@@ -1,0 +1,68 @@
+:root{
+  --bg: #0b1116;
+  --text: rgba(255,255,255,0.92);
+  --muted: rgba(255,255,255,0.62);
+  --accent: #64b6ff;
+  --accent-1: #47b6ff;
+  --accent-2: #4ef2c9;
+  --nav-bg: linear-gradient(180deg, rgba(12,18,22,0.6), rgba(12,18,22,0.25));
+  --nav-border: rgba(255,255,255,0.03);
+  --nav-text: rgba(255,255,255,0.9);
+  --nav-muted: rgba(255,255,255,0.6);
+  --cta-text: #07111a;
+  --cta-shadow: 0 6px 18px rgba(44,120,200,0.14);
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+  background-color: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* theme override via data-theme attribute */
+[data-theme="light"]{
+  --bg: #ffffff;
+  --text: #102027;
+  --muted: rgba(16,32,39,0.6);
+  --accent: #5366ff;
+  --accent-1: #2f7bff;
+  --accent-2: #45d6a8;
+  --nav-bg: rgba(255,255,255,0.95);
+  --nav-border: rgba(16,32,39,0.06);
+  --nav-text: #213547;
+  --nav-muted: rgba(33,53,71,0.65);
+  --cta-text: #07111a;
+  --cta-shadow: 0 8px 26px rgba(60,120,160,0.06);
+}
+
+a{font-weight:500;color:var(--accent);text-decoration:inherit}
+a:hover{opacity:0.9}
+
+body{
+  margin:0;
+  display:flex;
+  min-width:320px;
+  min-height:100vh;
+  background-color:var(--bg);
+  color:var(--text);
+}
+
+/* make sure the page root fills the viewport so 100vh calculations behave predictably */
+html, body, #root {
+  height: 100%;
+}
+
+/* avoid accidental horizontal scroll from the illustration overflow */
+body {
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+h1{font-size:3.2em;line-height:1.1}
+
+button{border-radius:8px;border:1px solid transparent;padding:0.6em 1.2em;font-size:1em;font-weight:500;font-family:inherit;background-color:transparent;cursor:pointer;transition:all 0.2s}
+button:hover{opacity:0.95}
+button:focus,button:focus-visible{outline:4px auto -webkit-focus-ring-color}
