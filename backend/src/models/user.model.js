@@ -61,6 +61,16 @@ const userSchema = new mongoose.Schema(
       },
       default: AUTH_PROVIDERS.LOCAL,
     },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    appleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     isVerified: {
       type: Boolean,
       default: false,
@@ -181,6 +191,13 @@ userSchema.statics.findByEmail = function findUserByEmail(email) {
 
 userSchema.statics.findByUsername = function findUserByUsername(username) {
   return this.findOne({ username: username.toLowerCase() });
+};
+
+userSchema.statics.findByEmailOrUsername = function findUserByEmailOrUsername(identifier) {
+  const lowerIdentifier = identifier.toLowerCase();
+  return this.findOne({
+    $or: [{ email: lowerIdentifier }, { username: lowerIdentifier }],
+  });
 };
 
 userSchema.methods.incrementFailedLoginAttempts = async function incrementFailedLoginAttempts() {

@@ -3,6 +3,7 @@ import ApiResponse from '../utils/ApiResponse.js';
 import AuthService from '../services/auth.service.js';
 import { setAuthCookies, clearAuthCookies, getRefreshTokenFromRequest } from '../utils/cookie.utils.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
+import config from '../config/index.js';
 
 class AuthController {
   static register = asyncHandler(async (req, res) => {
@@ -15,8 +16,8 @@ class AuthController {
   });
 
   static login = asyncHandler(async (req, res) => {
-    const { email, password } = req.body;
-    const { user, tokens } = await AuthService.login(email, password);
+    const { identifier, password } = req.body;
+    const { user, tokens } = await AuthService.login(identifier, password);
 
     setAuthCookies(res, tokens);
 
@@ -54,8 +55,8 @@ class AuthController {
   });
 
   static changePassword = asyncHandler(async (req, res) => {
-    const { currentPassword, newPassword } = req.body;
-    await AuthService.changePassword(req.user._id, currentPassword, newPassword);
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    await AuthService.changePassword(req.user._id, currentPassword, newPassword, confirmPassword);
     clearAuthCookies(res);
 
     res.status(HTTP_STATUS.OK).json(
@@ -73,8 +74,8 @@ class AuthController {
   });
 
   static resetPassword = asyncHandler(async (req, res) => {
-    const { token, newPassword } = req.body;
-    await AuthService.resetPassword(token, newPassword);
+    const { token, newPassword, confirmPassword } = req.body;
+    await AuthService.resetPassword(token, newPassword, confirmPassword);
 
     res.status(HTTP_STATUS.OK).json(
       new ApiResponse(HTTP_STATUS.OK, null, 'Password reset successfully')
@@ -100,7 +101,7 @@ class AuthController {
 
   static updateProfile = asyncHandler(async (req, res) => {
     const updateData = req.body;
-    const user = await AuthService.updateProfile(req.user._id, updateData);
+    const user = await AuthService.updateProfile(req.user._id, updateData, req.file);
 
     res.status(HTTP_STATUS.OK).json(
       new ApiResponse(HTTP_STATUS.OK, user, 'Profile updated successfully')
@@ -113,6 +114,28 @@ class AuthController {
 
     res.status(HTTP_STATUS.OK).json(
       new ApiResponse(HTTP_STATUS.OK, null, 'Account deleted successfully')
+    );
+  });
+
+  static googleAuth = asyncHandler(async (req, res) => {
+    const { code } = req.body;
+    const { user, tokens } = await AuthService.googleAuth(code);
+
+    setAuthCookies(res, tokens);
+
+    res.status(HTTP_STATUS.OK).json(
+      new ApiResponse(HTTP_STATUS.OK, { user, accessToken: tokens.accessToken }, 'Google login successful')
+    );
+  });
+
+  static appleAuth = asyncHandler(async (req, res) => {
+    const { idToken, nonce } = req.body;
+    const { user, tokens } = await AuthService.appleAuth(idToken, nonce);
+
+    setAuthCookies(res, tokens);
+
+    res.status(HTTP_STATUS.OK).json(
+      new ApiResponse(HTTP_STATUS.OK, { user, accessToken: tokens.accessToken }, 'Apple login successful')
     );
   });
 }

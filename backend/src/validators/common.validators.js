@@ -78,3 +78,10 @@ export const tokenValidator = (field = 'token') =>
     .withMessage('Token is required')
     .isString()
     .withMessage('Token must be a string');
+
+export const loginIdentifierValidator = (field = 'identifier') =>
+  body(field)
+    .trim()
+    .notEmpty()
+    .withMessage('Identifier (email or username) is required');
+

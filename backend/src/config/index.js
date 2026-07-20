@@ -53,13 +53,37 @@ const config = Object.freeze({
     host: process.env.EMAIL_HOST || '',
     port: Number.parseInt(process.env.EMAIL_PORT || '587', 10),
     user: process.env.EMAIL_USER || '',
-    password: process.env.EMAIL_PASSWORD || '',
-    isConfigured: Boolean(
-      process.env.EMAIL_HOST &&
-        process.env.EMAIL_USER &&
-        process.env.EMAIL_PASSWORD
-    ),
-  },
+    password: process.env.EMAIL_PASSWORD,
+      isConfigured: Boolean(
+        process.env.EMAIL_HOST &&
+          process.env.EMAIL_USER &&
+          process.env.EMAIL_PASSWORD
+      ),
+    },
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri: process.env.GOOGLE_REDIRECT_URI,
+      isConfigured: Boolean(
+        process.env.GOOGLE_CLIENT_ID &&
+          process.env.GOOGLE_CLIENT_SECRET &&
+          process.env.GOOGLE_REDIRECT_URI
+      ),
+    },
+    apple: {
+      clientId: process.env.APPLE_CLIENT_ID,
+      teamId: process.env.APPLE_TEAM_ID,
+      keyId: process.env.APPLE_KEY_ID,
+      privateKey: process.env.APPLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      redirectUri: process.env.APPLE_REDIRECT_URI,
+      isConfigured: Boolean(
+        process.env.APPLE_CLIENT_ID &&
+          process.env.APPLE_TEAM_ID &&
+          process.env.APPLE_KEY_ID &&
+          process.env.APPLE_PRIVATE_KEY &&
+          process.env.APPLE_REDIRECT_URI
+      ),
+    },
 
   rateLimit: {
     windowMs: 15 * 60 * 1000,

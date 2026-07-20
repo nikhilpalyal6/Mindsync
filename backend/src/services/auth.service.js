@@ -1,10 +1,19 @@
 import User from '../models/user.model.js';
 import TokenService from './token.service.js';
 import EmailService, { generateSecureToken } from './email.service.js';
+import FileService from './file.service.js';
 import { validatePasswordStrength } from '../utils/password.utils.js';
 import ApiError from '../utils/ApiError.js';
 import logger from '../config/logger.js';
 import { hashPassword, comparePassword } from '../utils/password.utils.js';
+import { OAuth2Client } from 'google-auth-library';
+import * as jose from 'jose';
+import config from '../config/index.js';
+import { AUTH_PROVIDERS } from '../constants/index.js';
+
+const googleClient = config.google.isConfigured 
+  ? new OAuth2Client(config.google.clientId, config.google.clientSecret, config.google.redirectUri)
+  : null;
 
 class AuthService {
   static async register(userData) {
@@ -32,13 +41,8 @@ class AuthService {
       username,
       email,
       password,
+      isVerified: true, // Mark as verified by default
     });
-
-    const verificationToken = generateSecureToken();
-    const hashedVerificationToken = await hashPassword(verificationToken);
-    await user.setEmailVerificationToken(hashedVerificationToken);
-
-    await EmailService.sendVerificationEmail(user, verificationToken);
 
     logger.info(`User registered successfully: ${user.email}`);
 
@@ -47,8 +51,8 @@ class AuthService {
     };
   }
 
-  static async login(email, password) {
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+  static async login(identifier, password) {
+    const user = await User.findByEmailOrUsername(identifier).select('+password');
 
     if (!user) {
       throw ApiError.unauthorized('Invalid credentials');
@@ -65,7 +69,7 @@ class AuthService {
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       await user.incrementFailedLoginAttempts();
-      logger.warn(`Failed login attempt for ${email}`);
+      logger.warn(`Failed login attempt for ${identifier}`);
       throw ApiError.unauthorized('Invalid credentials');
     }
 
@@ -101,7 +105,11 @@ class AuthService {
     return user;
   }
 
-  static async changePassword(userId, currentPassword, newPassword) {
+  static async changePassword(userId, currentPassword, newPassword, confirmPassword) {
+    if (newPassword !== confirmPassword) {
+      throw ApiError.badRequest('New password and confirm password do not match');
+    }
+
     const user = await User.findById(userId).select('+password');
 
     if (!user) {
@@ -142,7 +150,11 @@ class AuthService {
     };
   }
 
-  static async resetPassword(token, newPassword) {
+  static async resetPassword(token, newPassword, confirmPassword) {
+    if (newPassword !== confirmPassword) {
+      throw ApiError.badRequest('New password and confirm password do not match');
+    }
+
     const users = await User.find().select('+passwordResetToken +passwordResetExpires');
     let user = null;
     for (const u of users) {
@@ -166,6 +178,7 @@ class AuthService {
     }
 
     await user.setPassword(newPassword);
+    await user.clearPasswordResetToken(); // Added to clear token from DB
     await user.clearRefreshToken();
     logger.info(`Password reset successfully for user: ${user.email}`);
   }
@@ -210,7 +223,7 @@ class AuthService {
     logger.info(`Verification email resent to ${user.email}`);
   }
 
-  static async updateProfile(userId, updateData) {
+  static async updateProfile(userId, updateData, file) {
     const { name, username, bio } = updateData;
     const user = await User.findById(userId);
 
@@ -227,6 +240,13 @@ class AuthService {
         throw ApiError.badRequest('Username already in use');
       }
       user.username = username;
+    }
+
+    if (file) {
+      const imageUrl = await FileService.uploadImage(file.path);
+      if (imageUrl) {
+        user.profileImage = imageUrl;
+      }
     }
 
     await user.save();
@@ -246,6 +266,123 @@ class AuthService {
     await user.clearRefreshToken();
 
     logger.info(`Account soft deleted: ${userId}`);
+  }
+
+  static async googleAuth(code) {
+    if (!config.google.isConfigured || !googleClient) {
+      throw ApiError.badRequest('Google OAuth is not configured');
+    }
+
+    const { tokens } = await googleClient.getToken(code);
+    const ticket = await googleClient.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: config.google.clientId,
+    });
+    const payload = ticket.getPayload();
+    const googleId = payload.sub;
+    const email = payload.email;
+    const name = payload.name;
+    const picture = payload.picture;
+    const emailVerified = payload.email_verified;
+
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+    if (!user) {
+      let username = email.split('@')[0];
+      let existingUser = await User.findByUsername(username);
+      let counter = 1;
+      while (existingUser) {
+        username = `${email.split('@')[0]}${counter}`;
+        existingUser = await User.findByUsername(username);
+        counter++;
+      }
+
+      user = await User.create({
+        name,
+        username,
+        email,
+        googleId,
+        provider: AUTH_PROVIDERS.GOOGLE,
+        profileImage: picture,
+        isVerified: emailVerified,
+        password: generateSecureToken(), // Random password for OAuth users
+      });
+      logger.info(`New user registered via Google: ${user.email}`);
+    } else {
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.provider = AUTH_PROVIDERS.GOOGLE;
+        if (!user.profileImage && picture) {
+          user.profileImage = picture;
+        }
+        if (emailVerified && !user.isVerified) {
+          user.isVerified = true;
+        }
+        await user.save({ validateBeforeSave: false });
+        logger.info(`Linked Google account to existing user: ${user.email}`);
+      }
+    }
+
+    await user.updateLastLogin();
+    const authTokens = await TokenService.generateAndStoreTokens(user);
+    return { user, tokens: authTokens };
+  }
+
+  static async appleAuth(idToken, nonce) {
+    if (!config.apple.isConfigured) {
+      throw ApiError.badRequest('Apple OAuth is not configured');
+    }
+
+    const applePublicKeys = await jose.createRemoteJWKSet(
+      new URL('https://appleid.apple.com/auth/keys')
+    );
+
+    const { payload } = await jose.jwtVerify(idToken, applePublicKeys, {
+      audience: config.apple.clientId,
+      issuer: 'https://appleid.apple.com',
+    });
+
+    const appleId = payload.sub;
+    const email = payload.email;
+    const emailVerified = payload.email_verified === true || payload.email_verified === 'true';
+
+    let user = await User.findOne({ $or: [{ appleId }, email ? { email } : {}] });
+
+    if (!user) {
+      let username = email ? email.split('@')[0] : `apple_${appleId.slice(0, 10)}`;
+      let existingUser = await User.findByUsername(username);
+      let counter = 1;
+      while (existingUser) {
+        username = `${email ? email.split('@')[0] : `apple_${appleId.slice(0, 10)}`}${counter}`;
+        existingUser = await User.findByUsername(username);
+        counter++;
+      }
+
+      user = await User.create({
+        name: 'Apple User', // Apple doesn't always send name
+        username,
+        email: email || '',
+        appleId,
+        provider: AUTH_PROVIDERS.APPLE,
+        isVerified: emailVerified,
+        password: generateSecureToken(), // Random password for OAuth users
+      });
+      logger.info(`New user registered via Apple: ${user.email || user.appleId}`);
+    } else {
+      if (!user.appleId) {
+        user.appleId = appleId;
+        user.provider = AUTH_PROVIDERS.APPLE;
+        if (emailVerified && !user.isVerified) {
+          user.isVerified = true;
+        }
+        await user.save({ validateBeforeSave: false });
+        logger.info(`Linked Apple account to existing user: ${user.email || user.appleId}`);
+      }
+    }
+
+    await user.updateLastLogin();
+    const authTokens = await TokenService.generateAndStoreTokens(user);
+    return { user, tokens: authTokens };
   }
 }
 

@@ -1,17 +1,23 @@
 import { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useGoogleLogin } from '@react-oauth/google'
 import AOS from 'aos'
 import 'aos/dist/aos.css'
 import './auth.css'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
+
 export default function Auth() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isSignup = location.pathname === '/signup'
+  
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
+    name: '',
+    username: '',
     email: '',
     password: '',
     agreeToTerms: false
@@ -27,26 +33,102 @@ export default function Auth() {
   useEffect(() => {
     // Reset form when switching between login/signup
     setFormData({
-      firstName: '',
-      lastName: '',
+      name: '',
+      username: '',
       email: '',
       password: '',
       agreeToTerms: false
     })
     setIsLoading(false)
+    setError('')
   }, [isSignup])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
-    
-    // Simulate form submission
-    setTimeout(() => {
-      console.log('Form submitted:', formData)
+    setError('')
+
+    try {
+      let url, body
+
+      if (isSignup) {
+        url = `${API_BASE_URL}/auth/register`
+        body = {
+          name: formData.name,
+          username: formData.username,
+          email: formData.email,
+          password: formData.password
+        }
+      } else {
+        url = `${API_BASE_URL}/auth/login`
+        body = {
+          identifier: formData.email,
+          password: formData.password
+        }
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Something went wrong')
+      }
+
+      if (isSignup) {
+        alert('Account created successfully! Please log in.')
+        navigate('/login')
+      } else {
+        navigate('/study')
+      }
+    } catch (err) {
+      console.error('[Auth] Error:', err)
+      setError(err.message)
+    } finally {
       setIsLoading(false)
-      // Add your actual form submission logic here
-    }, 2000)
+    }
   }
+
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (codeResponse) => {
+      try {
+        setIsLoading(true)
+        setError('')
+        const response = await fetch(`${API_BASE_URL}/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({ code: codeResponse.code })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Google login failed')
+        }
+
+        navigate('/study')
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    onError: (error) => {
+      console.error('Google login error:', error)
+      setError('Google login failed')
+    },
+    flow: 'auth-code'
+  })
 
   return (
     <div className="auth-page">
@@ -82,8 +164,8 @@ export default function Auth() {
               <img src="/logo.png" alt="MindSync" className="auth-logo" />
             </Link>
             <Link to="/" className="back-link">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M9.293 2.293a1 1 0 011.414 0l7 7a1 1 0 010 1.414l-7 7a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586L9.293 3.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
               <span>Back</span>
             </Link>
@@ -109,32 +191,37 @@ export default function Auth() {
               </div>
             )}
 
+            {error && (
+              <div className="error-message">
+                {error}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="auth-form">
               {isSignup && (
-                <div className="name-fields">
+                <>
                   <div className="form-group">
-                    <label htmlFor="firstName">First name</label>
+                    <label htmlFor="name">Full name</label>
                     <input
                       type="text"
-                      id="firstName"
-                      placeholder="John"
-                      value={formData.firstName}
-                      onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                      id="name"
+                      placeholder="John Doe"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
                     />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="lastName">Last name</label>
+                    <label htmlFor="username">Username</label>
                     <input
                       type="text"
-                      id="lastName"
-                      placeholder="Doe"
-                      value={formData.lastName}
-                      onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                      id="username"
+                      placeholder="johndoe"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                       required
                     />
                   </div>
-                </div>
+                </>
               )}
 
               <div className="form-group">
@@ -169,17 +256,15 @@ export default function Auth() {
                     type="button"
                     className="password-toggle"
                     onClick={() => setShowPassword(!showPassword)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
-                        <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                       </svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-1.745-1.745a10.029 10.029 0 003.3-4.38 1.651 1.651 0 000-1.185A10.004 10.004 0 009.999 3a9.956 9.956 0 00-4.744 1.194L3.28 2.22zM7.752 6.69l1.092 1.092a2.5 2.5 0 013.374 3.373l1.091 1.092a4 4 0 00-5.557-5.557z" clipRule="evenodd" />
-                        <path d="M10.748 13.93l2.523 2.523a9.987 9.987 0 01-3.27.547c-4.258 0-7.894-2.66-9.337-6.41a1.651 1.651 0 010-1.186A10.007 10.007 0 012.839 6.02L6.07 9.252a4 4 0 004.678 4.678z" />
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
                     )}
                   </button>
@@ -223,8 +308,8 @@ export default function Auth() {
                 ) : (
                   <>
                     <span>{isSignup ? 'Create account' : 'Sign in'}</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638l-2.081-2.47a.75.75 0 111.146-.966l3.5 4.25a.75.75 0 010 .966l-3.5 4.25a.75.75 0 11-1.146-.966l2.081-2.47H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3.75 12h16.5m0 0L12 3.75M20.25 12 12 20.25" />
                     </svg>
                   </>
                 )}
@@ -235,11 +320,11 @@ export default function Auth() {
               </div>
 
               <div className="social-buttons">
-                <button type="button" className="social-btn google">
+                <button type="button" className="social-btn" onClick={() => handleGoogleLogin()}>
                   <img src="/google-icon.svg" alt="Google" />
                   <span>Google</span>
                 </button>
-                <button type="button" className="social-btn apple">
+                <button type="button" className="social-btn">
                   <img src="/apple-icon.svg" alt="Apple" />
                   <span>Apple</span>
                 </button>

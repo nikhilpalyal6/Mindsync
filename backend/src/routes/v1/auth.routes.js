@@ -2,6 +2,7 @@ import { Router } from 'express';
 import AuthController from '../../controllers/auth.controller.js';
 import { protect } from '../../middleware/auth.middleware.js';
 import { validate } from '../../middleware/validate.middleware.js';
+import { uploadSingle } from '../../config/multer.js';
 import {
   nameValidator,
   usernameValidator,
@@ -9,8 +10,8 @@ import {
   passwordValidator,
   bioValidator,
   tokenValidator,
+  loginIdentifierValidator,
 } from '../../validators/common.validators.js';
-import { body } from 'express-validator';
 import { authRateLimiter } from '../../middleware/rateLimiter.middleware.js';
 
 const router = Router();
@@ -25,7 +26,7 @@ router.post(
 
 router.post(
   '/login',
-  validate([emailValidator(), passwordValidator()]),
+  validate([loginIdentifierValidator(), passwordValidator()]),
   AuthController.login
 );
 
@@ -52,6 +53,16 @@ router.post(
   AuthController.verifyEmail
 );
 
+router.post(
+  '/google',
+  AuthController.googleAuth
+);
+
+router.post(
+  '/apple',
+  AuthController.appleAuth
+);
+
 router.use(protect);
 
 router.post(
@@ -64,7 +75,7 @@ router.get(
   AuthController.getCurrentUser
 );
 
-router.put(
+router.post(
   '/change-password',
   validate([passwordValidator('currentPassword'), passwordValidator('newPassword')]),
   AuthController.changePassword
@@ -77,6 +88,7 @@ router.post(
 
 router.patch(
   '/profile',
+  uploadSingle('profileImage'),
   validate([
     nameValidator().optional(),
     usernameValidator().optional(),
@@ -91,3 +103,4 @@ router.delete(
 );
 
 export default router;
+

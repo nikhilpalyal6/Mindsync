@@ -32,7 +32,7 @@ class EmailService {
   }
 
   static async sendVerificationEmail(user, verificationToken) {
-    const verificationUrl = `${config.clientUrl}/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${config.clientUrl}/verify-email/${verificationToken}`;
     const subject = `Verify your ${config.app.name} account`;
     const html = `
       <h1>Welcome to ${config.app.name}!</h1>
@@ -48,7 +48,7 @@ class EmailService {
   }
 
   static async sendPasswordResetEmail(user, resetToken) {
-    const resetUrl = `${config.clientUrl}/reset-password?token=${resetToken}`;
+    const resetUrl = `${config.clientUrl}/reset-password/${resetToken}`;
     const subject = `Reset your ${config.app.name} password`;
     const html = `
       <h1>Password Reset Request</h1>
