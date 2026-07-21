@@ -12,43 +12,65 @@ export default function ResetPassword() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [status, setStatus] = useState('idle');
+  const [message, setMessage] = useState('');
 
-  // Password strength checker
   const checkPasswordStrength = (password) => {
     const checks = {
       length: password.length >= 8,
       uppercase: /[A-Z]/.test(password),
       lowercase: /[a-z]/.test(password),
       number: /[0-9]/.test(password),
-      special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+      special: /[!@#$%^&*(),.?\":{}|<>]/.test(password),
     };
     const passedChecks = Object.values(checks).filter(Boolean).length;
-    
+
     return {
       checks,
       strength: passedChecks < 2 ? 'weak' : passedChecks < 4 ? 'medium' : 'strong',
-      isValid: Object.values(checks).every(Boolean)
+      isValid: Object.values(checks).every(Boolean),
     };
   };
 
   const strength = checkPasswordStrength(newPassword);
 
+  const getFriendlyError = (errorMessage) => {
+    const normalized = (errorMessage || '').toLowerCase();
+
+    if (normalized.includes('already') || normalized.includes('used')) {
+      return 'This reset link has already been used. Please request a new password reset link.';
+    }
+
+    if (normalized.includes('expired') || normalized.includes('invalid')) {
+      return 'This reset link is invalid or has expired. Please request a new password reset link.';
+    }
+
+    return errorMessage || 'Unable to update your password right now.';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
-    setSuccess('');
+    setStatus('idle');
+    setMessage('');
+
+    if (!token) {
+      setStatus('error');
+      setMessage('This reset link is invalid. Please request a new one.');
+      setIsLoading(false);
+      return;
+    }
 
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
+      setStatus('error');
+      setMessage('Passwords do not match.');
       setIsLoading(false);
       return;
     }
 
     if (!strength.isValid) {
-      setError('Password must meet all requirements');
+      setStatus('error');
+      setMessage('Password must include at least 8 characters, uppercase, lowercase, a number, and a special character.');
       setIsLoading(false);
       return;
     }
@@ -57,25 +79,27 @@ export default function ResetPassword() {
       const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          token, 
-          newPassword, 
-          confirmPassword 
+        body: JSON.stringify({
+          token,
+          newPassword,
+          confirmPassword,
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new Error(data.message || 'Something went wrong');
       }
 
-      setSuccess('Password reset successful!');
-      setTimeout(() => {
+      setStatus('success');
+      setMessage('Password updated successfully.');
+      window.setTimeout(() => {
         navigate('/login');
       }, 2000);
     } catch (err) {
-      setError(err.message);
+      setStatus('error');
+      setMessage(getFriendlyError(err.message));
     } finally {
       setIsLoading(false);
     }
@@ -120,38 +144,42 @@ export default function ResetPassword() {
               <p className="form-subtitle">Enter your new password below</p>
             </div>
 
-            {success && (
-              <div style={{ 
-                color: '#48efb3', 
-                background: 'rgba(72, 200, 147, 0.1)', 
-                border: '1px solid rgba(72, 200, 147, 0.2)', 
-                padding: '12px 16px', 
-                borderRadius: '12px', 
-                marginBottom: '24px', 
-                textAlign: 'center' 
-              }}>
-                {success}
+            {status === 'success' && (
+              <div className="status-card success">
+                <div className="status-icon">✓</div>
+                <div>
+                  <h3>Password Updated</h3>
+                  <p>{message}</p>
+                  <p className="status-subtext">Redirecting to login in a moment.</p>
+                </div>
               </div>
             )}
 
-            {error && <div className="error-message">{error}</div>}
+            {status === 'error' && (
+              <div className="status-card error">
+                <div className="status-icon">!</div>
+                <div>
+                  <h3>Unable to update password</h3>
+                  <p>{message}</p>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="auth-form">
-              {/* New Password */}
               <div className="form-group">
                 <label htmlFor="newPassword">New Password <span className="password-hint">(min 8 chars)</span></label>
                 <div className="password-input">
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type={showPassword ? 'text' : 'password'}
                     id="newPassword"
                     placeholder="••••••••"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     required
-                    disabled={isLoading || !!success}
+                    disabled={isLoading || status === 'success'}
                   />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="password-toggle"
                     onClick={() => setShowPassword(!showPassword)}
                   >
@@ -167,54 +195,24 @@ export default function ResetPassword() {
                     )}
                   </button>
                 </div>
-                {/* Password Strength Indicator */}
+
                 {newPassword && (
-                  <div style={{ marginTop: '12px' }}>
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      fontSize: '12px', 
-                      marginBottom: '6px', 
-                      color: 'var(--muted)' 
-                    }}>
-                      <span>Password Strength:</span>
-                      <span style={{ 
-                        color: strength.strength === 'weak' ? '#ef4444' : strength.strength === 'medium' ? '#f59e0b' : '#48efb3',
-                        fontWeight: '600'
-                      }}>
-                        {strength.strength.charAt(0).toUpperCase() + strength.strength.slice(1)}
-                      </span>
+                  <div className="password-strength-card">
+                    <div className="password-strength-meta">
+                      <span>Password Strength</span>
+                      <span className={`strength-badge ${strength.strength}`}>{strength.strength.charAt(0).toUpperCase() + strength.strength.slice(1)}</span>
                     </div>
-                    <div style={{ 
-                      display: 'flex', 
-                      gap: '4px', 
-                      marginBottom: '12px' 
-                    }}>
+                    <div className="strength-meter">
                       {[1, 2, 3, 4, 5].map((bar) => (
-                        <div 
+                        <div
                           key={bar}
-                          style={{ 
-                            height: '4px', 
-                            flex: 1, 
-                            borderRadius: '2px',
-                            background: bar <= Object.values(strength.checks).filter(Boolean).length 
-                              ? (strength.strength === 'weak' ? '#ef4444' : strength.strength === 'medium' ? '#f59e0b' : '#48efb3')
-                              : 'rgba(255, 255, 255, 0.1)'
-                          }}
-                        ></div>
+                          className={`strength-bar ${bar <= Object.values(strength.checks).filter(Boolean).length ? strength.strength : ''}`}
+                        />
                       ))}
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                    <div className="validation-list">
                       {Object.entries(strength.checks).map(([key, valid]) => (
-                        <div 
-                          key={key}
-                          style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '6px',
-                            color: valid ? '#48efb3' : 'var(--muted)'
-                          }}
-                        >
+                        <div key={key} className={`validation-item ${valid ? 'valid' : 'invalid'}`}>
                           <span>{valid ? '✓' : '○'}</span>
                           {key === 'length' && 'At least 8 characters'}
                           {key === 'uppercase' && 'Uppercase letter'}
@@ -228,21 +226,20 @@ export default function ResetPassword() {
                 )}
               </div>
 
-              {/* Confirm Password */}
               <div className="form-group">
                 <label htmlFor="confirmPassword">Confirm Password</label>
                 <div className="password-input">
                   <input
-                    type={showConfirmPassword ? "text" : "password"}
+                    type={showConfirmPassword ? 'text' : 'password'}
                     id="confirmPassword"
                     placeholder="••••••••"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
-                    disabled={isLoading || !!success}
+                    disabled={isLoading || status === 'success'}
                   />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="password-toggle"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
@@ -259,22 +256,14 @@ export default function ResetPassword() {
                   </button>
                 </div>
                 {confirmPassword && newPassword !== confirmPassword && (
-                  <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '8px' }}>
+                  <div className="validation-item invalid" style={{ marginTop: '8px' }}>
                     Passwords do not match
                   </div>
                 )}
               </div>
 
-              <button 
-                type="submit" 
-                className="submit-btn"
-                disabled={isLoading || !!success}
-              >
-                {isLoading ? (
-                  <span className="loading-spinner"></span>
-                ) : (
-                  'Reset Password'
-                )}
+              <button type="submit" className="submit-btn" disabled={isLoading || status === 'success'}>
+                {isLoading ? <span className="loading-spinner"></span> : 'Update Password'}
               </button>
             </form>
           </div>

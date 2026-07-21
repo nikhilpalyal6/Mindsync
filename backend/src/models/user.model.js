@@ -39,6 +39,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    avatar: {
+      type: String,
+      default: null,
+    },
     bio: {
       type: String,
       trim: true,
@@ -62,11 +66,6 @@ const userSchema = new mongoose.Schema(
       default: AUTH_PROVIDERS.LOCAL,
     },
     googleId: {
-      type: String,
-      unique: true,
-      sparse: true,
-    },
-    appleId: {
       type: String,
       unique: true,
       sparse: true,

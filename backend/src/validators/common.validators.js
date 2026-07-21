@@ -85,3 +85,14 @@ export const loginIdentifierValidator = (field = 'identifier') =>
     .notEmpty()
     .withMessage('Identifier (email or username) is required');
 
+export const confirmPasswordValidator = (field = 'confirmPassword', passwordField = 'newPassword') =>
+  body(field)
+    .notEmpty()
+    .withMessage('Confirm password is required')
+    .custom((value, { req }) => {
+      if (value !== req.body[passwordField]) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    });
+

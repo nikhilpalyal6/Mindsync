@@ -1,17 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import './studyMode.css'
 import VideoLearning from '../components/VideoLearning'
 
 export default function StudyMode() {
+  const { user, signOut } = useAuth()
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [showRecordModal, setShowRecordModal] = useState(false)
   const [showAddContentMenu, setShowAddContentMenu] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   const [pasteUrl, setPasteUrl] = useState('')
   const [pasteText, setPasteText] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const fileInputRef = useRef(null)
+  const profileDropdownRef = useRef(null)
   const navigate = useNavigate()
   const [uploadError, setUploadError] = useState('')
   const sidebarRef = useRef(null)
@@ -102,6 +106,20 @@ export default function StudyMode() {
     setIsSidebarOpen(false)
   }
 
+  const toggleProfileDropdown = () => {
+    setShowProfileDropdown(!showProfileDropdown)
+  }
+
+  const closeProfileDropdown = () => {
+    setShowProfileDropdown(false)
+  }
+
+  const handleLogout = async () => {
+    await signOut()
+    navigate('/login')
+    closeProfileDropdown()
+  }
+
   const handleBackFromVideo = () => {
     setVideoUrl('')
   }
@@ -129,6 +147,40 @@ export default function StudyMode() {
       document.body.style.overflow = ''
     }
   }, [isSidebarOpen])
+
+  // Close profile dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showProfileDropdown && profileDropdownRef.current && !profileDropdownRef.current.contains(event.target)) {
+        setShowProfileDropdown(false)
+      }
+    }
+
+    if (showProfileDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showProfileDropdown])
+
+  // Close dropdown on ESC key
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && showProfileDropdown) {
+        setShowProfileDropdown(false)
+      }
+    }
+
+    if (showProfileDropdown) {
+      document.addEventListener('keydown', handleKeyDown)
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showProfileDropdown])
 
   // If video URL is set, show the VideoLearning component
   if (videoUrl) {
@@ -300,20 +352,95 @@ export default function StudyMode() {
         </div>
 
         {/* Fixed Bottom Section - Profile */}
-        <div className="sidebar-footer">
+        <div className="sidebar-footer" ref={profileDropdownRef}>
+          {/* Free Plan Badge */}
           <div className="plan-badge">Free Plan</div>
-          <div className="user-profile-card">
+          
+          {/* User Profile Section */}
+          <button 
+            className="user-profile-section" 
+            onClick={toggleProfileDropdown}
+            aria-expanded={showProfileDropdown}
+            aria-haspopup="true"
+          >
+            {/* Avatar */}
             <div className="user-avatar">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
+              {user?.profileImage ? (
+                <img src={user.profileImage} alt={user.name || user.username} />
+              ) : (
+                <span>{(user?.name || user?.username || 'U').charAt(0).toUpperCase()}</span>
+              )}
             </div>
-            <span className="user-name">Nikhil Palyal</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="chevron-icon">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </div>
+            
+            {/* User Info */}
+            <div className="user-info">
+              <span className="user-name">{user?.name || user?.username || 'Your Profile'}</span>
+              <span className="user-email">{user?.email || 'No email'}</span>
+            </div>
+          </button>
+
+          {/* Profile Dropdown */}
+          {showProfileDropdown && (
+            <div className="profile-dropdown" role="menu">
+              <button 
+                className="dropdown-item"
+                onClick={() => { navigate('/profile'); closeProfileDropdown(); }}
+                role="menuitem"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <span>Profile</span>
+              </button>
+              <button 
+                className="dropdown-item"
+                onClick={() => { navigate('/settings'); closeProfileDropdown(); }}
+                role="menuitem"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                <span>Settings</span>
+              </button>
+              <button 
+                className="dropdown-item upgrade-item"
+                onClick={() => { closeProfileDropdown(); }}
+                role="menuitem"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <span>Upgrade Plan</span>
+              </button>
+              <button 
+                className="dropdown-item"
+                onClick={() => { closeProfileDropdown(); }}
+                role="menuitem"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span>Help</span>
+              </button>
+              <div className="dropdown-divider"></div>
+              <button 
+                className="dropdown-item logout-item"
+                onClick={handleLogout}
+                role="menuitem"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 

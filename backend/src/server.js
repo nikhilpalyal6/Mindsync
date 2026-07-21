@@ -2,12 +2,20 @@ import app from './app.js';
 import config from './config/index.js';
 import logger from './config/logger.js';
 import { connectDB, disconnectDB } from './database/connection.js';
+import { verifyEmailConnection } from './config/email.js';
 
 let server;
 
 const startServer = async () => {
   try {
     await connectDB();
+
+    const emailReady = await verifyEmailConnection();
+    if (emailReady) {
+      logger.info('Email service is configured and ready');
+    } else {
+      logger.warn('Email service is not ready. Verification and reset emails may fail.');
+    }
 
     server = app.listen(config.port, () => {
       logger.info(`MindSync server running in ${config.env} mode on port ${config.port}`);

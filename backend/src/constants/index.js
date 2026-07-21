@@ -4,7 +4,6 @@ export { HTTP_STATUS } from './httpStatus.js';
 export const AUTH_PROVIDERS = Object.freeze({
   LOCAL: 'local',
   GOOGLE: 'google',
-  APPLE: 'apple',
   GITHUB: 'github',
 });
 

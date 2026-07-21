@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useGoogleLogin } from '@react-oauth/google'
+import { GoogleLogin } from '@react-oauth/google'
 import AOS from 'aos'
 import 'aos/dist/aos.css'
 import './auth.css'
+import { useAuth } from '../contexts/AuthContext'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
 
@@ -42,6 +43,8 @@ export default function Auth() {
     setIsLoading(false)
     setError('')
   }, [isSignup])
+
+  const { loginComplete } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -82,12 +85,8 @@ export default function Auth() {
         throw new Error(data.message || 'Something went wrong')
       }
 
-      if (isSignup) {
-        alert('Account created successfully! Please log in.')
-        navigate('/login')
-      } else {
-        navigate('/study')
-      }
+      await loginComplete()
+      navigate('/study')
     } catch (err) {
       console.error('[Auth] Error:', err)
       setError(err.message)
@@ -96,39 +95,44 @@ export default function Auth() {
     }
   }
 
-  const handleGoogleLogin = useGoogleLogin({
-    onSuccess: async (codeResponse) => {
-      try {
-        setIsLoading(true)
-        setError('')
-        const response = await fetch(`${API_BASE_URL}/auth/google`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          credentials: 'include',
-          body: JSON.stringify({ code: codeResponse.code })
-        })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.message || 'Google login failed')
-        }
-
-        navigate('/study')
-      } catch (err) {
-        setError(err.message)
-      } finally {
-        setIsLoading(false)
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      const credential = credentialResponse?.credential
+      if (!credential) {
+        throw new Error('Google login failed')
       }
-    },
-    onError: (error) => {
-      console.error('Google login error:', error)
-      setError('Google login failed')
-    },
-    flow: 'auth-code'
-  })
+
+      setIsLoading(true)
+      setError('')
+
+      const response = await fetch(`${API_BASE_URL}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ idToken: credential })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Google login failed')
+      }
+
+      await loginComplete()
+      navigate('/study')
+    } catch (err) {
+      console.error('[Auth] Google login error:', err)
+      setError(err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleError = () => {
+    setError('Google login failed')
+  }
 
   return (
     <div className="auth-page">
@@ -319,15 +323,16 @@ export default function Auth() {
                 <span>Or continue with</span>
               </div>
 
-              <div className="social-buttons">
-                <button type="button" className="social-btn" onClick={() => handleGoogleLogin()}>
-                  <img src="/google-icon.svg" alt="Google" />
-                  <span>Google</span>
-                </button>
-                <button type="button" className="social-btn">
-                  <img src="/apple-icon.svg" alt="Apple" />
-                  <span>Apple</span>
-                </button>
+              <div className="social-buttons social-buttons-single">
+                <GoogleLogin
+                  className="social-btn"
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  text="continue_with"
+                  shape="pill"
+                  theme="filled_blue"
+                  useOneTap={false}
+                />
               </div>
             </form>
           </div>

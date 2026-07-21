@@ -11,21 +11,27 @@ import {
   bioValidator,
   tokenValidator,
   loginIdentifierValidator,
+  confirmPasswordValidator,
 } from '../../validators/common.validators.js';
-import { authRateLimiter } from '../../middleware/rateLimiter.middleware.js';
+import {
+  loginRateLimiter,
+  registerRateLimiter,
+  forgotPasswordRateLimiter,
+  resetPasswordRateLimiter,
+} from '../../middleware/rateLimiter.middleware.js';
 
 const router = Router();
 
-router.use(authRateLimiter);
-
 router.post(
   '/register',
+  registerRateLimiter,
   validate([nameValidator(), usernameValidator(), emailValidator(), passwordValidator()]),
   AuthController.register
 );
 
 router.post(
   '/login',
+  loginRateLimiter,
   validate([loginIdentifierValidator(), passwordValidator()]),
   AuthController.login
 );
@@ -37,13 +43,15 @@ router.post(
 
 router.post(
   '/forgot-password',
+  forgotPasswordRateLimiter,
   validate([emailValidator()]),
   AuthController.forgotPassword
 );
 
 router.post(
   '/reset-password',
-  validate([tokenValidator(), passwordValidator('newPassword')]),
+  resetPasswordRateLimiter,
+  validate([tokenValidator(), passwordValidator('newPassword'), confirmPasswordValidator()]),
   AuthController.resetPassword
 );
 
@@ -56,11 +64,6 @@ router.post(
 router.post(
   '/google',
   AuthController.googleAuth
-);
-
-router.post(
-  '/apple',
-  AuthController.appleAuth
 );
 
 router.use(protect);

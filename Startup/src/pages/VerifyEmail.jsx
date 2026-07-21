@@ -1,48 +1,108 @@
-import { useState, useEffect } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
-import './auth.css'
+import { useEffect, useState, useRef } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import './auth.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 export default function VerifyEmail() {
-  const { token } = useParams()
-  const navigate = useNavigate()
-  const [status, setStatus] = useState('loading') // loading, success, error
-  const [message, setMessage] = useState('')
+  const { token } = useParams();
+  const navigate = useNavigate();
+  const { loginComplete, user } = useAuth();
+  const [status, setStatus] = useState('loading');
+  const [message, setMessage] = useState('');
+  const [isResending, setIsResending] = useState(false);
+  const hasVerified = useRef(false);
+
+  const getFriendlyError = (errorMessage) => {
+    const normalized = (errorMessage || '').toLowerCase();
+
+    if (normalized.includes('expired') || normalized.includes('invalid')) {
+      return 'This verification link is invalid or has expired. Please request a new verification email.';
+    }
+
+    if (normalized.includes('already')) {
+      return 'This email has already been verified.';
+    }
+
+    return errorMessage || 'We could not verify your email right now.';
+  };
 
   useEffect(() => {
     const verifyEmail = async () => {
+      if (hasVerified.current) {
+        return;
+      }
+
+      hasVerified.current = true;
+
+      if (!token) {
+        setStatus('error');
+        setMessage('Invalid verification link.');
+        return;
+      }
+
       try {
         const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
-        })
+          body: JSON.stringify({ token }),
+        });
+
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          const data = await response.json()
-          throw new Error(data.message || 'Invalid or expired verification link')
+          throw new Error(data.message || 'Invalid or expired verification link');
         }
 
-        setStatus('success')
-        setMessage('Email verified successfully!')
-        // Redirect to login after 3 seconds
-        setTimeout(() => {
-          navigate('/login')
-        }, 3000)
+        if (user) {
+          await loginComplete();
+        }
+
+        setStatus('success');
+        setMessage('✓ Email Verified Successfully');
+
+        window.setTimeout(() => {
+          navigate(user ? '/study' : '/login');
+        }, 2000);
       } catch (err) {
-        setStatus('error')
-        setMessage(err.message)
+        setStatus('error');
+        setMessage(getFriendlyError(err.message));
       }
+    };
+
+    verifyEmail();
+  }, [token, navigate, loginComplete, user]);
+
+  const handleResend = async () => {
+    if (!user) {
+      setStatus('error');
+      setMessage('Please log in to resend your verification email.');
+      return;
     }
 
-    if (token) {
-      verifyEmail()
-    } else {
-      setStatus('error')
-      setMessage('Invalid verification link')
+    setIsResending(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Unable to resend verification email');
+      }
+
+      setStatus('success');
+      setMessage('A fresh verification email has been sent. Please check your inbox.');
+    } catch (err) {
+      setStatus('error');
+      setMessage(getFriendlyError(err.message));
+    } finally {
+      setIsResending(false);
     }
-  }, [token, navigate])
+  };
 
   return (
     <div className="auth-page">
@@ -55,14 +115,12 @@ export default function VerifyEmail() {
       <div className="auth-card">
         <div className="auth-image">
           <div className="image-content">
-            <div className="image-badge">
-              MindSync
-            </div>
+            <div className="image-badge">MindSync</div>
             <h1>
               Email <span className="gradient-text">Verification</span>
             </h1>
             <p className="image-description">
-              We're verifying your email address to keep your account secure.
+              We are verifying your email address to keep your account secure.
             </p>
           </div>
         </div>
@@ -79,50 +137,50 @@ export default function VerifyEmail() {
 
           <div className="auth-form-content">
             <div className="form-header">
-              <h1>
-                {status === 'loading' ? 'Verifying...' : status === 'success' ? 'Success!' : 'Verification Failed'}
-              </h1>
+              <h1>{status === 'loading' ? 'Verifying...' : status === 'success' ? 'Success!' : 'Verification Issue'}</h1>
               <p className="form-subtitle">{message}</p>
             </div>
 
             {status === 'loading' && (
-              <div style={{ textAlign: 'center', padding: '2rem' }}>
+              <div className="verification-state">
                 <span className="loading-spinner" style={{ width: '32px', height: '32px' }}></span>
-                <p style={{ marginTop: '1rem', color: 'var(--muted)' }}>Please wait while we verify your email...</p>
+                <p>Please wait while we verify your email...</p>
               </div>
             )}
 
             {status === 'success' && (
-              <div style={{ 
-                color: '#48efb3', 
-                background: 'rgba(72, 200, 147, 0.1)', 
-                border: '1px solid rgba(72, 200, 147, 0.2)', 
-                padding: '1rem', 
-                borderRadius: '12px', 
-                textAlign: 'center'
-              }}>
-                {message}
-                <p style={{ marginTop: '0.5rem', color: 'var(--muted)' }}>Redirecting to login...</p>
+              <div className="status-card success">
+                <div className="status-icon">✓</div>
+                <div>
+                  <h3>Email Verified</h3>
+                  <p>{message}</p>
+                  <p className="status-subtext">Redirecting you to your dashboard shortly.</p>
+                </div>
               </div>
             )}
 
             {status === 'error' && (
-              <>
-                <div className="error-message" style={{ marginBottom: '1.5rem' }}>
-                  {message}
+              <div className="verification-actions">
+                <div className="status-card error">
+                  <div className="status-icon">!</div>
+                  <div>
+                    <h3>Verification Failed</h3>
+                    <p>{message}</p>
+                  </div>
                 </div>
-                <Link 
-                  to="/signup" 
-                  className="submit-btn" 
-                  style={{ textAlign: 'center', textDecoration: 'none' }}
-                >
-                  Create New Account
-                </Link>
-              </>
+                <button type="button" className="submit-btn" onClick={handleResend} disabled={isResending}>
+                  {isResending ? <span className="loading-spinner"></span> : 'Resend Verification Email'}
+                </button>
+                {!user && (
+                  <Link to="/login" className="secondary-link">
+                    Go to Login
+                  </Link>
+                )}
+              </div>
             )}
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

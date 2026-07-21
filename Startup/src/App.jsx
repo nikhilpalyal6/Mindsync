@@ -5,9 +5,13 @@ import Auth from './pages/Auth'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import VerifyEmail from './pages/VerifyEmail'
+import Profile from './pages/Profile'
+import Settings from './pages/Settings'
 import Footer from './components/Footer'
 import NotFound from './pages/NotFound'
 import ScrollToTop from './components/ScrollToTop'
+import ProtectedRoute from './components/ProtectedRoute'
+import GuestRoute from './components/GuestRoute'
 import './App.css'
 import AOS from 'aos'
 import 'aos/dist/aos.css'
@@ -17,6 +21,8 @@ import Contact from './pages/Contact'
 import StudyMode from './pages/StudyMode'
 import Community from './pages/Community'
 import StudyViewer from './pages/StudyViewer'
+import { AuthProvider } from './contexts/AuthContext'
+import Toast from './components/Toast'
 
 function AppContent() {
   const location = useLocation()
@@ -36,20 +42,23 @@ function AppContent() {
     <div>
       <ScrollToTop />
       {!isAuthPage && !isStudyMode && <Navbar />}
+      <Toast />
       <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Auth />} />
-              <Route path="/signup" element={<Auth />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password/:token" element={<ResetPassword />} />
-              <Route path="/verify-email/:token" element={<VerifyEmail />} />
-              <Route path="/study" element={<StudyMode />} />
-              <Route path="/pricing" element={<Pricing />} />
-              <Route path="/about" element={<Community />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/study/viewer" element={<StudyViewer />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<GuestRoute><Auth /></GuestRoute>} />
+        <Route path="/signup" element={<GuestRoute><Auth /></GuestRoute>} />
+        <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
+        <Route path="/reset-password/:token" element={<GuestRoute><ResetPassword /></GuestRoute>} />
+        <Route path="/verify-email/:token" element={<GuestRoute><VerifyEmail /></GuestRoute>} />
+        <Route path="/study" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
+        <Route path="/study/viewer" element={<ProtectedRoute><StudyViewer /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/about" element={<Community />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
       {!isAuthPage && !isStudyMode && <Footer />}
     </div>
   )
@@ -57,9 +66,11 @@ function AppContent() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
 

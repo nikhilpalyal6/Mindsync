@@ -7,12 +7,11 @@ import ApiError from '../utils/ApiError.js';
 import logger from '../config/logger.js';
 import { hashPassword, comparePassword } from '../utils/password.utils.js';
 import { OAuth2Client } from 'google-auth-library';
-import * as jose from 'jose';
 import config from '../config/index.js';
 import { AUTH_PROVIDERS } from '../constants/index.js';
 
-const googleClient = config.google.isConfigured 
-  ? new OAuth2Client(config.google.clientId, config.google.clientSecret, config.google.redirectUri)
+const googleClient = config.google.isConfigured
+  ? new OAuth2Client(config.google.clientId)
   : null;
 
 class AuthService {
@@ -41,13 +40,29 @@ class AuthService {
       username,
       email,
       password,
-      isVerified: true, // Mark as verified by default
+      provider: AUTH_PROVIDERS.LOCAL,
+      isVerified: false,
     });
+
+    const verificationToken = generateSecureToken();
+    const hashedVerificationToken = await hashPassword(verificationToken);
+    await user.setEmailVerificationToken(hashedVerificationToken);
+
+    try {
+      await EmailService.sendVerificationEmail(user, verificationToken);
+    } catch (error) {
+      logger.error('Email verification send failed during registration', { error: error.message });
+      await user.deleteOne();
+      throw ApiError.internal('Unable to send verification email. Please check SMTP credentials in .env and try again.');
+    }
+
+    const tokens = await TokenService.generateAndStoreTokens(user);
 
     logger.info(`User registered successfully: ${user.email}`);
 
     return {
       user,
+      tokens,
     };
   }
 
@@ -141,8 +156,15 @@ class AuthService {
       const resetToken = generateSecureToken();
       const hashedResetToken = await hashPassword(resetToken);
       await user.setPasswordResetToken(hashedResetToken);
-      await EmailService.sendPasswordResetEmail(user, resetToken);
-      logger.info(`Password reset email sent to ${email}`);
+
+      try {
+        await EmailService.sendPasswordResetEmail(user, resetToken);
+        logger.info(`Password reset email sent to ${email}`);
+      } catch (error) {
+        logger.error('Password reset email failed', { error: error.message, email });
+        await user.clearPasswordResetToken();
+        throw ApiError.internal('Unable to send password reset email. Please check SMTP credentials in .env and try again.');
+      }
     }
 
     return {
@@ -218,9 +240,13 @@ class AuthService {
     const hashedVerificationToken = await hashPassword(verificationToken);
     await user.setEmailVerificationToken(hashedVerificationToken);
 
-    await EmailService.sendVerificationEmail(user, verificationToken);
-
-    logger.info(`Verification email resent to ${user.email}`);
+    try {
+      await EmailService.sendVerificationEmail(user, verificationToken);
+      logger.info(`Verification email resent to ${user.email}`);
+    } catch (error) {
+      logger.error('Failed to resend verification email', { error: error.message, email: user.email });
+      throw ApiError.internal('Unable to resend verification email. Please check SMTP credentials in .env and try again.');
+    }
   }
 
   static async updateProfile(userId, updateData, file) {
@@ -242,10 +268,17 @@ class AuthService {
       user.username = username;
     }
 
+    const previousProfileImage = user.profileImage;
+
     if (file) {
       const imageUrl = await FileService.uploadImage(file.path);
       if (imageUrl) {
         user.profileImage = imageUrl;
+
+        const oldPublicId = FileService.extractPublicIdFromUrl(previousProfileImage);
+        if (oldPublicId) {
+          await FileService.deleteImage(oldPublicId);
+        }
       }
     }
 
@@ -268,122 +301,95 @@ class AuthService {
     logger.info(`Account soft deleted: ${userId}`);
   }
 
-  static async googleAuth(code) {
+  static async googleAuth(idToken) {
     if (!config.google.isConfigured || !googleClient) {
       throw ApiError.badRequest('Google OAuth is not configured');
     }
 
-    const { tokens } = await googleClient.getToken(code);
-    const ticket = await googleClient.verifyIdToken({
-      idToken: tokens.id_token,
-      audience: config.google.clientId,
-    });
-    const payload = ticket.getPayload();
-    const googleId = payload.sub;
-    const email = payload.email;
-    const name = payload.name;
-    const picture = payload.picture;
-    const emailVerified = payload.email_verified;
+    if (!idToken) {
+      throw ApiError.badRequest('Google ID token is required');
+    }
 
-    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: config.google.clientId,
+      });
+      const payload = ticket.getPayload();
 
-    if (!user) {
-      let username = email.split('@')[0];
-      let existingUser = await User.findByUsername(username);
-      let counter = 1;
-      while (existingUser) {
-        username = `${email.split('@')[0]}${counter}`;
-        existingUser = await User.findByUsername(username);
-        counter++;
+      if (!payload?.email || !payload.sub) {
+        throw ApiError.badRequest('Invalid Google ID token');
       }
 
-      user = await User.create({
-        name,
-        username,
-        email,
-        googleId,
-        provider: AUTH_PROVIDERS.GOOGLE,
-        profileImage: picture,
-        isVerified: emailVerified,
-        password: generateSecureToken(), // Random password for OAuth users
-      });
-      logger.info(`New user registered via Google: ${user.email}`);
-    } else {
-      if (!user.googleId) {
-        user.googleId = googleId;
-        user.provider = AUTH_PROVIDERS.GOOGLE;
-        if (!user.profileImage && picture) {
-          user.profileImage = picture;
+      const googleId = payload.sub;
+      const email = payload.email.toLowerCase();
+      const name = payload.name || payload.given_name || email.split('@')[0];
+      const avatar = payload.picture || null;
+
+      let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+      if (!user) {
+        let username = email.split('@')[0];
+        let existingUser = await User.findByUsername(username);
+        let counter = 1;
+        while (existingUser) {
+          username = `${email.split('@')[0]}${counter}`;
+          existingUser = await User.findByUsername(username);
+          counter++;
         }
-        if (emailVerified && !user.isVerified) {
-          user.isVerified = true;
+
+        user = await User.create({
+          name,
+          username,
+          email,
+          googleId,
+          provider: AUTH_PROVIDERS.GOOGLE,
+          avatar,
+          profileImage: avatar,
+          isVerified: true,
+          password: generateSecureToken(),
+        });
+        logger.info(`New user registered via Google: ${user.email}`);
+      } else {
+        const updates = {};
+
+        if (!user.googleId) {
+          updates.googleId = googleId;
         }
-        await user.save({ validateBeforeSave: false });
+        if (user.provider !== AUTH_PROVIDERS.GOOGLE) {
+          updates.provider = AUTH_PROVIDERS.GOOGLE;
+        }
+        if (!user.avatar && avatar) {
+          updates.avatar = avatar;
+        }
+        if (!user.profileImage && avatar) {
+          updates.profileImage = avatar;
+        }
+        if (!user.isVerified) {
+          updates.isVerified = true;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          Object.assign(user, updates);
+          await user.save({ validateBeforeSave: false });
+        }
+
         logger.info(`Linked Google account to existing user: ${user.email}`);
       }
-    }
 
-    await user.updateLastLogin();
-    const authTokens = await TokenService.generateAndStoreTokens(user);
-    return { user, tokens: authTokens };
-  }
-
-  static async appleAuth(idToken, nonce) {
-    if (!config.apple.isConfigured) {
-      throw ApiError.badRequest('Apple OAuth is not configured');
-    }
-
-    const applePublicKeys = await jose.createRemoteJWKSet(
-      new URL('https://appleid.apple.com/auth/keys')
-    );
-
-    const { payload } = await jose.jwtVerify(idToken, applePublicKeys, {
-      audience: config.apple.clientId,
-      issuer: 'https://appleid.apple.com',
-    });
-
-    const appleId = payload.sub;
-    const email = payload.email;
-    const emailVerified = payload.email_verified === true || payload.email_verified === 'true';
-
-    let user = await User.findOne({ $or: [{ appleId }, email ? { email } : {}] });
-
-    if (!user) {
-      let username = email ? email.split('@')[0] : `apple_${appleId.slice(0, 10)}`;
-      let existingUser = await User.findByUsername(username);
-      let counter = 1;
-      while (existingUser) {
-        username = `${email ? email.split('@')[0] : `apple_${appleId.slice(0, 10)}`}${counter}`;
-        existingUser = await User.findByUsername(username);
-        counter++;
+      await user.updateLastLogin();
+      const authTokens = await TokenService.generateAndStoreTokens(user);
+      return { user, tokens: authTokens };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
       }
 
-      user = await User.create({
-        name: 'Apple User', // Apple doesn't always send name
-        username,
-        email: email || '',
-        appleId,
-        provider: AUTH_PROVIDERS.APPLE,
-        isVerified: emailVerified,
-        password: generateSecureToken(), // Random password for OAuth users
-      });
-      logger.info(`New user registered via Apple: ${user.email || user.appleId}`);
-    } else {
-      if (!user.appleId) {
-        user.appleId = appleId;
-        user.provider = AUTH_PROVIDERS.APPLE;
-        if (emailVerified && !user.isVerified) {
-          user.isVerified = true;
-        }
-        await user.save({ validateBeforeSave: false });
-        logger.info(`Linked Apple account to existing user: ${user.email || user.appleId}`);
-      }
+      logger.warn(`Google ID token verification failed: ${error.message}`);
+      throw ApiError.badRequest('Invalid Google ID token');
     }
-
-    await user.updateLastLogin();
-    const authTokens = await TokenService.generateAndStoreTokens(user);
-    return { user, tokens: authTokens };
   }
+
 }
 
 export default AuthService;

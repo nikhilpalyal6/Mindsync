@@ -1,11 +1,16 @@
-import { Link, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import './navbar.css'
 
 export default function Navbar() {
+  const { user, signOut } = useAuth()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
+  const dropdownRef = useRef(null)
 
   // Handle scroll
   useEffect(() => {
@@ -23,10 +28,14 @@ export default function Navbar() {
       if (isMenuOpen && !e.target.closest('.mobile-nav') && !e.target.closest('.mobile-menu-btn')) {
         setIsMenuOpen(false)
       }
+
+      if (isDropdownOpen && dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsDropdownOpen(false)
+      }
     }
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
-  }, [isMenuOpen])
+  }, [isMenuOpen, isDropdownOpen])
 
   // Prevent scroll when menu is open
   useEffect(() => {
@@ -94,8 +103,41 @@ export default function Navbar() {
         </ul>
 
         <div className="nav-actions">
-          <Link className="login" to="/login">Login</Link>
-          <Link className="cta" to="/study">Start Free</Link>
+          {user ? (
+            <div className="profile-menu" ref={dropdownRef}>
+              <button type="button" className="profile-button" onClick={() => setIsDropdownOpen((prev) => !prev)}>
+                <span className="profile-avatar">
+                  {user.profileImage ? (
+                    <img src={user.profileImage} alt={user.name || user.username} />
+                  ) : (
+                    <span>{(user.name || user.username || 'U').charAt(0).toUpperCase()}</span>
+                  )}
+                </span>
+                <span className="profile-name">{user.name || user.username}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="profile-chevron">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {isDropdownOpen && (
+                <div className="profile-dropdown">
+                  <button type="button" onClick={() => { setIsDropdownOpen(false); navigate('/profile') }}>
+                    Profile
+                  </button>
+                  <button type="button" onClick={() => { setIsDropdownOpen(false); navigate('/settings') }}>
+                    Settings
+                  </button>
+                  <button type="button" className="logout-action" onClick={async () => { setIsDropdownOpen(false); await signOut(); navigate('/login') }}>
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <Link className="login" to="/login">Login</Link>
+              <Link className="cta" to="/study">Start Free</Link>
+            </>
+          )}
         </div>
 
         <button 
@@ -165,8 +207,28 @@ export default function Navbar() {
           </li>
         </ul>
         <div className="nav-actions">
-          <Link onClick={() => setIsMenuOpen(false)} className="login" to="/login">Login</Link>
-          <Link onClick={() => setIsMenuOpen(false)} className="cta" to="/study">Start Free</Link>
+          {user ? (
+            <>
+              <Link onClick={() => setIsMenuOpen(false)} className="login" to="/profile">{user.name || user.username}</Link>
+              <Link onClick={() => setIsMenuOpen(false)} className="login" to="/settings">Settings</Link>
+              <button
+                type="button"
+                className="cta"
+                onClick={async () => {
+                  setIsMenuOpen(false)
+                  await signOut()
+                  navigate('/login')
+                }}
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <Link onClick={() => setIsMenuOpen(false)} className="login" to="/login">Login</Link>
+              <Link onClick={() => setIsMenuOpen(false)} className="cta" to="/study">Start Free</Link>
+            </>
+          )}
         </div>
       </div>
     </nav>

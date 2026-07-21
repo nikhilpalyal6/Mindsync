@@ -8,10 +8,12 @@ import config from '../config/index.js';
 class AuthController {
   static register = asyncHandler(async (req, res) => {
     const { name, username, email, password } = req.body;
-    const result = await AuthService.register({ name, username, email, password });
+    const { user, tokens } = await AuthService.register({ name, username, email, password });
+
+    setAuthCookies(res, tokens);
 
     res.status(HTTP_STATUS.CREATED).json(
-      new ApiResponse(HTTP_STATUS.CREATED, result, 'User registered successfully')
+      new ApiResponse(HTTP_STATUS.CREATED, { user, accessToken: tokens.accessToken }, 'User registered successfully. Check your email to verify your account.')
     );
   });
 
@@ -118,24 +120,19 @@ class AuthController {
   });
 
   static googleAuth = asyncHandler(async (req, res) => {
-    const { code } = req.body;
-    const { user, tokens } = await AuthService.googleAuth(code);
+    const { credential, idToken } = req.body;
+    const googleToken = credential || idToken;
+
+    if (!googleToken) {
+      throw new Error('Google ID token is required');
+    }
+
+    const { user, tokens } = await AuthService.googleAuth(googleToken);
 
     setAuthCookies(res, tokens);
 
     res.status(HTTP_STATUS.OK).json(
       new ApiResponse(HTTP_STATUS.OK, { user, accessToken: tokens.accessToken }, 'Google login successful')
-    );
-  });
-
-  static appleAuth = asyncHandler(async (req, res) => {
-    const { idToken, nonce } = req.body;
-    const { user, tokens } = await AuthService.appleAuth(idToken, nonce);
-
-    setAuthCookies(res, tokens);
-
-    res.status(HTTP_STATUS.OK).json(
-      new ApiResponse(HTTP_STATUS.OK, { user, accessToken: tokens.accessToken }, 'Apple login successful')
     );
   });
 }

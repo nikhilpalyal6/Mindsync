@@ -40,9 +40,44 @@ class FileService {
     }
   }
 
+  static extractPublicIdFromUrl(imageUrl) {
+    if (!imageUrl) {
+      return null;
+    }
+
+    try {
+      const parsedUrl = new URL(imageUrl);
+      const pathSegments = parsedUrl.pathname.split('/');
+      const uploadIndex = pathSegments.findIndex((segment) => segment === 'upload');
+
+      if (uploadIndex === -1 || uploadIndex === pathSegments.length - 1) {
+        return null;
+      }
+
+      const publicIdSegments = pathSegments.slice(uploadIndex + 1);
+
+      if (publicIdSegments[0] && /^v\d+$/.test(publicIdSegments[0])) {
+        publicIdSegments.shift();
+      }
+
+      const publicIdWithExtension = publicIdSegments.join('/');
+      const extensionIndex = publicIdWithExtension.lastIndexOf('.');
+      return extensionIndex === -1
+        ? publicIdWithExtension
+        : publicIdWithExtension.substring(0, extensionIndex);
+    } catch (error) {
+      logger.warn('Unable to extract Cloudinary public ID from URL', { imageUrl, error: error.message });
+      return null;
+    }
+  }
+
   static async deleteImage(publicId) {
     if (!cloudinaryClient) {
-      logger.warn('Cloudinary not configured; skipping image deletion');
+      logger.warn('Cloudinary is not configured; skipping image deletion');
+      return;
+    }
+
+    if (!publicId) {
       return;
     }
 
