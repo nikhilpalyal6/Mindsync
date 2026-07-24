@@ -5,8 +5,7 @@ import AOS from 'aos'
 import 'aos/dist/aos.css'
 import './auth.css'
 import { useAuth } from '../contexts/AuthContext'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
+import { login, register, googleLogin } from '../services/api'
 
 export default function Auth() {
   const location = useLocation()
@@ -16,6 +15,8 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [validationErrors, setValidationErrors] = useState({})
+  const [rateLimit, setRateLimit] = useState({ active: false, retryAfter: null })
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -42,54 +43,92 @@ export default function Auth() {
     })
     setIsLoading(false)
     setError('')
+    setValidationErrors({})
+    setRateLimit({ active: false, retryAfter: null })
   }, [isSignup])
 
+  useEffect(() => {
+    let countdown
+    if (rateLimit.active && rateLimit.retryAfter) {
+      countdown = setInterval(() => {
+        setRateLimit(prev => {
+          if (prev.retryAfter <= 1) {
+            clearInterval(countdown)
+            return { active: false, retryAfter: null }
+          }
+          return { ...prev, retryAfter: prev.retryAfter - 1 }
+        })
+      }, 1000)
+    }
+    return () => clearInterval(countdown)
+  }, [rateLimit.active, rateLimit.retryAfter])
+
   const { loginComplete } = useAuth()
+  const ROLES = {
+    USER: 'USER',
+    ADMIN: 'ADMIN',
+    SUPER_ADMIN: 'SUPER_ADMIN',
+  };
+  const ROLE_HIERARCHY = {
+    [ROLES.USER]: 1,
+    [ROLES.ADMIN]: 2,
+    [ROLES.SUPER_ADMIN]: 3,
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (isLoading || rateLimit.active) return
+
     setIsLoading(true)
     setError('')
+    setValidationErrors({})
 
     try {
-      let url, body
-
       if (isSignup) {
-        url = `${API_BASE_URL}/auth/register`
-        body = {
-          name: formData.name,
-          username: formData.username,
-          email: formData.email,
-          password: formData.password
-        }
+        await register(formData.name, formData.username, formData.email, formData.password)
       } else {
-        url = `${API_BASE_URL}/auth/login`
-        body = {
-          identifier: formData.email,
-          password: formData.password
-        }
+        await login(formData.email, formData.password)
       }
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify(body)
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Something went wrong')
+      const currentUser = await loginComplete()
+      const userRoleLevel = ROLE_HIERARCHY[currentUser?.role] || 0;
+      const adminLevel = ROLE_HIERARCHY[ROLES.ADMIN];
+      if (userRoleLevel >= adminLevel) {
+        navigate('/admin')
+      } else {
+        navigate('/study')
       }
-
-      await loginComplete()
-      navigate('/study')
     } catch (err) {
       console.error('[Auth] Error:', err)
-      setError(err.message)
+      
+      if (err.statusCode === 429) {
+        setRateLimit({
+          active: true,
+          retryAfter: err.retryAfter || 60
+        })
+        setError('Too many attempts. Please wait before trying again.')
+      } else if (err.statusCode === 422 && err.errors.length > 0) {
+        // Handle validation errors
+        const fieldErrors = {}
+        err.errors.forEach(e => {
+          if (e.field) {
+            fieldErrors[e.field] = e.message
+          }
+        })
+        setValidationErrors(fieldErrors)
+        setError(err.message || 'Please fix the errors below.')
+        
+        // Scroll to first invalid field
+        setTimeout(() => {
+          const firstInvalidField = document.querySelector('.form-group.error input')
+          if (firstInvalidField) {
+            firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            firstInvalidField.focus()
+          }
+        }, 100)
+      } else {
+        setError(err.message || 'Something went wrong')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -102,29 +141,31 @@ export default function Auth() {
         throw new Error('Google login failed')
       }
 
+      if (isLoading || rateLimit.active) return
+
       setIsLoading(true)
       setError('')
+      setValidationErrors({})
 
-      const response = await fetch(`${API_BASE_URL}/auth/google`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
-        body: JSON.stringify({ idToken: credential })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Google login failed')
+      await googleLogin(credential)
+      const currentUser = await loginComplete()
+      const userRoleLevel = ROLE_HIERARCHY[currentUser?.role] || 0;
+      const adminLevel = ROLE_HIERARCHY[ROLES.ADMIN];
+      if (userRoleLevel >= adminLevel) {
+        navigate('/admin')
+      } else {
+        navigate('/study')
       }
-
-      await loginComplete()
-      navigate('/study')
     } catch (err) {
       console.error('[Auth] Google login error:', err)
-      setError(err.message)
+      
+      if (err.statusCode === 429) {
+        setRateLimit({
+          active: true,
+          retryAfter: err.retryAfter || 60
+        })
+      }
+      setError(err.message || 'Google login failed')
     } finally {
       setIsLoading(false)
     }
@@ -133,6 +174,8 @@ export default function Auth() {
   const handleGoogleError = () => {
     setError('Google login failed')
   }
+
+  const getFieldError = (fieldName) => validationErrors[fieldName]
 
   return (
     <div className="auth-page">
@@ -198,12 +241,17 @@ export default function Auth() {
             {error && (
               <div className="error-message">
                 {error}
+                {rateLimit.active && rateLimit.retryAfter && (
+                  <span style={{ display: 'block', marginTop: '8px', fontSize: '14px' }}>
+                    Retry in {rateLimit.retryAfter}s
+                  </span>
+                )}
               </div>
             )}
             <form onSubmit={handleSubmit} className="auth-form">
               {isSignup && (
                 <>
-                  <div className="form-group">
+                  <div className={`form-group ${getFieldError('name') ? 'error' : ''}`}>
                     <label htmlFor="name">Full name</label>
                     <input
                       type="text"
@@ -213,8 +261,11 @@ export default function Auth() {
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
                     />
+                    {getFieldError('name') && (
+                      <div className="field-error">{getFieldError('name')}</div>
+                    )}
                   </div>
-                  <div className="form-group">
+                  <div className={`form-group ${getFieldError('username') ? 'error' : ''}`}>
                     <label htmlFor="username">Username</label>
                     <input
                       type="text"
@@ -224,11 +275,14 @@ export default function Auth() {
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                       required
                     />
+                    {getFieldError('username') && (
+                      <div className="field-error">{getFieldError('username')}</div>
+                    )}
                   </div>
                 </>
               )}
 
-              <div className="form-group">
+              <div className={`form-group ${getFieldError('email') ? 'error' : ''}`}>
                 <label htmlFor="email">Email address</label>
                 <input
                   type="email"
@@ -238,9 +292,12 @@ export default function Auth() {
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
                 />
+                {getFieldError('email') && (
+                  <div className="field-error">{getFieldError('email')}</div>
+                )}
               </div>
 
-              <div className="form-group">
+              <div className={`form-group ${getFieldError('password') ? 'error' : ''}`}>
                 <label htmlFor="password">
                   {isSignup ? 'Password' : 'Password'}
                   {isSignup && (
@@ -273,6 +330,9 @@ export default function Auth() {
                     )}
                   </button>
                 </div>
+                {getFieldError('password') && (
+                  <div className="field-error">{getFieldError('password')}</div>
+                )}
               </div>
 
               {!isSignup && (
@@ -303,7 +363,11 @@ export default function Auth() {
                 </div>
               )}
 
-              <button type="submit" className="submit-btn" disabled={isLoading}>
+              <button 
+                type="submit" 
+                className="submit-btn" 
+                disabled={isLoading || rateLimit.active}
+              >
                 {isLoading ? (
                   <>
                     <span className="loading-spinner"></span>

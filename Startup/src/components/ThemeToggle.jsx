@@ -1,29 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useTheme } from '../contexts/ThemeContext'
 import './navbar.css'
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState(() => {
-    try {
-      return localStorage.getItem('theme') || 'dark'
-    } catch {
-      return 'dark'
-    }
-  })
+  const { theme, setTheme } = useTheme()
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    try {
-      localStorage.setItem('theme', theme)
-    } catch {}
-  }, [theme])
+  const cycleTheme = () => {
+    const themes = ['light', 'dark', 'system']
+    const currentIndex = themes.indexOf(theme)
+    setTheme(themes[(currentIndex + 1) % themes.length])
+  }
+
+  const getIcon = () => {
+    if (theme === 'light') return '☀️'
+    if (theme === 'dark') return '🌙'
+    return '💻'
+  }
 
   return (
     <button
       className="theme-toggle"
       aria-label="Toggle theme"
-      onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+      onClick={cycleTheme}
+      title={`Current theme: ${theme}`}
     >
-      {theme === 'dark' ? '☀️' : '🌙'}
+      {getIcon()}
     </button>
   )
 }
+

@@ -2,8 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './auth.css';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+import { verifyEmail, resendVerification } from '../services/api';
 
 export default function VerifyEmail() {
   const { token } = useParams();
@@ -29,7 +28,7 @@ export default function VerifyEmail() {
   };
 
   useEffect(() => {
-    const verifyEmail = async () => {
+    const verifyEmailFn = async () => {
       if (hasVerified.current) {
         return;
       }
@@ -43,17 +42,7 @@ export default function VerifyEmail() {
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
-        });
-
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          throw new Error(data.message || 'Invalid or expired verification link');
-        }
+        await verifyEmail(token);
 
         if (user) {
           await loginComplete();
@@ -71,28 +60,21 @@ export default function VerifyEmail() {
       }
     };
 
-    verifyEmail();
+    verifyEmailFn();
   }, [token, navigate, loginComplete, user]);
 
   const handleResend = async () => {
-    if (!user) {
-      setStatus('error');
-      setMessage('Please log in to resend your verification email.');
+    if (!user || isResending) {
+      if (!user) {
+        setStatus('error');
+        setMessage('Please log in to resend your verification email.');
+      }
       return;
     }
 
     setIsResending(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Unable to resend verification email');
-      }
+      await resendVerification();
 
       setStatus('success');
       setMessage('A fresh verification email has been sent. Please check your inbox.');

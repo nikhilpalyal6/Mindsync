@@ -119,6 +119,19 @@ const userSchema = new mongoose.Schema(
       select: false,
       default: null,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -256,8 +269,11 @@ userSchema.methods.setPassword = async function setPassword(newPassword) {
   await this.save();
 };
 
-userSchema.methods.softDelete = async function softDelete() {
+userSchema.methods.softDelete = async function softDelete(deletedBy = null) {
   this.isActive = false;
+  this.isDeleted = true;
+  this.deletedAt = new Date();
+  this.deletedBy = deletedBy || this._id;
   await this.save({ validateBeforeSave: false });
 };
 

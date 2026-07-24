@@ -70,9 +70,11 @@ export function AuthProvider({ children }) {
     try {
       const currentUser = await fetchCurrentUser()
       setUser(currentUser)
+      return currentUser
     } catch {
       // Don't set user to null - keep existing session if fetch fails
       // This prevents logging out the user during verification
+      return null
     }
   }
 

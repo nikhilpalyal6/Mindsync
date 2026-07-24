@@ -8,7 +8,9 @@ import config from '../config/index.js';
 class AuthController {
   static register = asyncHandler(async (req, res) => {
     const { name, username, email, password } = req.body;
-    const { user, tokens } = await AuthService.register({ name, username, email, password });
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const { user, tokens } = await AuthService.register({ name, username, email, password }, { userAgent, ipAddress });
 
     setAuthCookies(res, tokens);
 
@@ -19,7 +21,9 @@ class AuthController {
 
   static login = asyncHandler(async (req, res) => {
     const { identifier, password } = req.body;
-    const { user, tokens } = await AuthService.login(identifier, password);
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const { user, tokens } = await AuthService.login(identifier, password, { userAgent, ipAddress });
 
     setAuthCookies(res, tokens);
 
@@ -29,7 +33,10 @@ class AuthController {
   });
 
   static logout = asyncHandler(async (req, res) => {
-    await AuthService.logout(req.user._id);
+    const refreshToken = getRefreshTokenFromRequest(req);
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    await AuthService.logout(req.user._id, { refreshToken, userAgent, ipAddress });
     clearAuthCookies(res);
 
     res.status(HTTP_STATUS.OK).json(
@@ -39,7 +46,9 @@ class AuthController {
 
   static refreshToken = asyncHandler(async (req, res) => {
     const refreshToken = getRefreshTokenFromRequest(req);
-    const tokens = await AuthService.refreshAccessToken(refreshToken);
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const tokens = await AuthService.refreshAccessToken(refreshToken, { userAgent, ipAddress });
 
     setAuthCookies(res, tokens);
 
@@ -58,7 +67,9 @@ class AuthController {
 
   static changePassword = asyncHandler(async (req, res) => {
     const { currentPassword, newPassword, confirmPassword } = req.body;
-    await AuthService.changePassword(req.user._id, currentPassword, newPassword, confirmPassword);
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    await AuthService.changePassword(req.user._id, currentPassword, newPassword, confirmPassword, { userAgent, ipAddress });
     clearAuthCookies(res);
 
     res.status(HTTP_STATUS.OK).json(
@@ -77,7 +88,9 @@ class AuthController {
 
   static resetPassword = asyncHandler(async (req, res) => {
     const { token, newPassword, confirmPassword } = req.body;
-    await AuthService.resetPassword(token, newPassword, confirmPassword);
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    await AuthService.resetPassword(token, newPassword, confirmPassword, { userAgent, ipAddress });
 
     res.status(HTTP_STATUS.OK).json(
       new ApiResponse(HTTP_STATUS.OK, null, 'Password reset successfully')
@@ -86,7 +99,9 @@ class AuthController {
 
   static verifyEmail = asyncHandler(async (req, res) => {
     const { token } = req.body;
-    await AuthService.verifyEmail(token);
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    await AuthService.verifyEmail(token, { userAgent, ipAddress });
 
     res.status(HTTP_STATUS.OK).json(
       new ApiResponse(HTTP_STATUS.OK, null, 'Email verified successfully')
@@ -103,7 +118,9 @@ class AuthController {
 
   static updateProfile = asyncHandler(async (req, res) => {
     const updateData = req.body;
-    const user = await AuthService.updateProfile(req.user._id, updateData, req.file);
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
+    const user = await AuthService.updateProfile(req.user._id, updateData, req.file, { userAgent, ipAddress });
 
     res.status(HTTP_STATUS.OK).json(
       new ApiResponse(HTTP_STATUS.OK, user, 'Profile updated successfully')
@@ -122,12 +139,14 @@ class AuthController {
   static googleAuth = asyncHandler(async (req, res) => {
     const { credential, idToken } = req.body;
     const googleToken = credential || idToken;
+    const userAgent = req.get('user-agent');
+    const ipAddress = req.ip || req.connection.remoteAddress;
 
     if (!googleToken) {
       throw new Error('Google ID token is required');
     }
 
-    const { user, tokens } = await AuthService.googleAuth(googleToken);
+    const { user, tokens } = await AuthService.googleAuth(googleToken, { userAgent, ipAddress });
 
     setAuthCookies(res, tokens);
 

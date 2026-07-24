@@ -17,11 +17,5 @@ export default function ProtectedRoute({ children }) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  const protectedStudyArea = location.pathname.startsWith('/study')
-
-  if (!user.isVerified && protectedStudyArea) {
-    return <Navigate to="/profile" state={{ from: location }} replace />
-  }
-
   return children
 }

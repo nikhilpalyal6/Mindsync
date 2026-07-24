@@ -1,5 +1,6 @@
 import User from '../models/user.model.js';
 import TokenService from './token.service.js';
+import UserService from './user.service.js';
 import EmailService, { generateSecureToken } from './email.service.js';
 import FileService from './file.service.js';
 import { validatePasswordStrength } from '../utils/password.utils.js';
@@ -15,8 +16,9 @@ const googleClient = config.google.isConfigured
   : null;
 
 class AuthService {
-  static async register(userData) {
+  static async register(userData, options = {}) {
     const { name, username, email, password } = userData;
+    const { userAgent, ipAddress } = options;
 
     const passwordCheck = validatePasswordStrength(password);
     if (!passwordCheck.isValid) {
@@ -56,7 +58,15 @@ class AuthService {
       throw ApiError.internal('Unable to send verification email. Please check SMTP credentials in .env and try again.');
     }
 
-    const tokens = await TokenService.generateAndStoreTokens(user);
+    const tokens = await TokenService.generateAndStoreTokens(user, { userAgent, ipAddress });
+
+    // Log activity and login history
+    await UserService.logActivity(user._id, 'login', {}, { userAgent, ipAddress });
+    await UserService.logLoginHistory(user._id, true, { userAgent, ipAddress, provider: 'local' });
+
+    // Create default preferences
+    await UserService.getOrCreateNotificationPreferences(user._id);
+    await UserService.getOrCreateUserPreferences(user._id);
 
     logger.info(`User registered successfully: ${user.email}`);
 
@@ -66,24 +76,29 @@ class AuthService {
     };
   }
 
-  static async login(identifier, password) {
+  static async login(identifier, password, options = {}) {
+    const { userAgent, ipAddress } = options;
     const user = await User.findByEmailOrUsername(identifier).select('+password');
 
     if (!user) {
+      await UserService.logLoginHistory(null, false, { userAgent, ipAddress, provider: 'local', failureReason: 'Invalid credentials' });
       throw ApiError.unauthorized('Invalid credentials');
     }
 
     if (!user.isActive) {
+      await UserService.logLoginHistory(user._id, false, { userAgent, ipAddress, provider: 'local', failureReason: 'Account deactivated' });
       throw ApiError.forbidden('Account has been deactivated');
     }
 
     if (user.isAccountLocked()) {
+      await UserService.logLoginHistory(user._id, false, { userAgent, ipAddress, provider: 'local', failureReason: 'Account locked' });
       throw ApiError.forbidden('Account locked due to too many failed login attempts. Please try again later.');
     }
 
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       await user.incrementFailedLoginAttempts();
+      await UserService.logLoginHistory(user._id, false, { userAgent, ipAddress, provider: 'local', failureReason: 'Invalid password' });
       logger.warn(`Failed login attempt for ${identifier}`);
       throw ApiError.unauthorized('Invalid credentials');
     }
@@ -91,7 +106,15 @@ class AuthService {
     await user.resetFailedLoginAttempts();
     await user.updateLastLogin();
 
-    const tokens = await TokenService.generateAndStoreTokens(user);
+    const tokens = await TokenService.generateAndStoreTokens(user, { userAgent, ipAddress });
+
+    // Log activity and login history
+    await UserService.logActivity(user._id, 'login', {}, { userAgent, ipAddress });
+    await UserService.logLoginHistory(user._id, true, { userAgent, ipAddress, provider: 'local' });
+
+    // Create default preferences if they don't exist
+    await UserService.getOrCreateNotificationPreferences(user._id);
+    await UserService.getOrCreateUserPreferences(user._id);
 
     logger.info(`User logged in successfully: ${user.email}`);
 
@@ -101,13 +124,16 @@ class AuthService {
     };
   }
 
-  static async logout(userId) {
-    await TokenService.logout(userId);
+  static async logout(userId, options = {}) {
+    const { refreshToken, userAgent, ipAddress } = options;
+    await TokenService.logout(userId, refreshToken);
+    await UserService.logActivity(userId, 'logout', {}, { userAgent, ipAddress });
     logger.info(`User logged out: ${userId}`);
   }
 
-  static async refreshAccessToken(refreshToken) {
-    const tokens = await TokenService.refreshAccessToken(refreshToken);
+  static async refreshAccessToken(refreshToken, options = {}) {
+    const { userAgent, ipAddress } = options;
+    const tokens = await TokenService.refreshAccessToken(refreshToken, { userAgent, ipAddress });
     logger.info(`Access token refreshed`);
     return tokens;
   }
@@ -120,7 +146,8 @@ class AuthService {
     return user;
   }
 
-  static async changePassword(userId, currentPassword, newPassword, confirmPassword) {
+  static async changePassword(userId, currentPassword, newPassword, confirmPassword, options = {}) {
+    const { userAgent, ipAddress } = options;
     if (newPassword !== confirmPassword) {
       throw ApiError.badRequest('New password and confirm password do not match');
     }
@@ -144,7 +171,9 @@ class AuthService {
     }
 
     await user.setPassword(newPassword);
-    await user.clearRefreshToken();
+    await TokenService.logoutAllSessions(userId);
+
+    await UserService.logActivity(userId, 'password_change', {}, { userAgent, ipAddress });
 
     logger.info(`Password changed successfully for user: ${user.email}`);
   }
@@ -172,7 +201,8 @@ class AuthService {
     };
   }
 
-  static async resetPassword(token, newPassword, confirmPassword) {
+  static async resetPassword(token, newPassword, confirmPassword, options = {}) {
+    const { userAgent, ipAddress } = options;
     if (newPassword !== confirmPassword) {
       throw ApiError.badRequest('New password and confirm password do not match');
     }
@@ -201,11 +231,15 @@ class AuthService {
 
     await user.setPassword(newPassword);
     await user.clearPasswordResetToken(); // Added to clear token from DB
-    await user.clearRefreshToken();
+    await TokenService.logoutAllSessions(user._id);
+
+    await UserService.logActivity(user._id, 'password_reset', {}, { userAgent, ipAddress });
+
     logger.info(`Password reset successfully for user: ${user.email}`);
   }
 
-  static async verifyEmail(token) {
+  static async verifyEmail(token, options = {}) {
+    const { userAgent, ipAddress } = options;
     const users = await User.find().select('+emailVerificationToken +emailVerificationExpires');
     let user = null;
     for (const u of users) {
@@ -222,6 +256,9 @@ class AuthService {
     }
 
     await user.markEmailVerified();
+
+    await UserService.logActivity(user._id, 'email_verification', {}, { userAgent, ipAddress });
+
     logger.info(`Email verified successfully for user: ${user.email}`);
   }
 
@@ -249,8 +286,9 @@ class AuthService {
     }
   }
 
-  static async updateProfile(userId, updateData, file) {
+  static async updateProfile(userId, updateData, file, options = {}) {
     const { name, username, bio } = updateData;
+    const { userAgent, ipAddress } = options;
     const user = await User.findById(userId);
 
     if (!user) {
@@ -283,6 +321,9 @@ class AuthService {
     }
 
     await user.save();
+
+    await UserService.logActivity(userId, 'profile_update', {}, { userAgent, ipAddress });
+
     logger.info(`Profile updated successfully for user: ${user.email}`);
 
     return user;
@@ -301,7 +342,8 @@ class AuthService {
     logger.info(`Account soft deleted: ${userId}`);
   }
 
-  static async googleAuth(idToken) {
+  static async googleAuth(idToken, options = {}) {
+    const { userAgent, ipAddress } = options;
     if (!config.google.isConfigured || !googleClient) {
       throw ApiError.badRequest('Google OAuth is not configured');
     }
@@ -378,7 +420,16 @@ class AuthService {
       }
 
       await user.updateLastLogin();
-      const authTokens = await TokenService.generateAndStoreTokens(user);
+      const authTokens = await TokenService.generateAndStoreTokens(user, { userAgent, ipAddress });
+
+      // Log activity and login history
+      await UserService.logActivity(user._id, 'google_login', {}, { userAgent, ipAddress });
+      await UserService.logLoginHistory(user._id, true, { userAgent, ipAddress, provider: 'google' });
+
+      // Create default preferences if they don't exist
+      await UserService.getOrCreateNotificationPreferences(user._id);
+      await UserService.getOrCreateUserPreferences(user._id);
+
       return { user, tokens: authTokens };
     } catch (error) {
       if (error instanceof ApiError) {

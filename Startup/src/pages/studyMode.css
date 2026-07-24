@@ -433,7 +433,7 @@
 /* Profile Dropdown */
 .profile-dropdown {
   position: absolute;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(30, 35, 45, 0.98);
@@ -447,12 +447,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  animation: dropdownSlideUp 0.2s ease;
+  animation: dropdownSlideDown 0.2s ease;
   z-index: 100;
   min-width: 200px;
   max-width: 280px;
-  max-height: 300px;
-  overflow-y: auto;
 }
 
 /* Responsive dropdown positioning */
@@ -466,6 +464,17 @@
   from {
     opacity: 0;
     transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes dropdownSlideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
   }
   to {
     opacity: 1;

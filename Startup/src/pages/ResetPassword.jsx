@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import './auth.css';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+import { resetPassword } from '../services/api';
 
 export default function ResetPassword() {
   const { token } = useParams();
@@ -50,6 +49,7 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isLoading) return;
     setIsLoading(true);
     setStatus('idle');
     setMessage('');
@@ -76,21 +76,7 @@ export default function ResetPassword() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          newPassword,
-          confirmPassword,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Something went wrong');
-      }
+      await resetPassword(token, newPassword, confirmPassword);
 
       setStatus('success');
       setMessage('Password updated successfully.');
