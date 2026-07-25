@@ -3,6 +3,7 @@ import config from './config/index.js';
 import logger from './config/logger.js';
 import { connectDB, disconnectDB } from './database/connection.js';
 import { verifyEmailConnection } from './config/email.js';
+import { logEvent } from './utils/auditLogger.js';
 
 let server;
 
@@ -17,9 +18,38 @@ const startServer = async () => {
       logger.warn('Email service is not ready. Verification and reset emails may fail.');
     }
 
-    server = app.listen(config.port, () => {
+    server = app.listen(config.port, async () => {
       logger.info(`MindSync server running in ${config.env} mode on port ${config.port}`);
       logger.info(`Health check: http://localhost:${config.port}/api/v1/health`);
+
+      // Log system initialization events
+      await logEvent({
+        category: 'system_event',
+        action: 'Server Start',
+        description: `MindSync server started successfully on port ${config.port} in ${config.env} mode.`,
+        status: 'success',
+        role: 'SYSTEM'
+      });
+
+      if (emailReady) {
+        await logEvent({
+          category: 'system_event',
+          action: 'Email Connected',
+          description: 'Nodemailer SMTP mail transporter connected successfully.',
+          status: 'success',
+          role: 'SYSTEM'
+        });
+      }
+
+      if (config.cloudinary?.cloudName && config.cloudinary?.apiKey && config.cloudinary?.apiSecret) {
+        await logEvent({
+          category: 'system_event',
+          action: 'Cloudinary Connected',
+          description: 'Cloudinary media upload service credentials verified.',
+          status: 'success',
+          role: 'SYSTEM'
+        });
+      }
     });
   } catch (error) {
     logger.error('Failed to start server', { error: error.message });
@@ -29,6 +59,16 @@ const startServer = async () => {
 
 const gracefulShutdown = async (signal) => {
   logger.info(`${signal} received. Starting graceful shutdown...`);
+  
+  try {
+    await logEvent({
+      category: 'system_event',
+      action: 'Server Shutdown',
+      description: `Graceful server shutdown initiated via ${signal} signal.`,
+      status: 'warning',
+      role: 'SYSTEM'
+    });
+  } catch (err) {}
 
   if (server) {
     server.close(async () => {

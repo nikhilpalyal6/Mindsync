@@ -1,6 +1,11 @@
 
 import User from '../models/user.model.js';
 import Activity from '../models/activity.model.js';
+import { getDBStatus } from '../database/connection.js';
+import { emailTransporter } from '../config/email.js';
+import { cloudinaryClient } from '../config/cloudinary.js';
+import config from '../config/index.js';
+import process from 'process';
 
 class DashboardService {
   async getDashboardStats() {
@@ -52,6 +57,45 @@ class DashboardService {
       .limit(10)
       .populate('userId', 'name email username');
 
+    // Live Health Checks
+    let emailStatus = 'Status unavailable';
+    if (config.email.isConfigured) {
+      try {
+        if (emailTransporter) {
+          await emailTransporter.verify();
+          emailStatus = 'connected';
+        }
+      } catch (err) {
+        emailStatus = 'error';
+      }
+    } else {
+      emailStatus = 'unconfigured';
+    }
+
+    let cloudinaryStatus = 'Status unavailable';
+    if (config.cloudinary.isConfigured) {
+      if (cloudinaryClient) {
+        cloudinaryStatus = 'connected';
+      }
+    } else {
+      cloudinaryStatus = 'unconfigured';
+    }
+
+    const health = {
+      database: getDBStatus().status || 'disconnected',
+      api: 'connected',
+      email: emailStatus,
+      cloudinary: cloudinaryStatus,
+    };
+
+    // Server Info
+    const serverInfo = {
+      environment: config.env || 'production',
+      version: config.app.version || '1.0.0',
+      uptime: process.uptime(),
+      currentTime: new Date().toISOString(),
+    };
+
     return {
       totalUsers,
       activeUsers,
@@ -59,6 +103,8 @@ class DashboardService {
       newUsersThisWeek,
       userGrowthData,
       recentActivities,
+      health,
+      serverInfo,
     };
   }
 }

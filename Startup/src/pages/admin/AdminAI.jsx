@@ -1,5 +1,6 @@
 import React from 'react';
 import { Cpu } from 'lucide-react';
+import EmptyState from '../../components/admin/EmptyState';
 
 export const AdminAI = () => {
   return (
@@ -9,15 +10,11 @@ export const AdminAI = () => {
         <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#9ca3af' }}>Monitor LLM status, model parameters, API latency, and prompt settings.</p>
       </div>
 
-      <div className="admin-empty-state">
-        <div className="admin-empty-icon-container">
-          <Cpu className="w-8 h-8" />
-        </div>
-        <h3 className="admin-empty-title">No AI monitoring data available</h3>
-        <p className="admin-empty-description">
-          MindSync AI integration endpoints and LLM logs have no dedicated administrator status hook. All models run directly in user study namespaces.
-        </p>
-      </div>
+      <EmptyState 
+        title="No AI monitoring data available"
+        description="MindSync AI integration endpoints and LLM logs have no dedicated administrator status hook. All models run directly in user study namespaces."
+        icon={Cpu}
+      />
     </div>
   );
 };

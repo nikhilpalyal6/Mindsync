@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import config from '../config/index.js';
 import logger from '../config/logger.js';
+import { logEvent } from '../utils/auditLogger.js';
 
 let isConnected = false;
 let reconnectAttempts = 0;
@@ -38,6 +39,13 @@ const registerEventHandlers = () => {
     isConnected = true;
     reconnectAttempts = 0;
     logger.info('MongoDB connected successfully');
+    logEvent({
+      category: 'system_event',
+      action: 'MongoDB Connected',
+      description: 'Primary MongoDB database connection established successfully.',
+      status: 'success',
+      role: 'SYSTEM'
+    });
   });
 
   mongoose.connection.on('disconnected', () => {
@@ -51,6 +59,13 @@ const registerEventHandlers = () => {
     isConnected = true;
     reconnectAttempts = 0;
     logger.info('MongoDB reconnected');
+    logEvent({
+      category: 'system_event',
+      action: 'MongoDB Reconnected',
+      description: 'Primary MongoDB database connection re-established.',
+      status: 'success',
+      role: 'SYSTEM'
+    });
   });
 };
 

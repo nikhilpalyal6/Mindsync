@@ -42,6 +42,34 @@ const apiRequest = async (endpoint, options = {}) => {
     }
 
     if (!response.ok) {
+      if (response.status === 401 && !endpoint.includes('/auth/refresh-token') && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/logout')) {
+        try {
+          const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+            method: 'POST',
+            credentials: 'include',
+          });
+          
+          if (refreshResponse.ok) {
+            const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+                ...fetchOptions.headers,
+              },
+              signal: controller.signal,
+              ...fetchOptions,
+            });
+            
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json();
+              return retryData.data;
+            }
+          }
+        } catch (refreshError) {
+          console.error('Silent token refresh failed:', refreshError);
+        }
+      }
+
       const retryAfter = response.headers.get('Retry-After')
       throw new ApiError(
         data.message || 'Request failed',
@@ -168,6 +196,147 @@ export const logoutAllOtherDevices = async () => {
     method: 'DELETE',
   })
 }
+
+// Admin User Management endpoints
+export const getAdminUsers = async (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/admin/users?${query}`);
+};
+
+export const getAdminUserDetails = async (id) => {
+  return await api.get(`/admin/users/${id}`);
+};
+
+export const updateAdminUserStatus = async (id, isActive) => {
+  return await api.patch(`/admin/users/${id}/status`, { isActive });
+};
+
+export const updateAdminUserVerify = async (id, isVerified) => {
+  return await api.patch(`/admin/users/${id}/verify`, { isVerified });
+};
+
+export const updateAdminUserRole = async (id, role) => {
+  return await api.patch(`/admin/users/${id}/role`, { role });
+};
+
+export const adminBulkAction = async (userIds, action) => {
+  return await api.post('/admin/users/bulk-action', { userIds, action });
+};
+
+export const getAdminAnalytics = async (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/admin/analytics/overview?${query}`);
+};
+
+export const getAdminReportData = async (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/admin/reports/data?${query}`);
+};
+
+export const getAdminNotifications = async (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/admin/notifications?${query}`);
+};
+
+export const getAdminNotificationStats = async () => {
+  return await api.get('/admin/notifications/stats');
+};
+
+export const getAdminNotificationById = async (id) => {
+  return await api.get(`/admin/notifications/${id}`);
+};
+
+export const markAdminNotificationRead = async (id) => {
+  return await api.patch(`/admin/notifications/read/${id}`);
+};
+
+export const markAdminNotificationUnread = async (id) => {
+  return await api.patch(`/admin/notifications/unread/${id}`);
+};
+
+export const markAllAdminNotificationsRead = async () => {
+  return await api.patch('/admin/notifications/read-all');
+};
+
+export const deleteAdminNotification = async (id) => {
+  return await api.delete(`/admin/notifications/${id}`);
+};
+
+export const broadcastAdminAnnouncement = async (data) => {
+  return await api.post('/admin/notifications/broadcast', data);
+};
+
+export const getAdminSettingsConfig = async () => {
+  return await api.get('/admin/settings/config');
+};
+
+export const getAdminActivityLogs = async (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/admin/logs/activity?${query}`);
+};
+
+export const getAdminLoginLogs = async (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/admin/logs/logins?${query}`);
+};
+
+export const getAdminActiveSessions = async (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/admin/logs/sessions?${query}`);
+};
+
+export const getAdminLogsExportUrl = (params) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return `${API_BASE_URL}/admin/logs/export?${query}`;
+};
 
 // General API methods
 export const api = {
