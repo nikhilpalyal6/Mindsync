@@ -338,6 +338,33 @@ export const getAdminLogsExportUrl = (params) => {
   return `${API_BASE_URL}/admin/logs/export?${query}`;
 };
 
+export const getStudySessions = async (params = {}) => {
+  const cleanParams = {};
+  Object.keys(params).forEach(key => {
+    if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
+      cleanParams[key] = params[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  return await api.get(`/study?${query}`);
+};
+
+export const createStudySession = async (data) => {
+  return await api.post('/study', data);
+};
+
+export const updateStudySession = async (id, data) => {
+  return await api.patch(`/study/${id}`, data);
+};
+
+export const deleteStudySession = async (id) => {
+  return await api.delete(`/study/${id}`);
+};
+
+export const getStudyActivities = async () => {
+  return await api.get('/study/activity');
+};
+
 // General API methods
 export const api = {
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),

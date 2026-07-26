@@ -1,36 +1,365 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { Search, RefreshCw, MoreVertical, Pin, Trash2, Edit3, Copy, Archive, FileText, Video, BookOpen, Layers, HelpCircle, MessageSquare, Plus, Clock } from 'lucide-react'
+import { 
+  getStudySessions, 
+  createStudySession, 
+  updateStudySession, 
+  deleteStudySession,
+  getStudyActivities
+} from '../services/api'
 import './studyMode.css'
 import VideoLearning from '../components/VideoLearning'
 
+// Memoized Workspace Card Subcomponent with Context Menu and Count Chips
+const WorkspaceCard = React.memo(({ 
+  session, 
+  activeSessionId, 
+  onSelect, 
+  onRename, 
+  onTogglePin, 
+  onDelete 
+}) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(session.title);
+  const menuRef = useRef(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(false);
+      }
+    };
+    if (showMenu) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
+
+  const handleSaveRename = () => {
+    if (editTitle.trim() && editTitle !== session.title) {
+      onRename(session._id, editTitle.trim());
+    } else {
+      setEditTitle(session.title);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSaveRename();
+    if (e.key === 'Escape') {
+      setEditTitle(session.title);
+      setIsEditing(false);
+    }
+  };
+
+  const isSelected = activeSessionId === session._id;
+
+  return (
+    <div 
+      className={`enhanced-workspace-card ${session.pinned ? 'pinned' : ''} ${isSelected ? 'selected' : ''}`}
+      onClick={() => !isEditing && onSelect(session)}
+    >
+      <div className="card-header-row">
+        <div className="card-title-area">
+          {isEditing ? (
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={handleSaveRename}
+              onKeyDown={handleKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+              className="admin-select"
+              style={{ fontSize: '0.9rem', padding: '4px 8px', width: '100%' }}
+            />
+          ) : (
+            <h3 
+              className="card-title-text" 
+              onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+              title="Double-click to rename"
+            >
+              {session.pinned && <span style={{ marginRight: '6px' }}>📌</span>}
+              {session.title}
+            </h3>
+          )}
+          {session.description && (
+            <p className="card-desc-text">{session.description}</p>
+          )}
+        </div>
+
+        {/* Action Context Menu */}
+        <div className="card-menu-wrapper" ref={menuRef} onClick={(e) => e.stopPropagation()}>
+          <button 
+            className="card-menu-btn" 
+            onClick={() => setShowMenu(!showMenu)} 
+            aria-label="Workspace Options"
+          >
+            <MoreVertical size={14} />
+          </button>
+
+          {showMenu && (
+            <div className="card-dropdown-menu">
+              <button className="card-dropdown-item" onClick={() => { setShowMenu(false); setIsEditing(true); }}>
+                <Edit3 size={12} />
+                <span>Rename</span>
+              </button>
+              <button className="card-dropdown-item" onClick={(e) => { setShowMenu(false); onTogglePin(session, e); }}>
+                <Pin size={12} />
+                <span>{session.pinned ? 'Unpin' : 'Pin'}</span>
+              </button>
+              <button className="card-dropdown-item delete" onClick={(e) => { setShowMenu(false); onDelete(session._id, e); }}>
+                <Trash2 size={12} />
+                <span>Delete</span>
+              </button>
+
+              <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '2px 0' }} />
+
+              <button className="card-dropdown-item disabled" disabled>
+                <Copy size={12} />
+                <span>Duplicate</span>
+                <span className="disabled-badge">Phase 3.2+</span>
+              </button>
+              <button className="card-dropdown-item disabled" disabled>
+                <Archive size={12} />
+                <span>Archive</span>
+                <span className="disabled-badge">Phase 3.2+</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dates Row */}
+      <div className="card-dates-row">
+        <span>Created: {new Date(session.createdAt || Date.now()).toLocaleDateString()}</span>
+        <span>Opened: {new Date(session.lastOpened || session.updatedAt || Date.now()).toLocaleDateString()}</span>
+      </div>
+
+      {/* Placeholder Count Chips */}
+      <div className="card-counts-grid">
+        <div className="count-chip" title="PDF Documents">
+          <FileText size={10} /> <span>{session.pdfCount || 0}</span>
+        </div>
+        <div className="count-chip" title="YouTube Videos">
+          <Video size={10} /> <span>{session.youtubeCount || 0}</span>
+        </div>
+        <div className="count-chip" title="Notes">
+          <BookOpen size={10} /> <span>{session.notesCount || 0}</span>
+        </div>
+        <div className="count-chip" title="Flashcards">
+          <Layers size={10} /> <span>{session.flashcardsCount || 0}</span>
+        </div>
+        <div className="count-chip" title="Quizzes">
+          <HelpCircle size={10} /> <span>{session.quizCount || 0}</span>
+        </div>
+        <div className="count-chip" title="AI Chats">
+          <MessageSquare size={10} /> <span>{session.chatCount || 0}</span>
+        </div>
+      </div>
+    </div>
+  );
+});
+WorkspaceCard.displayName = 'WorkspaceCard';
+
+// Main StudyMode Component
 export default function StudyMode() {
   const { user, signOut } = useAuth()
-  const [showPasteModal, setShowPasteModal] = useState(false)
-  const [showRecordModal, setShowRecordModal] = useState(false)
-  const [showAddContentMenu, setShowAddContentMenu] = useState(false)
+  const navigate = useNavigate()
+
+  // Navigation & Dropdown toggles
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
+
+  // Real Sessions & Activities State
+  const [sessions, setSessions] = useState([])
+  const [activities, setActivities] = useState([])
+  const [activeSession, setActiveSession] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Inline editing state for sidebar item
+  const [editingSidebarId, setEditingSidebarId] = useState(null)
+  const [sidebarTitleText, setSidebarTitleText] = useState('')
+
+  // Active Workspace View Tab
+  const [activeTab, setActiveTab] = useState('pdf')
+
+  // Modals & Upload logic
+  const [showPasteModal, setShowPasteModal] = useState(false)
+  const [showRecordModal, setShowRecordModal] = useState(false)
   const [pasteUrl, setPasteUrl] = useState('')
   const [pasteText, setPasteText] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
+  const [uploadError, setUploadError] = useState('')
+  const [learnQuery, setLearnQuery] = useState('')
+
   const fileInputRef = useRef(null)
   const profileDropdownRef = useRef(null)
-  const navigate = useNavigate()
-  const [uploadError, setUploadError] = useState('')
   const sidebarRef = useRef(null)
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click()
+  // Load Sessions and Recent Activity
+  const fetchSessionsAndActivities = useCallback(async (selectLastOpened = false) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const [resSessions, resActivities] = await Promise.allSettled([
+        getStudySessions(),
+        getStudyActivities()
+      ])
+
+      const fetchedSessions = resSessions.status === 'fulfilled' ? (resSessions.value || []) : []
+      setSessions(fetchedSessions)
+
+      if (resActivities.status === 'fulfilled') {
+        setActivities(resActivities.value || [])
+      }
+
+      if (selectLastOpened && fetchedSessions.length > 0) {
+        const lastSessionId = localStorage.getItem('mindsync_last_study_session_id')
+        if (lastSessionId) {
+          const lastSess = fetchedSessions.find(s => s._id === lastSessionId)
+          if (lastSess) {
+            setActiveSession(lastSess)
+            if (lastSess.metadata?.lastTab) {
+              setActiveTab(lastSess.metadata.lastTab)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load study sessions.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSessionsAndActivities(true)
+  }, [fetchSessionsAndActivities])
+
+  // Select session & persist last opened
+  const selectSession = async (session) => {
+    setActiveSession(session)
+    localStorage.setItem('mindsync_last_study_session_id', session._id)
+    if (session.metadata?.lastTab) {
+      setActiveTab(session.metadata.lastTab)
+    }
+
+    try {
+      await updateStudySession(session._id, { lastOpened: new Date() })
+      const [resSessions, resActivities] = await Promise.all([
+        getStudySessions(),
+        getStudyActivities()
+      ])
+      setSessions(resSessions || [])
+      setActivities(resActivities || [])
+    } catch (err) {
+      console.error('Failed to update last opened timestamp:', err)
+    }
+    setIsSidebarOpen(false)
   }
 
-  const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
-
-  const handleFileChange = (e) => {
-    const files = e.target.files
-    if (!files || files.length === 0) {
-      return
+  // Optimistic Create Session
+  const handleCreateSession = async (title = 'Untitled Study Workspace') => {
+    try {
+      const res = await createStudySession({ title })
+      const newSession = res
+      setSessions(prev => [newSession, ...prev])
+      selectSession(newSession)
+      fetchSessionsAndActivities(false)
+    } catch (err) {
+      console.error('Failed to create study workspace:', err)
     }
+  }
+
+  // Optimistic Rename Session
+  const handleRenameSession = async (id, newTitle) => {
+    if (!newTitle.trim()) return
+    const trimmed = newTitle.trim()
+
+    // Optimistic state update
+    setSessions(prev => prev.map(s => s._id === id ? { ...s, title: trimmed } : s))
+    if (activeSession?._id === id) {
+      setActiveSession(prev => ({ ...prev, title: trimmed }))
+    }
+    setEditingSidebarId(null)
+
+    try {
+      await updateStudySession(id, { title: trimmed })
+      const resActs = await getStudyActivities()
+      setActivities(resActs || [])
+    } catch (err) {
+      console.error('Failed to rename study workspace:', err)
+      fetchSessionsAndActivities(false)
+    }
+  }
+
+  // Optimistic Delete Session
+  const handleDeleteSession = async (id, e) => {
+    if (e) e.stopPropagation()
+    if (!window.confirm('Are you sure you want to delete this study workspace?')) return
+
+    setSessions(prev => prev.filter(s => s._id !== id))
+    if (activeSession?._id === id) {
+      setActiveSession(null)
+      localStorage.removeItem('mindsync_last_study_session_id')
+    }
+
+    try {
+      await deleteStudySession(id)
+      const resActs = await getStudyActivities()
+      setActivities(resActs || [])
+    } catch (err) {
+      console.error('Failed to delete study workspace:', err)
+      fetchSessionsAndActivities(false)
+    }
+  }
+
+  // Optimistic Pin/Unpin Toggle
+  const handleTogglePinSession = async (session, e) => {
+    if (e) e.stopPropagation()
+    const updatedPinned = !session.pinned
+
+    setSessions(prev => prev.map(s => s._id === session._id ? { ...s, pinned: updatedPinned } : s))
+    if (activeSession?._id === session._id) {
+      setActiveSession(prev => ({ ...prev, pinned: updatedPinned }))
+    }
+
+    try {
+      await updateStudySession(session._id, { pinned: updatedPinned })
+      const resActs = await getStudyActivities()
+      setActivities(resActs || [])
+    } catch (err) {
+      console.error('Failed to toggle pin state:', err)
+      fetchSessionsAndActivities(false)
+    }
+  }
+
+  // Auto-save active tab state
+  const handleTabChange = async (tabId) => {
+    setActiveTab(tabId)
+    if (activeSession) {
+      try {
+        const updatedMeta = { ...(activeSession.metadata || {}), lastTab: tabId }
+        await updateStudySession(activeSession._id, { metadata: updatedMeta })
+        setActiveSession(prev => ({ ...prev, metadata: updatedMeta }))
+      } catch (err) {
+        console.error('Failed to save tab metadata:', err)
+      }
+    }
+  }
+
+  // PDF File Upload handler
+  const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+  const handleUploadClick = () => fileInputRef.current?.click()
+
+  const handleFileChange = async (e) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
     const file = files[0]
     if (file.size > MAX_FILE_SIZE) {
@@ -41,6 +370,20 @@ export default function StudyMode() {
 
     const fileUrl = URL.createObjectURL(file)
     setUploadError('')
+
+    try {
+      const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace'
+      const res = await createStudySession({ 
+        title: sessionTitle, 
+        description: `PDF Document: ${file.name}`
+      })
+      const newSession = res
+      setSessions(prev => [newSession, ...prev])
+      selectSession(newSession)
+    } catch (err) {
+      console.error('Failed to auto-create workspace for PDF:', err)
+    }
+
     navigate('/study/viewer', {
       state: {
         fileName: file.name,
@@ -52,11 +395,8 @@ export default function StudyMode() {
     e.target.value = ''
   }
 
-  const handlePasteSubmit = () => {
+  const handlePasteSubmit = async () => {
     if (pasteUrl || pasteText) {
-      console.log('Paste submitted:', { url: pasteUrl, text: pasteText })
-      
-      // Check if it's a YouTube URL
       const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
       if (pasteUrl && youtubeRegex.test(pasteUrl)) {
         setVideoUrl(pasteUrl)
@@ -65,54 +405,94 @@ export default function StudyMode() {
         setPasteText('')
         return
       }
-      
-      // Handle other paste logic here
+
+      try {
+        const sessionTitle = pasteUrl ? 'Web Link Study Workspace' : 'Lecture Notes Workspace'
+        const description = pasteUrl ? `Web resources: ${pasteUrl}` : 'Pasted text content.'
+        const res = await createStudySession({
+          title: sessionTitle,
+          description,
+          metadata: { pasteUrl, pasteText: pasteText.substring(0, 100) }
+        })
+        const newSession = res
+        setSessions(prev => [newSession, ...prev])
+        selectSession(newSession)
+      } catch (err) {
+        console.error('Failed to create session for pasted content:', err)
+      }
+
       setPasteUrl('')
       setPasteText('')
       setShowPasteModal(false)
     }
   }
 
+  const handleLearnSubmit = (e) => {
+    e.preventDefault()
+    if (!learnQuery.trim()) return
+    handleCreateSession(learnQuery.trim())
+    setLearnQuery('')
+  }
+
   const handleRecordSelect = (type) => {
-    console.log('Recording type selected:', type)
-    // Handle recording logic here
+    handleCreateSession(`Voice Lecture Workspace (${type})`)
     setShowRecordModal(false)
   }
 
-  const handleSpaceClick = (spaceName) => {
-    if (spaceName === 'Create Space') {
-      console.log('Create new space')
-      // Handle create space logic
-    } else {
-      console.log('Open space:', spaceName)
-      // Handle open space logic
+  // Filtered Sessions Memo
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery.trim()) return sessions
+    const regex = new RegExp(searchQuery, 'i')
+    return sessions.filter(s => regex.test(s.title) || regex.test(s.description || ''))
+  }, [sessions, searchQuery])
+
+  // Separate Pinned Workspaces
+  const pinnedWorkspaces = useMemo(() => {
+    return filteredSessions.filter(s => s.pinned)
+  }, [filteredSessions])
+
+  // Group Non-Pinned Workspaces by History Categories (Today, Yesterday, This Week, Older)
+  const groupedHistoryWorkspaces = useMemo(() => {
+    const unpinned = filteredSessions.filter(s => !s.pinned)
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const yesterdayStart = todayStart - 86400000
+    const weekStart = todayStart - (6 * 86400000)
+
+    const groups = {
+      today: [],
+      yesterday: [],
+      thisWeek: [],
+      older: []
     }
-  }
 
-  const handleRecentClick = (recentItem) => {
-    console.log('Open recent:', recentItem)
-    // Handle open recent item logic
-  }
+    unpinned.forEach(s => {
+      const openedTime = new Date(s.lastOpened || s.updatedAt || s.createdAt).getTime()
+      if (openedTime >= todayStart) {
+        groups.today.push(s)
+      } else if (openedTime >= yesterdayStart) {
+        groups.yesterday.push(s)
+      } else if (openedTime >= weekStart) {
+        groups.thisWeek.push(s)
+      } else {
+        groups.older.push(s)
+      }
+    })
 
-  const handleAddContent = () => {
-    setShowAddContentMenu(true)
-  }
+    // Sort inside each group descending by lastOpened
+    const sortByOpened = (a, b) => new Date(b.lastOpened || b.createdAt) - new Date(a.lastOpened || a.createdAt)
+    groups.today.sort(sortByOpened)
+    groups.yesterday.sort(sortByOpened)
+    groups.thisWeek.sort(sortByOpened)
+    groups.older.sort(sortByOpened)
 
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen)
-  }
+    return groups
+  }, [filteredSessions])
 
-  const closeSidebar = () => {
-    setIsSidebarOpen(false)
-  }
-
-  const toggleProfileDropdown = () => {
-    setShowProfileDropdown(!showProfileDropdown)
-  }
-
-  const closeProfileDropdown = () => {
-    setShowProfileDropdown(false)
-  }
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen)
+  const closeSidebar = () => setIsSidebarOpen(false)
+  const toggleProfileDropdown = () => setShowProfileDropdown(!showProfileDropdown)
+  const closeProfileDropdown = () => setShowProfileDropdown(false)
 
   const handleLogout = async () => {
     await signOut()
@@ -120,83 +500,53 @@ export default function StudyMode() {
     closeProfileDropdown()
   }
 
-  const handleBackFromVideo = () => {
-    setVideoUrl('')
-  }
+  const handleBackFromVideo = () => setVideoUrl('')
 
-  // Close sidebar when clicking outside
+  // Event listener cleanups
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (isSidebarOpen && sidebarRef.current && !sidebarRef.current.contains(event.target)) {
-        // Check if click is not on hamburger button
         if (!event.target.closest('.hamburger-menu-btn')) {
           setIsSidebarOpen(false)
         }
       }
     }
-
     if (isSidebarOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
     }
-
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.body.style.overflow = ''
     }
   }, [isSidebarOpen])
 
-  // Close profile dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showProfileDropdown && profileDropdownRef.current && !profileDropdownRef.current.contains(event.target)) {
         setShowProfileDropdown(false)
       }
     }
-
-    if (showProfileDropdown) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
+    if (showProfileDropdown) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showProfileDropdown])
 
-  // Close dropdown on ESC key
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && showProfileDropdown) {
-        setShowProfileDropdown(false)
-      }
-    }
-
-    if (showProfileDropdown) {
-      document.addEventListener('keydown', handleKeyDown)
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [showProfileDropdown])
-
-  // If video URL is set, show the VideoLearning component
   if (videoUrl) {
     return <VideoLearning videoUrl={videoUrl} onBack={handleBackFromVideo} />
   }
 
   return (
     <div className="study-mode-page">
-      {/* Sidebar */}
+      {/* Sidebar Overlay */}
       {isSidebarOpen && (
         <div className="sidebar-overlay" onClick={closeSidebar}></div>
       )}
+
+      {/* Left Sidebar */}
       <aside className={`study-sidebar ${isSidebarOpen ? 'open' : ''}`} ref={sidebarRef}>
-        {/* Fixed Top Section */}
         <div className="sidebar-top">
-          {/* Close Button */}
           <button className="sidebar-close-btn" onClick={closeSidebar} aria-label="Close sidebar">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -220,150 +570,188 @@ export default function StudyMode() {
             </Link>
           </div>
 
-          {/* Add Content Button */}
-          <button className="add-content-btn" onClick={handleAddContent}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>Add content</span>
+          {/* Create Session Button */}
+          <button className="add-content-btn" onClick={() => handleCreateSession('New Study Workspace')}>
+            <Plus size={16} />
+            <span>Create Workspace</span>
           </button>
 
-          {/* Search */}
-          <button className="nav-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-            <span>Search</span>
-          </button>
+          {/* Search Bar */}
+          <div className="sidebar-search-container">
+            <Search size={14} style={{ color: 'rgba(255,255,255,0.4)' }} />
+            <input
+              type="text"
+              placeholder="Search workspaces..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Scrollable Middle Section */}
         <div className="sidebar-scrollable">
-          {/* History/Recents Section */}
-          <div className="sidebar-section">
-            <h3 className="sidebar-section-title">History</h3>
-            <div className="sidebar-section-content">
+          {loading && sessions.length === 0 ? (
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem', padding: '12px 0' }}>
+              Loading workspaces...
+            </div>
+          ) : error ? (
+            <div style={{ padding: '12px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ color: '#f87171', fontSize: '0.8rem' }}>{error}</span>
               <button 
-                className="sidebar-item"
-                onClick={() => { handleRecentClick('React Tutorial'); closeSidebar(); }}
+                onClick={() => fetchSessionsAndActivities()}
+                style={{ fontSize: '0.75rem', color: '#66b8ff', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                <span>React Tutorial for Beginner...</span>
-              </button>
-              <button 
-                className="sidebar-item"
-                onClick={() => { handleRecentClick('Sorting Tutorial'); closeSidebar(); }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                <span>Sorting - Part 1 | Selection ...</span>
-              </button>
-              <button 
-                className="sidebar-item"
-                onClick={() => { handleRecentClick('React JS Full Course'); closeSidebar(); }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                <span>React JS 19 Full Course in ...</span>
+                <RefreshCw size={10} /> Retry
               </button>
             </div>
-          </div>
+          ) : sessions.length === 0 ? (
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem', padding: '12px 0', lineHeight: '1.4' }}>
+              No study workspaces yet. Create your first workspace above!
+            </div>
+          ) : (
+            <>
+              {/* Pinned Workspaces */}
+              {pinnedWorkspaces.length > 0 && (
+                <div className="sidebar-section">
+                  <h3 className="sidebar-section-title">Pinned</h3>
+                  <div className="sidebar-section-content" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {pinnedWorkspaces.map((session) => (
+                      <div key={session._id} style={{ position: 'relative' }}>
+                        {editingSidebarId === session._id ? (
+                          <input
+                            type="text"
+                            value={sidebarTitleText}
+                            onChange={(e) => setSidebarTitleText(e.target.value)}
+                            onBlur={() => handleRenameSession(session._id, sidebarTitleText)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameSession(session._id, sidebarTitleText)
+                              if (e.key === 'Escape') setEditingSidebarId(null)
+                            }}
+                            autoFocus
+                            className="admin-select"
+                            style={{ width: '100%', fontSize: '0.85rem', padding: '6px 10px' }}
+                          />
+                        ) : (
+                          <button
+                            className={`session-list-item ${activeSession?._id === session._id ? 'active' : ''}`}
+                            onClick={() => selectSession(session)}
+                          >
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                              📌 {session.title}
+                            </span>
+                            <div className="session-item-actions">
+                              <button 
+                                className="session-action-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingSidebarId(session._id)
+                                  setSidebarTitleText(session.title)
+                                }}
+                                title="Rename Workspace"
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                className="session-action-btn"
+                                onClick={(e) => handleTogglePinSession(session, e)}
+                                title="Unpin Workspace"
+                              >
+                                ⭐
+                              </button>
+                              <button 
+                                className="session-action-btn delete"
+                                onClick={(e) => handleDeleteSession(session._id, e)}
+                                title="Delete Workspace"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {/* Spaces Section */}
-          <div className="sidebar-section">
-            <h3 className="sidebar-section-title">Spaces</h3>
-            <div className="sidebar-section-content">
-              <button 
-                className="sidebar-item"
-                onClick={() => { handleSpaceClick('Create Space'); closeSidebar(); }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Create Space</span>
-              </button>
-              <button 
-                className="sidebar-item"
-                onClick={() => { handleSpaceClick("Nikhil's Space"); closeSidebar(); }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                  <line x1="12" y1="22.08" x2="12" y2="12" />
-                </svg>
-                <span>Nikhil's Space</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Help & Tools Section */}
-          <div className="sidebar-section">
-            <h3 className="sidebar-section-title">Help & Tools</h3>
-            <div className="sidebar-section-content">
-              <button className="sidebar-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 9V5a3 3 0 0 0-6 0v4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
-                </svg>
-                <span>Feedback</span>
-              </button>
-              <button className="sidebar-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
-                </svg>
-                <span>Quick Guide</span>
-                <span className="notification-dot"></span>
-              </button>
-              <button className="sidebar-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                  <line x1="8" y1="21" x2="16" y2="21" />
-                  <line x1="12" y1="17" x2="12" y2="21" />
-                  <rect x="6" y="5" width="4" height="2" rx="0.5" />
-                  <circle cx="17" cy="8" r="1" fill="currentColor" />
-                </svg>
-                <span>Chrome Extension</span>
-              </button>
-              <button className="sidebar-item">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
-                </svg>
-                <span>Discord Server</span>
-              </button>
-              <button className="sidebar-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="1" x2="12" y2="23" />
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
-                <span>Invite & Earn</span>
-              </button>
-            </div>
-          </div>
+              {/* Sidebar Workspaces Feed */}
+              <div className="sidebar-section">
+                <h3 className="sidebar-section-title">All Workspaces</h3>
+                <div className="sidebar-section-content" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {filteredSessions.filter(s => !s.pinned).map((session) => (
+                    <div key={session._id} style={{ position: 'relative' }}>
+                      {editingSidebarId === session._id ? (
+                        <input
+                          type="text"
+                          value={sidebarTitleText}
+                          onChange={(e) => setSidebarTitleText(e.target.value)}
+                          onBlur={() => handleRenameSession(session._id, sidebarTitleText)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameSession(session._id, sidebarTitleText)
+                            if (e.key === 'Escape') setEditingSidebarId(null)
+                          }}
+                          autoFocus
+                          className="admin-select"
+                          style={{ width: '100%', fontSize: '0.85rem', padding: '6px 10px' }}
+                        />
+                      ) : (
+                        <button
+                          className={`session-list-item ${activeSession?._id === session._id ? 'active' : ''}`}
+                          onClick={() => selectSession(session)}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px', minWidth: 0 }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px', fontWeight: 600 }}>
+                              {session.title}
+                            </span>
+                            <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>
+                              Opened: {new Date(session.lastOpened || session.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="session-item-actions">
+                            <button 
+                              className="session-action-btn"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEditingSidebarId(session._id)
+                                setSidebarTitleText(session.title)
+                              }}
+                              title="Rename Workspace"
+                            >
+                              ✏️
+                            </button>
+                            <button 
+                              className="session-action-btn"
+                              onClick={(e) => handleTogglePinSession(session, e)}
+                              title="Pin Workspace"
+                            >
+                              📌
+                            </button>
+                            <button 
+                              className="session-action-btn delete"
+                              onClick={(e) => handleDeleteSession(session._id, e)}
+                              title="Delete Workspace"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Fixed Bottom Section - Profile */}
+        {/* Footer Profile Dropdown */}
         <div className="sidebar-footer" ref={profileDropdownRef}>
-          {/* Free Plan Badge */}
           <div className="plan-badge">Free Plan</div>
-          
-          {/* User Profile Section */}
           <button 
             className="user-profile-section" 
             onClick={toggleProfileDropdown}
             aria-expanded={showProfileDropdown}
-            aria-haspopup="true"
           >
-            {/* Avatar */}
             <div className="user-avatar">
               {user?.profileImage ? (
                 <img src={user.profileImage} alt={user.name || user.username} />
@@ -371,83 +759,22 @@ export default function StudyMode() {
                 <span>{(user?.name || user?.username || 'U').charAt(0).toUpperCase()}</span>
               )}
             </div>
-            
-            {/* User Info */}
             <div className="user-info">
               <span className="user-name">{user?.name || user?.username || 'Your Profile'}</span>
               <span className="user-email">{user?.email || 'No email'}</span>
             </div>
           </button>
 
-          {/* Profile Dropdown */}
           {showProfileDropdown && (
             <div className="profile-dropdown" role="menu">
-              <button 
-                className="dropdown-item"
-                onClick={() => { navigate('/profile'); closeProfileDropdown(); }}
-                role="menuitem"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
+              <button className="dropdown-item" onClick={() => { navigate('/profile'); closeProfileDropdown(); }}>
                 <span>Profile</span>
               </button>
-              <button 
-                className="dropdown-item"
-                onClick={() => { navigate('/settings'); closeProfileDropdown(); }}
-                role="menuitem"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
+              <button className="dropdown-item" onClick={() => { navigate('/settings'); closeProfileDropdown(); }}>
                 <span>Settings</span>
               </button>
-              <button 
-                className="dropdown-item upgrade-item"
-                onClick={() => { navigate('/pricing'); closeProfileDropdown(); }}
-                role="menuitem"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                <span>Upgrade Plan</span>
-              </button>
-              <button 
-                className="dropdown-item"
-                onClick={() => { closeProfileDropdown(); }}
-                role="menuitem"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                </svg>
-                <span>Notifications</span>
-              </button>
-              <button 
-                className="dropdown-item"
-                onClick={() => { closeProfileDropdown(); }}
-                role="menuitem"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                <span>Help</span>
-              </button>
               <div className="dropdown-divider"></div>
-              <button 
-                className="dropdown-item logout-item"
-                onClick={handleLogout}
-                role="menuitem"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
+              <button className="dropdown-item logout-item" onClick={handleLogout}>
                 <span>Logout</span>
               </button>
             </div>
@@ -455,64 +782,12 @@ export default function StudyMode() {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Workspace Layout */}
       <main className="study-main">
-        {/* Add Content Menu */}
-        {showAddContentMenu && (
-          <div className="add-content-menu">
-            <div className="add-content-menu-overlay" onClick={() => setShowAddContentMenu(false)}></div>
-            <div className="add-content-menu-content">
-              <button className="add-content-option" onClick={() => { setShowAddContentMenu(false); handleUploadClick(); }}>
-                <div className="add-content-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                </div>
-                <div>
-                  <h4>Upload</h4>
-                  <p>File, audio, video</p>
-                </div>
-              </button>
-              <button className="add-content-option" onClick={() => { setShowAddContentMenu(false); setShowPasteModal(true); }}>
-                <div className="add-content-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                </div>
-                <div>
-                  <h4>Paste</h4>
-                  <p>YouTube, website, text</p>
-                </div>
-              </button>
-              <button className="add-content-option" onClick={() => { setShowAddContentMenu(false); setShowRecordModal(true); }}>
-                <div className="add-content-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
-                </div>
-                <div>
-                  <h4>Record</h4>
-                  <p>Record class, video call</p>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Header with Hamburger, Logo and Upgrade button */}
+        {/* Header */}
         <header className="study-header">
           <div className="study-header-left">
-            <button 
-              className="hamburger-menu-btn"
-              onClick={toggleSidebar}
-              aria-label="Toggle menu"
-            >
+            <button className="hamburger-menu-btn" onClick={toggleSidebar} aria-label="Toggle menu">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M4 6h16M4 12h16M4 18h16" />
               </svg>
@@ -525,183 +800,341 @@ export default function StudyMode() {
             <span>Upgrade</span>
           </button>
         </header>
-        <div className="study-container">
-          {/* What do you want to learn section */}
-          <section className="learn-section">
-            <h1 className="learn-title">What do you want to learn?</h1>
-            
-            <div className="upload-methods">
-              <button className="upload-card" onClick={handleUploadClick}>
-                <div className="upload-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                </div>
-                <h3>Upload</h3>
-                <p>File, audio, video</p>
-              </button>
 
-              <button className="upload-card" onClick={() => setShowPasteModal(true)}>
-                <div className="upload-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
+        {activeSession ? (
+          /* Active Session Workspace */
+          <div className="study-workspace-container">
+            <div className="study-workspace-main">
+              {/* Session Control Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button 
+                    onClick={() => setActiveSession(null)}
+                    style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', padding: '4px 10px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer' }}
+                  >
+                    ← All Workspaces
+                  </button>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+                    {activeSession.title}
+                  </h2>
+                  <button 
+                    onClick={(e) => handleTogglePinSession(activeSession, e)}
+                    style={{ fontSize: '1.1rem', cursor: 'pointer', background: 'none', border: 'none' }}
+                  >
+                    {activeSession.pinned ? '📌' : '⭐'}
+                  </button>
                 </div>
-                <h3>Paste</h3>
-                <p>YouTube, website, text</p>
-              </button>
 
-              <button className="upload-card" onClick={() => setShowRecordModal(true)}>
-                <div className="upload-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
+                {/* Workspace Content Tabs */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    onClick={() => handleTabChange('pdf')}
+                    className={`workspace-tab-btn ${activeTab === 'pdf' ? 'active' : ''}`}
+                  >
+                    📁 PDF
+                  </button>
+                  <button 
+                    onClick={() => handleTabChange('youtube')}
+                    className={`workspace-tab-btn ${activeTab === 'youtube' ? 'active' : ''}`}
+                  >
+                    🎥 YouTube
+                  </button>
+                  <button 
+                    onClick={() => handleTabChange('notes')}
+                    className={`workspace-tab-btn ${activeTab === 'notes' ? 'active' : ''}`}
+                  >
+                    📝 Notes
+                  </button>
                 </div>
-                <h3>Record</h3>
-                <p>Record class, video call</p>
-              </button>
+              </div>
+
+              {/* Workspace Content Panels */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                {activeTab === 'pdf' && (
+                  <div className="workspace-placeholder-box">
+                    <FileText size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                    <h3>AI PDF Reader Placeholder</h3>
+                    <p style={{ maxWidth: '420px', fontSize: '0.85rem' }}>
+                      Upload educational PDFs to summarize chapters and generate key concepts with MindSync AI co-pilot in Phase 3.2+.
+                    </p>
+                    <button className="add-content-btn" onClick={handleUploadClick} style={{ maxWidth: '220px', marginTop: '12px' }}>
+                      Upload Test PDF Document
+                    </button>
+                  </div>
+                )}
+
+                {activeTab === 'youtube' && (
+                  <div className="workspace-placeholder-box">
+                    <Video size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                    <h3>AI YouTube Learning Placeholder</h3>
+                    <p style={{ maxWidth: '420px', fontSize: '0.85rem' }}>
+                      Interactive video transcripts extraction and automated video checkpoints will be available in Phase 3.2+.
+                    </p>
+                    <button className="add-content-btn" onClick={() => setShowPasteModal(true)} style={{ maxWidth: '220px', marginTop: '12px' }}>
+                      Paste YouTube Video Link
+                    </button>
+                  </div>
+                )}
+
+                {activeTab === 'notes' && (
+                  <div className="workspace-placeholder-box">
+                    <BookOpen size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                    <h3>AI Notes Workspace Placeholder</h3>
+                    <p style={{ maxWidth: '420px', fontSize: '0.85rem' }}>
+                      Rich markdown notes editor and automated concepts summaries will be available in Phase 3.2+.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-            {uploadError && (
-              <div className="upload-error-banner">
-                <span>{uploadError}</span>
-                <button onClick={() => setUploadError('')} aria-label="Dismiss error">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+
+            {/* Right Co-Pilot Panel */}
+            <aside className="study-right-panel">
+              <div>
+                <h3 className="right-panel-title">MindSync AI Co-Pilot</h3>
+                <p className="right-panel-desc">Interactive tools synced to your active workspace.</p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
+                <div className="locked-tool-card">
+                  <span className="locked-tool-badge">Phase 3.2+</span>
+                  <h4>AI Tutor Chat</h4>
+                  <p>Ask questions and get explanations for complex subjects.</p>
+                </div>
+                <div className="locked-tool-card">
+                  <span className="locked-tool-badge">Phase 3.2+</span>
+                  <h4>Smart Flashcards</h4>
+                  <p>Auto-generate study cards from your lecture documents.</p>
+                </div>
+                <div className="locked-tool-card">
+                  <span className="locked-tool-badge">Phase 3.2+</span>
+                  <h4>Interactive Quizzes</h4>
+                  <p>Test your knowledge with multiple choice questions.</p>
+                </div>
+                <div className="locked-tool-card">
+                  <span className="locked-tool-badge">Phase 3.2+</span>
+                  <h4>Markdown Notes</h4>
+                  <p>Save notes and export them to your personal workspace.</p>
+                </div>
+                <div className="locked-tool-card">
+                  <span className="locked-tool-badge">Phase 3.2+</span>
+                  <h4>Concept Summaries</h4>
+                  <p>Compile chapters into quick 5-bullet summary cards.</p>
+                </div>
+              </div>
+            </aside>
+          </div>
+        ) : (
+          /* Workspaces Main View */
+          <div className="study-container">
+            <section className="learn-section">
+              <h1 className="learn-title">What do you want to learn?</h1>
+              
+              <div className="upload-methods">
+                <button className="upload-card" onClick={handleUploadClick}>
+                  <div className="upload-icon"><FileText size={24} /></div>
+                  <h3>Upload</h3>
+                  <p>File, audio, video</p>
+                </button>
+
+                <button className="upload-card" onClick={() => setShowPasteModal(true)}>
+                  <div className="upload-icon"><Video size={24} /></div>
+                  <h3>Paste</h3>
+                  <p>YouTube, website, text</p>
+                </button>
+
+                <button className="upload-card" onClick={() => setShowRecordModal(true)}>
+                  <div className="upload-icon"><BookOpen size={24} /></div>
+                  <h3>Record</h3>
+                  <p>Record class, video call</p>
                 </button>
               </div>
-            )}
 
-            <div className="learn-input-wrapper">
-              <input
-                type="text"
-                className="learn-input"
-                placeholder="Learn anything"
-              />
-              <button className="learn-submit-btn" aria-label="Submit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              </button>
-            </div>
-          </section>
+              {uploadError && (
+                <div className="upload-error-banner">
+                  <span>{uploadError}</span>
+                  <button onClick={() => setUploadError('')} aria-label="Dismiss error">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+              )}
 
-          {/* My Spaces Section */}
-          <section className="spaces-section">
-            <div className="section-header">
-              <h2 className="section-title">My Spaces</h2>
-              <div className="sort-dropdown">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="clock-icon">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-                <span>Newest</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
+              <form onSubmit={handleLearnSubmit} className="learn-input-wrapper">
+                <input
+                  type="text"
+                  className="learn-input"
+                  placeholder="Type anything you want to learn..."
+                  value={learnQuery}
+                  onChange={(e) => setLearnQuery(e.target.value)}
+                />
+                <button type="submit" className="learn-submit-btn" aria-label="Submit query">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                </button>
+              </form>
+            </section>
+
+            {/* Empty State vs Workspaces List */}
+            {sessions.length === 0 && !loading ? (
+              <div className="empty-workspace-container">
+                <div className="empty-workspace-icon">
+                  <BookOpen size={28} />
+                </div>
+                <div>
+                  <h3 style={{ color: '#fff', fontSize: '1.25rem', margin: 0, fontWeight: 700 }}>
+                    No Study Workspaces Yet
+                  </h3>
+                  <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.875rem', margin: '4px 0 0 0' }}>
+                    Create your first Study Workspace to begin organizing your subjects and notes.
+                  </p>
+                </div>
+                <button 
+                  className="add-content-btn" 
+                  onClick={() => handleCreateSession('My First Study Workspace')}
+                  style={{ maxWidth: '240px', background: 'linear-gradient(135deg, rgba(102, 184, 255, 0.2), rgba(72, 239, 179, 0.2))' }}
+                >
+                  <Plus size={16} />
+                  <span>Create Workspace</span>
+                </button>
               </div>
-            </div>
-            <div className="spaces-grid">
-              <button 
-                className="space-card create-space"
-                onClick={() => handleSpaceClick('Create Space')}
-              >
-                <div className="space-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </div>
-                <span>Create Space</span>
-              </button>
-              <button 
-                className="space-card"
-                onClick={() => handleSpaceClick("Nikhil's Space")}
-              >
-                <div className="space-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                    <line x1="12" y1="22.08" x2="12" y2="12" />
-                  </svg>
-                </div>
-                <div className="space-info">
-                  <span className="space-name">Nikhil's Space</span>
-                  <span className="space-content">0 content</span>
-                </div>
-              </button>
-            </div>
-          </section>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', marginTop: '24px' }}>
+                {/* Pinned Section */}
+                {pinnedWorkspaces.length > 0 && (
+                  <div className="history-group">
+                    <div className="history-group-title">📌 Pinned Workspaces</div>
+                    <div className="spaces-grid">
+                      {pinnedWorkspaces.map(session => (
+                        <WorkspaceCard
+                          key={session._id}
+                          session={session}
+                          activeSessionId={activeSession?._id}
+                          onSelect={selectSession}
+                          onRename={handleRenameSession}
+                          onTogglePin={handleTogglePinSession}
+                          onDelete={handleDeleteSession}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-          {/* Recents Section */}
-          <section className="recents-section">
-            <div className="section-header">
-              <h2 className="section-title">Recents</h2>
-              <button className="view-all-btn">View all</button>
-            </div>
-            <div className="recents-grid">
-              <button 
-                className="recent-card"
-                onClick={() => handleRecentClick('React Tutorial')}
-              >
-                <div className="recent-thumbnail">
-                  <div className="thumbnail-placeholder">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
+                {/* History Grouped Workspaces (Today, Yesterday, This Week, Older) */}
+                {groupedHistoryWorkspaces.today.length > 0 && (
+                  <div className="history-group">
+                    <div className="history-group-title">Today's Workspaces</div>
+                    <div className="spaces-grid">
+                      {groupedHistoryWorkspaces.today.map(session => (
+                        <WorkspaceCard
+                          key={session._id}
+                          session={session}
+                          activeSessionId={activeSession?._id}
+                          onSelect={selectSession}
+                          onRename={handleRenameSession}
+                          onTogglePin={handleTogglePinSession}
+                          onDelete={handleDeleteSession}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="recent-info">
-                  <h3 className="recent-title">React Tutorial for Beginners (...</h3>
-                  <p className="recent-time">3 months ago</p>
-                </div>
-              </button>
-              <button 
-                className="recent-card"
-                onClick={() => handleRecentClick('Sorting Tutorial')}
-              >
-                <div className="recent-thumbnail">
-                  <div className="thumbnail-placeholder">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="recent-info">
-                  <h3 className="recent-title">Sorting - Part 1 | Selection So...</h3>
-                  <p className="recent-time">3 months ago</p>
-                </div>
-              </button>
-              <button 
-                className="recent-card"
-                onClick={() => handleRecentClick('React JS Full Course')}
-              >
-                <div className="recent-thumbnail">
-                  <div className="thumbnail-placeholder">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="recent-info">
-                  <h3 className="recent-title">React JS 19 Full Course in Hi...</h3>
-                  <p className="recent-time">3 months ago</p>
-                </div>
-              </button>
-        </div>
-      </section>
-        </div>
-    </main>
+                )}
 
-      {/* Hidden file input */}
+                {groupedHistoryWorkspaces.yesterday.length > 0 && (
+                  <div className="history-group">
+                    <div className="history-group-title">Yesterday</div>
+                    <div className="spaces-grid">
+                      {groupedHistoryWorkspaces.yesterday.map(session => (
+                        <WorkspaceCard
+                          key={session._id}
+                          session={session}
+                          activeSessionId={activeSession?._id}
+                          onSelect={selectSession}
+                          onRename={handleRenameSession}
+                          onTogglePin={handleTogglePinSession}
+                          onDelete={handleDeleteSession}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {groupedHistoryWorkspaces.thisWeek.length > 0 && (
+                  <div className="history-group">
+                    <div className="history-group-title">This Week</div>
+                    <div className="spaces-grid">
+                      {groupedHistoryWorkspaces.thisWeek.map(session => (
+                        <WorkspaceCard
+                          key={session._id}
+                          session={session}
+                          activeSessionId={activeSession?._id}
+                          onSelect={selectSession}
+                          onRename={handleRenameSession}
+                          onTogglePin={handleTogglePinSession}
+                          onDelete={handleDeleteSession}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {groupedHistoryWorkspaces.older.length > 0 && (
+                  <div className="history-group">
+                    <div className="history-group-title">Older</div>
+                    <div className="spaces-grid">
+                      {groupedHistoryWorkspaces.older.map(session => (
+                        <WorkspaceCard
+                          key={session._id}
+                          session={session}
+                          activeSessionId={activeSession?._id}
+                          onSelect={selectSession}
+                          onRename={handleRenameSession}
+                          onTogglePin={handleTogglePinSession}
+                          onDelete={handleDeleteSession}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Activity Section */}
+                <div className="activity-feed-card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
+                    <Clock size={16} style={{ color: '#66b8ff' }} />
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+                      Recent Study Activity
+                    </h3>
+                  </div>
+
+                  {activities.length === 0 ? (
+                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)', padding: '8px 0' }}>
+                      No recent activity recorded yet.
+                    </div>
+                  ) : (
+                    <div className="activity-feed-list">
+                      {activities.slice(0, 8).map((act, i) => (
+                        <div key={act._id || i} className="activity-feed-item">
+                          <span className={`activity-dot ${act.action}`} />
+                          <span style={{ fontWeight: 600, color: '#fff' }}>{act.details || act.action}</span>
+                          <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginLeft: 'auto' }}>
+                            {new Date(act.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* File input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -716,19 +1149,10 @@ export default function StudyMode() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-left">
-                <div className="modal-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                </div>
+                <div className="modal-icon"><Video size={18} /></div>
                 <h2 className="modal-title">YouTube, Website, Etc</h2>
               </div>
-              <button 
-                className="modal-close"
-                onClick={() => setShowPasteModal(false)}
-                aria-label="Close"
-              >
+              <button className="modal-close" onClick={() => setShowPasteModal(false)} aria-label="Close">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -748,18 +1172,11 @@ export default function StudyMode() {
                 />
               </div>
 
-              <div className="modal-divider">
-                <span>or</span>
-              </div>
+              <div className="modal-divider"><span>or</span></div>
 
               <div className="paste-text-section">
                 <div className="paste-text-header">
-                  <div className="modal-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                    </svg>
-                  </div>
+                  <div className="modal-icon"><FileText size={18} /></div>
                   <h3 className="paste-text-title">Paste Text</h3>
                 </div>
                 <p className="modal-instruction">Copy and paste text to add as content</p>
@@ -774,15 +1191,12 @@ export default function StudyMode() {
             </div>
 
             <div className="modal-footer">
-              <button 
-                className="modal-btn cancel-btn"
-                onClick={() => setShowPasteModal(false)}
-              >
+              <button className="modal-btn cancel-btn" onClick={() => setShowPasteModal(false)}>
                 Cancel
               </button>
               <button 
-                className="modal-btn add-btn"
-                onClick={handlePasteSubmit}
+                className="modal-btn add-btn" 
+                onClick={handlePasteSubmit} 
                 disabled={!pasteUrl && !pasteText}
               >
                 Add
@@ -798,11 +1212,7 @@ export default function StudyMode() {
           <div className="modal-content record-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Select Audio Type</h2>
-              <button 
-                className="modal-close"
-                onClick={() => setShowRecordModal(false)}
-                aria-label="Close"
-              >
+              <button className="modal-close" onClick={() => setShowRecordModal(false)} aria-label="Close">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
@@ -811,36 +1221,16 @@ export default function StudyMode() {
             </div>
             
             <div className="modal-body record-modal-body">
-              <button 
-                className="record-option"
-                onClick={() => handleRecordSelect('microphone')}
-              >
-                <div className="record-option-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
-                </div>
+              <button className="record-option" onClick={() => handleRecordSelect('microphone')}>
+                <div className="record-option-icon"><BookOpen size={20} /></div>
                 <div className="record-option-content">
                   <h3>Microphone</h3>
                   <p>Record your voice or class</p>
                 </div>
               </button>
 
-              <button 
-                className="record-option"
-                onClick={() => handleRecordSelect('browser-tab')}
-              >
-                <div className="record-option-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                    <line x1="8" y1="21" x2="16" y2="21" />
-                    <line x1="12" y1="17" x2="12" y2="21" />
-                    <rect x="6" y="5" width="4" height="2" rx="0.5" />
-                  </svg>
-                </div>
+              <button className="record-option" onClick={() => handleRecordSelect('browser-tab')}>
+                <div className="record-option-icon"><Video size={20} /></div>
                 <div className="record-option-content">
                   <h3>Browser Tab</h3>
                   <p>Capture audio playing in a browser tab</p>
