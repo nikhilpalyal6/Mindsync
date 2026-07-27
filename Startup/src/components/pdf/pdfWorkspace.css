@@ -1,0 +1,213 @@
+/* MindSync PDF Workspace Theme */
+.pdf-workspace-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: rgba(15, 18, 26, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Toolbar Header */
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(20, 25, 35, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  gap: 12px;
+  flex-wrap: wrap;
+  z-index: 10;
+}
+
+.pdf-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pdf-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 4px;
+}
+
+.pdf-toolbar-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.pdf-toolbar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.pdf-toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pdf-toolbar-btn.accent {
+  background: rgba(102, 184, 255, 0.12);
+  border-color: rgba(102, 184, 255, 0.3);
+  color: #66b8ff;
+}
+
+.pdf-toolbar-btn.accent:hover:not(:disabled) {
+  background: rgba(102, 184, 255, 0.22);
+}
+
+.pdf-toolbar-btn.danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+.pdf-toolbar-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Page Input Box */
+.pdf-page-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pdf-page-input {
+  width: 44px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 3px 0;
+  outline: none;
+}
+
+.pdf-page-input:focus {
+  border-color: #66b8ff;
+}
+
+/* Zoom Indicator Badge */
+.pdf-zoom-badge {
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  min-width: 44px;
+  text-align: center;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Main Document Canvas Viewport */
+.pdf-viewport {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  background: #0d1017;
+}
+
+.pdf-page-canvas-wrapper {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: transform 0.15s ease-out;
+}
+
+/* Upload Empty State Box */
+.pdf-upload-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  margin: auto;
+  border: 2px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(20, 25, 35, 0.4);
+  max-width: 480px;
+  width: 100%;
+  gap: 12px;
+}
+
+.pdf-upload-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(102, 184, 255, 0.12);
+  border: 1px solid rgba(102, 184, 255, 0.25);
+  color: #66b8ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.pdf-upload-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.pdf-upload-desc {
+  font-size: 0.825rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+  max-width: 360px;
+  line-height: 1.4;
+}
+
+/* Loading & Error States */
+.pdf-status-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  padding: 2rem;
+  text-align: center;
+}
+
+.pdf-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(102, 184, 255, 0.2);
+  border-top-color: #66b8ff;
+  border-radius: 50%;
+  animation: pdf-spin 0.8s linear infinite;
+}
+
+@keyframes pdf-spin {
+  to { transform: rotate(360deg); }
+}

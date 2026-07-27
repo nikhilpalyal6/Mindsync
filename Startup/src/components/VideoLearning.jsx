@@ -74,6 +74,8 @@ export default function VideoLearning({ videoUrl, session, onBack }) {
       setVideoTitle(data.title)
       setChapters(data.chapters)
       setTranscript(data.transcript)
+
+      console.log(`[Persistent Workspace] Video Restored: ${data.title} (${videoUrl})`)
     }
   }, [videoUrl])
 

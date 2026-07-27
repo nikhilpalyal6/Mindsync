@@ -3,6 +3,7 @@ import AIMessage from '../models/aiMessage.model.js';
 import StudySession from '../models/studySession.model.js';
 import ApiError from '../utils/ApiError.js';
 import aiProviderService from './ai/aiProvider.service.js';
+import contextBuilderService from './context/contextBuilder.service.js';
 
 class AIService {
   async getConversations(userId, studySessionId) {
@@ -111,7 +112,7 @@ class AIService {
       throw ApiError.notFound('Conversation not found or unauthorized');
     }
 
-    // 1. Save User Message
+    // 1. Save User Message in MongoDB
     const userMessage = await AIMessage.create({
       conversation: conversationId,
       user: userId,
@@ -120,22 +121,15 @@ class AIService {
       status: 'completed',
     });
 
-    // 2. Load conversation history in chronological order
-    const history = await AIMessage.find({ conversation: conversationId })
-      .sort({ createdAt: 1 })
-      .lean();
+    // 2. Build Enriched Workshop Memory & Context via ContextBuilderService
+    const { systemInstruction, messages: boundedHistory } = await contextBuilderService.buildContext({
+      userId,
+      studySessionId: conversation.studySession,
+      conversationId,
+      currentQuery: content.trim(),
+    });
 
-    // Context Window Limiting: Select up to last 20 messages for context safety
-    const boundedHistory = history.slice(-20);
-
-    // 3. System Prompt Definition
-    const systemInstruction = 
-      'You are MindSync AI, an expert, encouraging, and clear AI learning co-pilot. ' +
-      'Your mission is to explain complex concepts, teach step-by-step, simplify difficult ideas, ' +
-      'provide practical real-world examples, generate quizzes and flashcards when requested, answer questions, ' +
-      'and encourage active learning. Format your responses with clear markdown, headings, bullet points, and code blocks where helpful.';
-
-    // 4. Generate AI Response via Gemini Provider
+    // 3. Generate AI Response via Active AI Provider (Groq / Gemini)
     let assistantContent = '';
     let status = 'completed';
 
@@ -152,7 +146,7 @@ class AIService {
         "Please verify your connection and try again in a moment.";
     }
 
-    // 5. Save Assistant Message in MongoDB
+    // 4. Save Assistant Message in MongoDB
     const assistantMessage = await AIMessage.create({
       conversation: conversationId,
       user: userId,
@@ -161,11 +155,11 @@ class AIService {
       status: status,
     });
 
-    // 6. Update conversation lastMessageAt
+    // 5. Update conversation lastMessageAt
     conversation.lastMessageAt = new Date();
     await conversation.save();
 
-    // 7. Increment chatCount on parent StudySession
+    // 6. Increment chatCount on parent StudySession
     try {
       await StudySession.updateOne(
         { _id: conversation.studySession },

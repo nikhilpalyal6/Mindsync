@@ -70,6 +70,9 @@ class StudyService {
     allowedUpdates.forEach((field) => {
       if (updates[field] !== undefined) {
         session[field] = updates[field];
+        if (field === 'metadata') {
+          session.markModified('metadata');
+        }
       }
     });
 

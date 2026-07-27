@@ -13,6 +13,9 @@ import './studyMode.css'
 import VideoLearning from '../components/VideoLearning'
 import ChatLayout from '../components/chat/ChatLayout'
 import AISidebar from '../components/ai/AISidebar'
+import PDFWorkspace from '../components/pdf/PDFWorkspace'
+import PDFLearningPanel from '../components/pdf/PDFLearningPanel'
+import NotesLearningPanel from '../components/notes/NotesLearningPanel'
 
 // Memoized Workspace Card Subcomponent with Context Menu and Count Chips
 const WorkspaceCard = React.memo(({ 
@@ -227,18 +230,6 @@ export default function StudyMode() {
         setActivities(resActivities.value || [])
       }
 
-      if (selectLastOpened && fetchedSessions.length > 0) {
-        const lastSessionId = localStorage.getItem('mindsync_last_study_session_id')
-        if (lastSessionId) {
-          const lastSess = fetchedSessions.find(s => s._id === lastSessionId)
-          if (lastSess) {
-            setActiveSession(lastSess)
-            if (lastSess.metadata?.lastTab) {
-              setActiveTab(lastSess.metadata.lastTab)
-            }
-          }
-        }
-      }
     } catch (err) {
       setError(err.message || 'Failed to load study sessions.')
     } finally {
@@ -246,17 +237,29 @@ export default function StudyMode() {
     }
   }, [])
 
+  // Always land on Study Mode Home page when entering Study Mode
   useEffect(() => {
-    fetchSessionsAndActivities(true)
+    fetchSessionsAndActivities(false)
   }, [fetchSessionsAndActivities])
 
-  // Select session & persist last opened
+  // Select session & restore active resource state directly from MongoDB metadata
   const selectSession = async (session) => {
     setActiveSession(session)
     localStorage.setItem('mindsync_last_study_session_id', session._id)
-    if (session.metadata?.lastTab) {
-      setActiveTab(session.metadata.lastTab)
+
+    // Read metadata from MongoDB document
+    const meta = session.metadata || {}
+    const restoredResource = meta.activeResourceType || meta.lastTab || 'pdf'
+    setActiveTab(restoredResource)
+
+    if (meta.youtube?.videoUrl) {
+      setVideoUrl(meta.youtube.videoUrl)
+    } else {
+      setVideoUrl('')
     }
+
+    console.log(`[Persistent Workspace] Workshop Opened from Home: ${session.title}`)
+    console.log(`[Persistent Workspace] Resource Restored from MongoDB: ${restoredResource.toUpperCase()}`)
 
     try {
       await updateStudySession(session._id, { lastOpened: new Date() })
@@ -398,16 +401,33 @@ export default function StudyMode() {
     }
   }
 
-  // Auto-save active tab state
+  // Active Resource Manager: Switch active resource ('pdf' | 'youtube' | 'notes')
   const handleTabChange = async (tabId) => {
-    setActiveTab(tabId)
+    const resourceType = tabId.toLowerCase()
+    setActiveTab(resourceType)
+    console.log(`[Active Resource Manager] Active Resource Changed: ${resourceType.toUpperCase()}`)
+
+    // Dispatch internal event for Future Context Builders & AI co-pilots
     if (activeSession) {
+      window.dispatchEvent(new CustomEvent('activeResourceChanged', {
+        detail: {
+          sessionId: activeSession._id,
+          activeResourceType: resourceType,
+          timestamp: new Date().toISOString()
+        }
+      }))
+
       try {
-        const updatedMeta = { ...(activeSession.metadata || {}), lastTab: tabId }
+        const updatedMeta = { 
+          ...(activeSession.metadata || {}), 
+          activeResourceType: resourceType,
+          lastTab: resourceType,
+          lastOpened: new Date()
+        }
         await updateStudySession(activeSession._id, { metadata: updatedMeta })
         setActiveSession(prev => ({ ...prev, metadata: updatedMeta }))
       } catch (err) {
-        console.error('Failed to save tab metadata:', err)
+        console.error('Failed to update active resource metadata:', err)
       }
     }
   }
@@ -460,6 +480,30 @@ export default function StudyMode() {
       if (pasteUrl && youtubeRegex.test(pasteUrl)) {
         setVideoUrl(pasteUrl)
         setShowPasteModal(false)
+
+        if (activeSession) {
+          try {
+            const updatedMeta = {
+              ...(activeSession.metadata || {}),
+              youtube: { videoUrl: pasteUrl, lastOpened: new Date().toISOString() },
+              activeResourceType: 'youtube',
+              lastTab: 'youtube'
+            }
+            await updateStudySession(activeSession._id, {
+              metadata: updatedMeta,
+              youtubeCount: Math.max((activeSession.youtubeCount || 0), 1)
+            })
+            setActiveSession(prev => ({
+              ...prev,
+              metadata: updatedMeta,
+              youtubeCount: Math.max((prev?.youtubeCount || 0), 1)
+            }))
+            setActiveTab('youtube')
+          } catch (err) {
+            console.error('Failed to save YouTube metadata to MongoDB:', err)
+          }
+        }
+
         setPasteUrl('')
         setPasteText('')
         return
@@ -923,16 +967,7 @@ export default function StudyMode() {
               {/* Workspace Content Panels */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
                 {activeTab === 'pdf' && (
-                  <div className="workspace-placeholder-box">
-                    <FileText size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
-                    <h3>AI PDF Reader</h3>
-                    <p style={{ maxWidth: '420px', fontSize: '0.85rem' }}>
-                      Upload educational PDFs to analyze documents and generate key concepts with MindSync AI co-pilot in the right sidebar.
-                    </p>
-                    <button className="add-content-btn" onClick={handleUploadClick} style={{ maxWidth: '220px', marginTop: '12px' }}>
-                      Upload PDF Document
-                    </button>
-                  </div>
+                  <PDFWorkspace session={activeSession} />
                 )}
 
                 {activeTab === 'youtube' && (
@@ -960,17 +995,26 @@ export default function StudyMode() {
               </div>
             </div>
 
-            {/* Right Panel: Learning Features Overview */}
-            <aside className="study-right-panel">
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                  <Sparkles size={14} style={{ color: '#66b8ff' }} />
-                  <h3 className="right-panel-title">Learning Features</h3>
+            {/* Right Panel: Dedicated Resource AI Workspace Panels (PDF & Notes) vs General Overview */}
+            {activeTab === 'pdf' ? (
+              <aside className="study-right-panel" style={{ padding: 0, overflow: 'hidden', border: 'none', background: 'transparent' }}>
+                <PDFLearningPanel session={activeSession} />
+              </aside>
+            ) : activeTab === 'notes' ? (
+              <aside className="study-right-panel" style={{ padding: 0, overflow: 'hidden', border: 'none', background: 'transparent' }}>
+                <NotesLearningPanel session={activeSession} />
+              </aside>
+            ) : (
+              <aside className="study-right-panel">
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                    <Sparkles size={14} style={{ color: '#66b8ff' }} />
+                    <h3 className="right-panel-title">Learning Features</h3>
+                  </div>
+                  <p className="right-panel-desc">Workspace co-pilot modules and interactive learning tools.</p>
                 </div>
-                <p className="right-panel-desc">Workspace co-pilot modules and interactive learning tools.</p>
-              </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, marginTop: '6px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, marginTop: '6px' }}>
                 <div className="learning-feature-card active">
                   <div className="feature-card-header">
                     <div className="feature-icon active"><MessageSquare size={14} /></div>
@@ -1049,6 +1093,7 @@ export default function StudyMode() {
                 </div>
               </div>
             </aside>
+          )}
           </div>
         ) : (
           /* Workspaces Main Management Dashboard View */
@@ -1056,10 +1101,6 @@ export default function StudyMode() {
             {/* Notion / Linear / Cursor Style Hero Section */}
             <section className="dashboard-hero-section">
               <div className="hero-content">
-                <div className="hero-greeting-badge">
-                  <Sparkles size={14} style={{ color: '#66b8ff' }} />
-                  <span>MindSync Workspace Management</span>
-                </div>
                 <h1 className="hero-greeting-title">
                   {getGreeting()}, {user?.name || user?.username || 'Scholar'}
                 </h1>
