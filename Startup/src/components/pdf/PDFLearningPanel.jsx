@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MessageSquare, FileText, Layers, HelpCircle, TrendingUp, Sparkles } from 'lucide-react';
 import AISidebar from '../ai/AISidebar';
+import SummaryPanel from '../summary/SummaryPanel';
 
 export const PDFLearningPanel = React.memo(({ session }) => {
   const [activeFeature, setActiveFeature] = useState('ask-pdf');
@@ -78,13 +79,13 @@ export const PDFLearningPanel = React.memo(({ session }) => {
         <button
           onClick={() => setActiveFeature('summary')}
           style={{
-            background: activeFeature === 'summary' ? 'rgba(255, 255, 255, 0.1)' : 'none',
-            border: '1px solid transparent',
-            color: 'rgba(255, 255, 255, 0.4)',
+            background: activeFeature === 'summary' ? 'rgba(102, 184, 255, 0.15)' : 'none',
+            border: activeFeature === 'summary' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
+            color: activeFeature === 'summary' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
-            fontWeight: 500,
+            fontWeight: 600,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -143,6 +144,8 @@ export const PDFLearningPanel = React.memo(({ session }) => {
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {activeFeature === 'ask-pdf' ? (
           <AISidebar session={session} />
+        ) : activeFeature === 'summary' ? (
+          <SummaryPanel session={session} resourceType="pdf" />
         ) : (
           <div style={{
             flex: 1,

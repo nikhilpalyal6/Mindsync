@@ -4,7 +4,7 @@ import logger from '../../config/logger.js';
 
 class ContextBuilderService {
   /**
-   * Phase 3.2.3B: Context-Aware AI Builder
+   * Phase 3.2.3 Foundation: Context-Aware AI Builder
    * Dynamically constructs context using ONLY the currently active study resource (pdf | youtube | notes).
    * Inactive resources are strictly excluded.
    */
@@ -16,7 +16,7 @@ class ContextBuilderService {
     }).lean();
 
     if (session) {
-      logger.info(`[Context Builder] Workshop Loaded: ${session.title}`);
+      logger.info(`[Workshop Loaded] Workshop: ${session.title} (ID: ${session._id})`);
     } else {
       logger.warn(`[Context Builder] Workshop ${studySessionId} not found or unauthorized for user ${userId}`);
     }
@@ -24,7 +24,7 @@ class ContextBuilderService {
     const metadata = session?.metadata || {};
     const activeResourceType = (metadata.activeResourceType || metadata.lastTab || 'pdf').toLowerCase();
     
-    logger.info(`[Context Builder] Active Resource Detected: ${activeResourceType.toUpperCase()}`);
+    logger.info(`[Resource Changed] Active Resource: ${activeResourceType.toUpperCase()}`);
 
     // 2. Base System Persona Prompt
     const baseSystemPrompt = 
@@ -49,14 +49,15 @@ class ContextBuilderService {
 
     if (activeResourceType === 'pdf') {
       const pdfData = metadata.pdf || metadata.pdfList || (metadata.pdfFilename ? metadata : null);
-      activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: PDF]\n`;
+      activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: PDF DOCUMENT]\n`;
       if (pdfData) {
         activeResourceSection += `- Filename: ${pdfData.filename || pdfData.pdfFilename || 'Document.pdf'}\n`;
         if (pdfData.pageCount) activeResourceSection += `- Total Pages: ${pdfData.pageCount}\n`;
-        if (pdfData.activePage) activeResourceSection += `- Current Page: ${pdfData.activePage}\n`;
+        if (pdfData.pageNumber || pdfData.activePage) activeResourceSection += `- Current Page: ${pdfData.pageNumber || pdfData.activePage}\n`;
         
         if (pdfData.extractedText && pdfData.extractedText.trim()) {
-          activeResourceSection += `- Document Content:\n${pdfData.extractedText.slice(0, 2000)}\n`;
+          activeResourceSection += `- Extracted PDF Content:\n${pdfData.extractedText.slice(0, 6000)}\n`;
+          logger.info(`[PDF Extracted] Using ${pdfData.extractedText.length} chars of PDF text for AI context`);
         } else {
           activeResourceSection += `- Status: I can see that a PDF is open, but its contents haven't been processed yet.\n`;
         }
@@ -71,20 +72,26 @@ class ContextBuilderService {
         if (youtubeData.url || youtubeData.youtubeUrl) {
           activeResourceSection += `- Video URL: ${youtubeData.url || youtubeData.youtubeUrl}\n`;
         }
-        if (youtubeData.channelName) {
-          activeResourceSection += `- Channel: ${youtubeData.channelName}\n`;
+        if (youtubeData.channelName || youtubeData.channel) {
+          activeResourceSection += `- Channel: ${youtubeData.channelName || youtubeData.channel}\n`;
         }
-        if (youtubeData.transcript && youtubeData.transcript.trim()) {
-          activeResourceSection += `- Transcript Snippet:\n${youtubeData.transcript.slice(0, 2000)}\n`;
+        if (youtubeData.chapters && Array.isArray(youtubeData.chapters) && youtubeData.chapters.length > 0) {
+          activeResourceSection += `- Video Chapters:\n${youtubeData.chapters.map(c => `  - ${c.time || ''} ${c.title || ''}`).join('\n')}\n`;
+        }
+        const activeTranscript = youtubeData.englishTranscript || youtubeData.transcript || youtubeData.originalTranscript;
+        if (activeTranscript && activeTranscript.trim()) {
+          activeResourceSection += `- Video Transcript:\n${activeTranscript.slice(0, 6000)}\n`;
+          logger.info(`[DEBUG] Context Builder loaded transcript. Length: ${activeTranscript.length} (Title: ${youtubeData.title})`);
         } else {
           activeResourceSection += `- Status: I can see the video, but no transcript is available yet.\n`;
+          logger.warn(`[DEBUG] Context Builder found no transcript for YouTube resource (${youtubeData?.title || 'No Title'})`);
         }
       } else {
         activeResourceSection += `- Status: I can see the video tab is open, but no YouTube video link is loaded yet.\n`;
       }
     } else if (activeResourceType === 'notes') {
       const notesData = metadata.notes || metadata.notesList || (metadata.noteTitle || metadata.noteContent ? [metadata] : []);
-      activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: NOTES]\n`;
+      activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: WORKSHOP NOTES]\n`;
       let hasNoteContent = false;
 
       if (Array.isArray(notesData) && notesData.length > 0) {
@@ -115,7 +122,7 @@ class ContextBuilderService {
       `The student is currently working on the active resource: ${activeResourceType.toUpperCase()}. ` +
       'You MUST base your response ONLY on the provided active resource context and conversation history. ' +
       'Do NOT reference or assume any information from inactive resource types. ' +
-      'If the active resource content or transcript is unavailable, politely explain to the user (e.g. "I can see that a PDF is open, but its contents haven\'t been processed yet.") without inventing content.';
+      'If the active resource content or transcript is unavailable, politely explain to the user without inventing content.';
 
     // Combine system prompt, workshop header, active resource section, and response instructions
     let fullSystemInstruction = `${baseSystemPrompt}${workshopSection}${activeResourceSection}${contextInstruction}`;
@@ -135,8 +142,6 @@ class ContextBuilderService {
     }
 
     const boundedHistory = history.slice(-25);
-
-    logger.info('[Context Builder] Context Built');
 
     return {
       systemInstruction: fullSystemInstruction,

@@ -309,32 +309,41 @@
 
 .vl-time {
   font-family: monospace;
-  font-size: 13px;
-  color: var(--vl-accent);
-  min-width: 45px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #66b8ff;
+  min-width: 52px;
+  padding-top: 2px;
 }
 
 .vl-chapter-title {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 /* Transcripts List */
 .vl-transcripts-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .vl-transcript-item {
   display: flex;
-  gap: 16px;
+  gap: 14px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.vl-transcript-item:hover {
+  background-color: rgba(255, 255, 255, 0.04);
 }
 
 .vl-transcript-item p {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--vl-text-secondary);
+  font-size: 16px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 /* Right Panel - Tools Nav */

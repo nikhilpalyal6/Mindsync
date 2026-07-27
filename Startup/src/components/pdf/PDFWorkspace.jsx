@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { FileText, Upload, Sparkles, CheckCircle } from 'lucide-react';
+import { pdfjs } from 'react-pdf';
 import PDFToolbar from './PDFToolbar';
 import PDFViewer from './PDFViewer';
 import { updateStudySession } from '../../services/api';
 import './pdfWorkspace.css';
+
+// Ensure workerSrc is set for text extraction
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+// Module-level in-memory cache to preserve valid PDF DataUrls across component unmounts
+const inMemoryPDFCache = new Map();
 
 export const PDFWorkspace = React.memo(({ session }) => {
   const [file, setFile] = useState(null);
@@ -14,7 +21,7 @@ export const PDFWorkspace = React.memo(({ session }) => {
   const [fitMode, setFitMode] = useState('page');
   const fileInputRef = useRef(null);
 
-  // Restore PDF state on session mount or session switch
+  // Restore PDF state from in-memory cache or MongoDB on session mount or session switch
   useEffect(() => {
     if (!session?._id) return;
 
@@ -28,24 +35,65 @@ export const PDFWorkspace = React.memo(({ session }) => {
     setScale(savedScale);
     setFitMode(savedFitMode);
 
-    // Restore PDF Binary/Data URL from LocalStorage / IndexedDB key
+    // 1. Check in-memory cache FIRST (0ms, 100% valid File/DataUrl object)
+    const memCached = inMemoryPDFCache.get(session._id);
+    if (memCached && memCached.file) {
+      setFile(memCached.file);
+      setFileName(memCached.fileName || savedFileName || 'Saved Document.pdf');
+      console.log(`[PDF Processing] Restored PDF from in-memory cache: ${memCached.fileName}`);
+      return;
+    }
+
+    // 2. Check LocalStorage cache
     try {
       const storedDataUrl = localStorage.getItem(`mindsync_pdf_${session._id}`);
-      if (storedDataUrl) {
+      if (storedDataUrl && storedDataUrl.startsWith('data:application/pdf')) {
         setFile(storedDataUrl);
         setFileName(savedFileName || 'Saved Document.pdf');
-        console.log(`[Persistent Workspace] PDF Restored: ${savedFileName || 'Document.pdf'} (Page ${savedPage}, Zoom ${Math.round(savedScale * 100)}%)`);
-      } else if (pdfMeta.fileData) {
-        setFile(pdfMeta.fileData);
-        setFileName(savedFileName || 'Saved Document.pdf');
-        console.log(`[Persistent Workspace] PDF Restored: ${savedFileName || 'Document.pdf'} (Page ${savedPage}, Zoom ${Math.round(savedScale * 100)}%)`);
+        inMemoryPDFCache.set(session._id, { file: storedDataUrl, fileName: savedFileName });
+        console.log(`[PDF Processing] Restored PDF from local cache: ${savedFileName}`);
+        return;
       }
     } catch (err) {
-      console.warn('[Persistent Workspace] Could not load PDF from storage:', err);
+      console.warn('[PDF Processing] LocalStorage check failed:', err);
     }
-  }, [session?._id]);
 
-  // Persist updated PDF metadata to StudySession.metadata
+    // 3. Check MongoDB fileData
+    if (pdfMeta.fileData && typeof pdfMeta.fileData === 'string' && pdfMeta.fileData.startsWith('data:application/pdf')) {
+      setFile(pdfMeta.fileData);
+      setFileName(savedFileName || 'Saved Document.pdf');
+      inMemoryPDFCache.set(session._id, { file: pdfMeta.fileData, fileName: savedFileName });
+      console.log(`[PDF Processing] Restored PDF from MongoDB fileData: ${savedFileName}`);
+    } else if (savedFileName) {
+      setFileName(savedFileName);
+    }
+  }, [session?._id, session?.metadata?.pdf?.lastOpened]);
+
+  // Extract readable text from PDF using pdfjs-dist
+  const extractPDFText = async (arrayBuffer) => {
+    try {
+      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+      const pdfDoc = await loadingTask.promise;
+      let fullText = '';
+      const totalPages = pdfDoc.numPages;
+      const pagesToRead = Math.min(totalPages, 50);
+
+      for (let pageNum = 1; pageNum <= pagesToRead; pageNum++) {
+        const page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        if (pageText.trim()) {
+          fullText += `[Page ${pageNum}]\n${pageText}\n\n`;
+        }
+      }
+      return { fullText: fullText.trim(), pageCount: totalPages };
+    } catch (err) {
+      console.error('[PDF Processing] Failed to extract text:', err);
+      return { fullText: '', pageCount: 0 };
+    }
+  };
+
+  // Persist updated PDF metadata to StudySession.metadata in MongoDB
   const persistPDFState = useCallback(async (updates) => {
     if (!session?._id) return;
 
@@ -57,6 +105,9 @@ export const PDFWorkspace = React.memo(({ session }) => {
         pageNumber: updates.pageNumber !== undefined ? updates.pageNumber : pageNumber,
         scale: updates.scale !== undefined ? updates.scale : scale,
         fitMode: updates.fitMode !== undefined ? updates.fitMode : fitMode,
+        extractedText: updates.extractedText !== undefined ? updates.extractedText : currentPdfMeta.extractedText || '',
+        pageCount: updates.pageCount !== undefined ? updates.pageCount : currentPdfMeta.pageCount || 0,
+        fileData: updates.fileData !== undefined ? updates.fileData : currentPdfMeta.fileData || '',
         lastOpened: new Date().toISOString(),
       };
 
@@ -67,16 +118,16 @@ export const PDFWorkspace = React.memo(({ session }) => {
         lastTab: 'pdf'
       };
 
-      await updateStudySession(session._id, { metadata: updatedMeta });
+      await updateStudySession(session._id, { metadata: updatedMeta, pdfCount: Math.max((session.pdfCount || 0), 1) });
       if (session.metadata) {
         session.metadata = updatedMeta;
       }
     } catch (err) {
-      console.error('[Persistent Workspace] Failed to save PDF metadata:', err);
+      console.error('[PDF Processing] Failed to save PDF metadata to MongoDB:', err);
     }
   }, [session, fileName, pageNumber, scale, fitMode]);
 
-  // File Upload Handler
+  // File Upload Handler with Text Extraction
   const handleFileChange = (e) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
@@ -94,17 +145,42 @@ export const PDFWorkspace = React.memo(({ session }) => {
         setScale(1.0);
         setFitMode('page');
 
-        // Persist to local browser storage & StudySession metadata
+        // Store in module-level in-memory cache
+        if (session?._id) {
+          inMemoryPDFCache.set(session._id, {
+            file: dataUrl,
+            fileName: selectedFile.name
+          });
+        }
+
+        // Cache to LocalStorage for quick load across refreshes
         try {
           localStorage.setItem(`mindsync_pdf_${session?._id}`, dataUrl);
         } catch (err) {
-          console.warn('[Persistent Workspace] LocalStorage quota exceeded, relying on metadata:', err);
+          console.warn('[PDF Processing] LocalStorage quota exceeded, storing in MongoDB:', err);
         }
 
+        // Extract readable text from ArrayBuffer
+        let extractedText = '';
+        let pageCount = 0;
+        try {
+          const arrayBuffer = await selectedFile.arrayBuffer();
+          const extracted = await extractPDFText(arrayBuffer);
+          extractedText = extracted.fullText;
+          pageCount = extracted.pageCount;
+          console.log(`[PDF Processing] Extracted ${extractedText.length} chars of text from ${pageCount} pages`);
+        } catch (extractErr) {
+          console.error('[PDF Processing] Text extraction error:', extractErr);
+        }
+
+        // Persist file metadata & extracted text to MongoDB as single source of truth
         await persistPDFState({
           pageNumber: 1,
           scale: 1.0,
           fitMode: 'page',
+          extractedText,
+          pageCount,
+          fileData: dataUrl
         });
       };
       reader.readAsDataURL(selectedFile);
@@ -126,6 +202,7 @@ export const PDFWorkspace = React.memo(({ session }) => {
     }
 
     if (session?._id) {
+      inMemoryPDFCache.delete(session._id);
       try {
         localStorage.removeItem(`mindsync_pdf_${session._id}`);
         const updatedMeta = { ...(session.metadata || {}), pdf: null };
@@ -250,6 +327,7 @@ export const PDFWorkspace = React.memo(({ session }) => {
           fitMode={fitMode}
           onDocumentLoadSuccess={onDocumentLoadSuccess}
           onDocumentLoadError={onDocumentLoadError}
+          onPageChange={handlePageChange}
           onRetry={handleOpenClick}
         />
       ) : (
@@ -260,7 +338,7 @@ export const PDFWorkspace = React.memo(({ session }) => {
             </div>
             <h3 className="pdf-upload-title">PDF Study Workspace</h3>
             <p className="pdf-upload-desc">
-              Upload lecture slides, textbooks, or research papers. Your document, exact page, and zoom scale will be saved automatically.
+              Upload lecture slides, textbooks, or research papers. Document text will be extracted automatically for AI Chat and Summary Engine.
             </p>
 
             <button 

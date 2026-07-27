@@ -405,6 +405,14 @@ export default function StudyMode() {
   const handleTabChange = async (tabId) => {
     const resourceType = tabId.toLowerCase()
     setActiveTab(resourceType)
+
+    if (resourceType === 'youtube') {
+      const savedVideoUrl = activeSession?.metadata?.youtube?.videoUrl || activeSession?.metadata?.videoUrl || ''
+      if (savedVideoUrl) {
+        setVideoUrl(savedVideoUrl)
+      }
+    }
+
     console.log(`[Active Resource Manager] Active Resource Changed: ${resourceType.toUpperCase()}`)
 
     // Dispatch internal event for Future Context Builders & AI co-pilots
@@ -649,8 +657,12 @@ export default function StudyMode() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showProfileDropdown])
 
-  if (videoUrl) {
-    return <VideoLearning videoUrl={videoUrl} session={activeSession} onBack={handleBackFromVideo} />
+  const handleSwitchFromVideo = async (targetResource) => {
+    await handleTabChange(targetResource)
+  }
+
+  if (videoUrl && activeTab === 'youtube') {
+    return <VideoLearning videoUrl={videoUrl} session={activeSession} onBack={handleBackFromVideo} onSwitchTab={handleSwitchFromVideo} />
   }
 
   return (
@@ -971,16 +983,25 @@ export default function StudyMode() {
                 )}
 
                 {activeTab === 'youtube' && (
-                  <div className="workspace-placeholder-box">
-                    <Video size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
-                    <h3>AI YouTube Learning Placeholder</h3>
-                    <p style={{ maxWidth: '420px', fontSize: '0.85rem' }}>
-                      Interactive video transcripts extraction and automated video checkpoints will be available in Phase 3.2+.
-                    </p>
-                    <button className="add-content-btn" onClick={() => setShowPasteModal(true)} style={{ maxWidth: '220px', marginTop: '12px' }}>
-                      Paste YouTube Video Link
-                    </button>
-                  </div>
+                  videoUrl ? (
+                    <VideoLearning 
+                      videoUrl={videoUrl} 
+                      session={activeSession} 
+                      onBack={() => setVideoUrl('')} 
+                      onSwitchTab={handleTabChange} 
+                    />
+                  ) : (
+                    <div className="workspace-placeholder-box">
+                      <Video size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                      <h3>AI YouTube Learning Workspace</h3>
+                      <p style={{ maxWidth: '420px', fontSize: '0.85rem' }}>
+                        Paste any YouTube educational video URL to load interactive transcripts, chapters, and video AI co-pilot.
+                      </p>
+                      <button className="add-content-btn" onClick={() => setShowPasteModal(true)} style={{ maxWidth: '220px', marginTop: '12px' }}>
+                        Paste YouTube Video Link
+                      </button>
+                    </div>
+                  )
                 )}
 
                 {activeTab === 'notes' && (

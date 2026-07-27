@@ -48,6 +48,13 @@ export const ChatLayout = React.memo(({ session }) => {
         // Keep active or select first thread
         const current = convList.find(c => c._id === activeConversation?._id) || convList[0];
         setActiveConversation(current);
+        console.log(`[Existing Conversation Loaded] Restored conversation ${current._id} for workshop ${session._id}`);
+      } else {
+        // Create initial primary conversation automatically if none exists for this workshop
+        const newConv = await createAIConversation({ studySessionId: session._id, title: `${session.title || 'Study Workshop'} Chat` });
+        setConversations([newConv]);
+        setActiveConversation(newConv);
+        console.log(`[Workshop Conversation Restored] Created primary conversation ${newConv._id} for workshop ${session._id}`);
       }
     } catch (err) {
       setError(err.message || 'Failed to load conversations');

@@ -389,6 +389,18 @@ export const sendAIMessage = async (data) => {
   return await api.post('/ai/messages', data);
 };
 
+export const generateSummary = async (sessionId, data = {}) => {
+  return await api.post(`/study/${sessionId}/summary`, data);
+};
+
+export const getSummary = async (sessionId, resourceType, summaryType = 'quick') => {
+  return await api.get(`/study/${sessionId}/summary?resourceType=${resourceType}&summaryType=${summaryType}`);
+};
+
+export const fetchYouTubeData = async (sessionId, videoUrl) => {
+  return await api.post(`/study/${sessionId}/youtube/fetch`, { videoUrl });
+};
+
 // General API methods
 export const api = {
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),
