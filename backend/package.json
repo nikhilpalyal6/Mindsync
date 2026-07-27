@@ -21,6 +21,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@google/genai": "^2.13.0",
+    "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.5.1",
     "cookie-parser": "^1.4.7",
@@ -31,6 +33,7 @@
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.2.1",
     "google-auth-library": "^10.9.0",
+    "groq-sdk": "^1.4.0",
     "helmet": "^8.0.0",
     "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.2",

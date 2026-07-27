@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import './videoLearning.css'
+import AISidebar from './ai/AISidebar'
 
 // Mock Data Service
 const MOCK_DATA = {
@@ -41,7 +42,7 @@ const MOCK_DATA = {
   }
 }
 
-export default function VideoLearning({ videoUrl, onBack }) {
+export default function VideoLearning({ videoUrl, session, onBack }) {
   const [videoId, setVideoId] = useState('')
   const [activeTab, setActiveTab] = useState('chapters')
   const [activeToolTab, setActiveToolTab] = useState('chat')
@@ -203,74 +204,9 @@ export default function VideoLearning({ videoUrl, onBack }) {
             ))}
           </div>
 
-          <div className="vl-ai-content">
+          <div className="vl-ai-content" style={{ height: 'calc(100% - 50px)', overflow: 'hidden' }}>
             {activeToolTab === 'chat' && (
-              <div className="vl-chat-interface">
-                <div className="vl-chat-empty-state">
-                  <div className="vl-chat-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </div>
-                  <h3>Learn with the AI Tutor</h3>
-
-                  <div className="vl-suggestion-chips">
-                    <button>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                      Quiz
-                    </button>
-                    <button>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m6.24 6.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m6.24-6.24l4.24-4.24" /></svg>
-                      Mind Map
-                    </button>
-                    <button>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /></svg>
-                      Voice Mode
-                    </button>
-                    <button>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
-                      Flashcards
-                    </button>
-                    <button>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
-                      Search
-                    </button>
-                    <button>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
-                      Timeline
-                    </button>
-                  </div>
-                </div>
-
-                <div className="vl-chat-input-container">
-                  <div className="vl-chat-input-header">
-                    <span className="vl-input-label">Learn anything</span>
-                  </div>
-                  <div className="vl-chat-input-wrapper">
-                    <div className="vl-input-actions-left">
-                      <button className="vl-input-action-btn">
-                        Auto <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
-                      </button>
-                      <button className="vl-input-action-btn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
-                        Add Context
-                      </button>
-                    </div>
-                    <div className="vl-input-actions-right">
-                      <button className="vl-icon-btn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
-                      </button>
-                      <button className="vl-icon-btn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /></svg>
-                      </button>
-                      <button className="vl-voice-btn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /></svg>
-                        Voice
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AISidebar session={session} />
             )}
           </div>
         </div>

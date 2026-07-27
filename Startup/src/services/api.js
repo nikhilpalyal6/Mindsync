@@ -365,6 +365,30 @@ export const getStudyActivities = async () => {
   return await api.get('/study/activity');
 };
 
+export const getAIConversations = async (studySessionId) => {
+  return await api.get(`/ai/conversations?studySessionId=${studySessionId}`);
+};
+
+export const createAIConversation = async (data) => {
+  return await api.post('/ai/conversations', data);
+};
+
+export const updateAIConversation = async (id, data) => {
+  return await api.patch(`/ai/conversations/${id}`, data);
+};
+
+export const deleteAIConversation = async (id) => {
+  return await api.delete(`/ai/conversations/${id}`);
+};
+
+export const getAIMessages = async (conversationId) => {
+  return await api.get(`/ai/messages?conversationId=${conversationId}`);
+};
+
+export const sendAIMessage = async (data) => {
+  return await api.post('/ai/messages', data);
+};
+
 // General API methods
 export const api = {
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),

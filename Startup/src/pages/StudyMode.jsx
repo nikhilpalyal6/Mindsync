@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Search, RefreshCw, MoreVertical, Pin, Trash2, Edit3, Copy, Archive, FileText, Video, BookOpen, Layers, HelpCircle, MessageSquare, Plus, Clock } from 'lucide-react'
+import { Search, RefreshCw, MoreVertical, Pin, Trash2, Edit3, Copy, Archive, FileText, Video, BookOpen, Layers, HelpCircle, MessageSquare, Plus, Clock, Folder, Sparkles } from 'lucide-react'
 import { 
   getStudySessions, 
   createStudySession, 
@@ -11,6 +11,8 @@ import {
 } from '../services/api'
 import './studyMode.css'
 import VideoLearning from '../components/VideoLearning'
+import ChatLayout from '../components/chat/ChatLayout'
+import AISidebar from '../components/ai/AISidebar'
 
 // Memoized Workspace Card Subcomponent with Context Menu and Count Chips
 const WorkspaceCard = React.memo(({ 
@@ -185,7 +187,7 @@ export default function StudyMode() {
   const [editingSidebarId, setEditingSidebarId] = useState(null)
   const [sidebarTitleText, setSidebarTitleText] = useState('')
 
-  // Active Workspace View Tab
+  // Active Workspace View Tab (PDF, YouTube, Notes resource launcher)
   const [activeTab, setActiveTab] = useState('pdf')
 
   // Modals & Upload logic
@@ -196,6 +198,13 @@ export default function StudyMode() {
   const [videoUrl, setVideoUrl] = useState('')
   const [uploadError, setUploadError] = useState('')
   const [learnQuery, setLearnQuery] = useState('')
+
+  // Create Workspace Modal States
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newWorkspaceTitle, setNewWorkspaceTitle] = useState('')
+  const [newWorkspaceDesc, setNewWorkspaceDesc] = useState('')
+  const [createModalError, setCreateModalError] = useState('')
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false)
 
   const fileInputRef = useRef(null)
   const profileDropdownRef = useRef(null)
@@ -263,10 +272,60 @@ export default function StudyMode() {
     setIsSidebarOpen(false)
   }
 
-  // Optimistic Create Session
-  const handleCreateSession = async (title = 'Untitled Study Workspace') => {
+  // Open Create Workspace Modal
+  const handleOpenCreateModal = (defaultTitle = '') => {
+    setNewWorkspaceTitle(defaultTitle)
+    setNewWorkspaceDesc('')
+    setCreateModalError('')
+    setShowCreateModal(true)
+  }
+
+  // Submit Create Workspace Modal Form
+  const handleCreateWorkspaceSubmit = async (e) => {
+    if (e) e.preventDefault()
+    const title = newWorkspaceTitle.trim()
+    const description = newWorkspaceDesc.trim()
+
+    if (!title) {
+      setCreateModalError('Workspace name is required.')
+      return
+    }
+
+    if (title.length > 100) {
+      setCreateModalError('Workspace name cannot exceed 100 characters.')
+      return
+    }
+
+    // Client-side duplicate check
+    const isDuplicate = sessions.some(s => s.title.toLowerCase() === title.toLowerCase())
+    if (isDuplicate) {
+      setCreateModalError('A workspace with this name already exists. Please choose a different name.')
+      return
+    }
+
+    setCreatingWorkspace(true)
+    setCreateModalError('')
+
     try {
-      const res = await createStudySession({ title })
+      const res = await createStudySession({ title, description })
+      const newSession = res
+      setSessions(prev => [newSession, ...prev])
+      selectSession(newSession)
+      fetchSessionsAndActivities(false)
+      setShowCreateModal(false)
+      setNewWorkspaceTitle('')
+      setNewWorkspaceDesc('')
+    } catch (err) {
+      setCreateModalError(err.message || 'Failed to create study workspace. Please try again.')
+    } finally {
+      setCreatingWorkspace(false)
+    }
+  }
+
+  // Create Session helper for auto-uploads / records
+  const handleCreateSession = async (title = 'Untitled Study Workspace', description = '') => {
+    try {
+      const res = await createStudySession({ title, description })
       const newSession = res
       setSessions(prev => [newSession, ...prev])
       selectSession(newSession)
@@ -430,7 +489,7 @@ export default function StudyMode() {
   const handleLearnSubmit = (e) => {
     e.preventDefault()
     if (!learnQuery.trim()) return
-    handleCreateSession(learnQuery.trim())
+    handleOpenCreateModal(learnQuery.trim())
     setLearnQuery('')
   }
 
@@ -489,6 +548,19 @@ export default function StudyMode() {
     return groups
   }, [filteredSessions])
 
+  // Live Dashboard Statistics
+  const totalWorkspaces = useMemo(() => sessions.length, [sessions])
+  const totalNotes = useMemo(() => sessions.reduce((acc, s) => acc + (s.notesCount || 0), 0), [sessions])
+  const totalPDFs = useMemo(() => sessions.reduce((acc, s) => acc + (s.pdfCount || 0), 0), [sessions])
+  const totalChats = useMemo(() => sessions.reduce((acc, s) => acc + (s.chatCount || 0), 0), [sessions])
+
+  const getGreeting = useCallback(() => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good Morning'
+    if (hour < 18) return 'Good Afternoon'
+    return 'Good Evening'
+  }, [])
+
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen)
   const closeSidebar = () => setIsSidebarOpen(false)
   const toggleProfileDropdown = () => setShowProfileDropdown(!showProfileDropdown)
@@ -534,7 +606,7 @@ export default function StudyMode() {
   }, [showProfileDropdown])
 
   if (videoUrl) {
-    return <VideoLearning videoUrl={videoUrl} onBack={handleBackFromVideo} />
+    return <VideoLearning videoUrl={videoUrl} session={activeSession} onBack={handleBackFromVideo} />
   }
 
   return (
@@ -571,7 +643,7 @@ export default function StudyMode() {
           </div>
 
           {/* Create Session Button */}
-          <button className="add-content-btn" onClick={() => handleCreateSession('New Study Workspace')}>
+          <button className="add-content-btn" onClick={() => handleOpenCreateModal()}>
             <Plus size={16} />
             <span>Create Workspace</span>
           </button>
@@ -853,12 +925,12 @@ export default function StudyMode() {
                 {activeTab === 'pdf' && (
                   <div className="workspace-placeholder-box">
                     <FileText size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />
-                    <h3>AI PDF Reader Placeholder</h3>
+                    <h3>AI PDF Reader</h3>
                     <p style={{ maxWidth: '420px', fontSize: '0.85rem' }}>
-                      Upload educational PDFs to summarize chapters and generate key concepts with MindSync AI co-pilot in Phase 3.2+.
+                      Upload educational PDFs to analyze documents and generate key concepts with MindSync AI co-pilot in the right sidebar.
                     </p>
                     <button className="add-content-btn" onClick={handleUploadClick} style={{ maxWidth: '220px', marginTop: '12px' }}>
-                      Upload Test PDF Document
+                      Upload PDF Document
                     </button>
                   </div>
                 )}
@@ -888,96 +960,177 @@ export default function StudyMode() {
               </div>
             </div>
 
-            {/* Right Co-Pilot Panel */}
+            {/* Right Panel: Learning Features Overview */}
             <aside className="study-right-panel">
               <div>
-                <h3 className="right-panel-title">MindSync AI Co-Pilot</h3>
-                <p className="right-panel-desc">Interactive tools synced to your active workspace.</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                  <Sparkles size={14} style={{ color: '#66b8ff' }} />
+                  <h3 className="right-panel-title">Learning Features</h3>
+                </div>
+                <p className="right-panel-desc">Workspace co-pilot modules and interactive learning tools.</p>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-                <div className="locked-tool-card">
-                  <span className="locked-tool-badge">Phase 3.2+</span>
-                  <h4>AI Tutor Chat</h4>
-                  <p>Ask questions and get explanations for complex subjects.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, marginTop: '6px' }}>
+                <div className="learning-feature-card active">
+                  <div className="feature-card-header">
+                    <div className="feature-icon active"><MessageSquare size={14} /></div>
+                    <div className="feature-info">
+                      <h4>AI Tutor Chat</h4>
+                      <p>Active inside YouTube, PDF, & Notes viewers</p>
+                    </div>
+                    <span className="feature-badge active">Active AI</span>
+                  </div>
                 </div>
-                <div className="locked-tool-card">
-                  <span className="locked-tool-badge">Phase 3.2+</span>
-                  <h4>Smart Flashcards</h4>
-                  <p>Auto-generate study cards from your lecture documents.</p>
+
+                <div className="learning-feature-card locked">
+                  <div className="feature-card-header">
+                    <div className="feature-icon"><Layers size={14} /></div>
+                    <div className="feature-info">
+                      <h4>Smart Flashcards</h4>
+                      <p>Auto-generate study cards from lectures</p>
+                    </div>
+                    <span className="feature-badge">Coming Soon</span>
+                  </div>
                 </div>
-                <div className="locked-tool-card">
-                  <span className="locked-tool-badge">Phase 3.2+</span>
-                  <h4>Interactive Quizzes</h4>
-                  <p>Test your knowledge with multiple choice questions.</p>
+
+                <div className="learning-feature-card locked">
+                  <div className="feature-card-header">
+                    <div className="feature-icon"><HelpCircle size={14} /></div>
+                    <div className="feature-info">
+                      <h4>Interactive Quizzes</h4>
+                      <p>Test knowledge with practice questions</p>
+                    </div>
+                    <span className="feature-badge">Coming Soon</span>
+                  </div>
                 </div>
-                <div className="locked-tool-card">
-                  <span className="locked-tool-badge">Phase 3.2+</span>
-                  <h4>Markdown Notes</h4>
-                  <p>Save notes and export them to your personal workspace.</p>
+
+                <div className="learning-feature-card locked">
+                  <div className="feature-card-header">
+                    <div className="feature-icon"><Clock size={14} /></div>
+                    <div className="feature-info">
+                      <h4>Audio Podcast</h4>
+                      <p>Convert notes to audio summaries</p>
+                    </div>
+                    <span className="feature-badge">Coming Soon</span>
+                  </div>
                 </div>
-                <div className="locked-tool-card">
-                  <span className="locked-tool-badge">Phase 3.2+</span>
-                  <h4>Concept Summaries</h4>
-                  <p>Compile chapters into quick 5-bullet summary cards.</p>
+
+                <div className="learning-feature-card locked">
+                  <div className="feature-card-header">
+                    <div className="feature-icon"><Video size={14} /></div>
+                    <div className="feature-info">
+                      <h4>Video Checkpoints</h4>
+                      <p>Interactive timestamps & chapters</p>
+                    </div>
+                    <span className="feature-badge">Coming Soon</span>
+                  </div>
+                </div>
+
+                <div className="learning-feature-card locked">
+                  <div className="feature-card-header">
+                    <div className="feature-icon"><BookOpen size={14} /></div>
+                    <div className="feature-info">
+                      <h4>Concept Mind Map</h4>
+                      <p>Visual subject connection trees</p>
+                    </div>
+                    <span className="feature-badge">Coming Soon</span>
+                  </div>
+                </div>
+
+                <div className="learning-feature-card locked">
+                  <div className="feature-card-header">
+                    <div className="feature-icon"><Search size={14} /></div>
+                    <div className="feature-info">
+                      <h4>Deep Search</h4>
+                      <p>Cross-workspace semantic search</p>
+                    </div>
+                    <span className="feature-badge">Coming Soon</span>
+                  </div>
                 </div>
               </div>
             </aside>
           </div>
         ) : (
-          /* Workspaces Main View */
+          /* Workspaces Main Management Dashboard View */
           <div className="study-container">
-            <section className="learn-section">
-              <h1 className="learn-title">What do you want to learn?</h1>
-              
-              <div className="upload-methods">
-                <button className="upload-card" onClick={handleUploadClick}>
-                  <div className="upload-icon"><FileText size={24} /></div>
-                  <h3>Upload</h3>
-                  <p>File, audio, video</p>
-                </button>
+            {/* Notion / Linear / Cursor Style Hero Section */}
+            <section className="dashboard-hero-section">
+              <div className="hero-content">
+                <div className="hero-greeting-badge">
+                  <Sparkles size={14} style={{ color: '#66b8ff' }} />
+                  <span>MindSync Workspace Management</span>
+                </div>
+                <h1 className="hero-greeting-title">
+                  {getGreeting()}, {user?.name || user?.username || 'Scholar'}
+                </h1>
+                <p className="hero-greeting-subtitle">
+                  Continue where you left off or launch a new study workspace to manage your subjects, notes, and AI co-pilots.
+                </p>
 
-                <button className="upload-card" onClick={() => setShowPasteModal(true)}>
-                  <div className="upload-icon"><Video size={24} /></div>
-                  <h3>Paste</h3>
-                  <p>YouTube, website, text</p>
-                </button>
+                <div className="hero-action-buttons">
+                  <button 
+                    className="add-content-btn hero-primary-btn" 
+                    onClick={() => handleOpenCreateModal()}
+                  >
+                    <Plus size={16} />
+                    <span>New Workspace</span>
+                  </button>
 
-                <button className="upload-card" onClick={() => setShowRecordModal(true)}>
-                  <div className="upload-icon"><BookOpen size={24} /></div>
-                  <h3>Record</h3>
-                  <p>Record class, video call</p>
-                </button>
-              </div>
-
-              {uploadError && (
-                <div className="upload-error-banner">
-                  <span>{uploadError}</span>
-                  <button onClick={() => setUploadError('')} aria-label="Dismiss error">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                  <button 
+                    className="admin-btn admin-btn-secondary hero-secondary-btn" 
+                    onClick={() => {
+                      const el = document.getElementById('workspaces-list-section')
+                      if (el) el.scrollIntoView({ behavior: 'smooth' })
+                    }}
+                  >
+                    <BookOpen size={15} />
+                    <span>Browse Workspaces</span>
                   </button>
                 </div>
-              )}
-
-              <form onSubmit={handleLearnSubmit} className="learn-input-wrapper">
-                <input
-                  type="text"
-                  className="learn-input"
-                  placeholder="Type anything you want to learn..."
-                  value={learnQuery}
-                  onChange={(e) => setLearnQuery(e.target.value)}
-                />
-                <button type="submit" className="learn-submit-btn" aria-label="Submit query">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </button>
-              </form>
+              </div>
             </section>
+
+            {/* Quick Live Statistics Row */}
+            <div className="dashboard-stats-grid">
+              <div className="dashboard-stat-card">
+                <div className="stat-card-header">
+                  <span className="stat-card-title">Total Workspaces</span>
+                  <div className="stat-card-icon blue"><Folder size={16} /></div>
+                </div>
+                <div className="stat-card-value">{totalWorkspaces}</div>
+                <span className="stat-card-subtitle">{pinnedWorkspaces.length} Pinned Workspaces</span>
+              </div>
+
+              <div className="dashboard-stat-card">
+                <div className="stat-card-header">
+                  <span className="stat-card-title">Notes Created</span>
+                  <div className="stat-card-icon green"><BookOpen size={16} /></div>
+                </div>
+                <div className="stat-card-value">{totalNotes}</div>
+                <span className="stat-card-subtitle">Organized in Workspaces</span>
+              </div>
+
+              <div className="dashboard-stat-card">
+                <div className="stat-card-header">
+                  <span className="stat-card-title">PDF Documents</span>
+                  <div className="stat-card-icon purple"><FileText size={16} /></div>
+                </div>
+                <div className="stat-card-value">{totalPDFs}</div>
+                <span className="stat-card-subtitle">Uploaded PDF Files</span>
+              </div>
+
+              <div className="dashboard-stat-card">
+                <div className="stat-card-header">
+                  <span className="stat-card-title">AI Conversations</span>
+                  <div className="stat-card-icon cyan"><MessageSquare size={16} /></div>
+                </div>
+                <div className="stat-card-value">{totalChats}</div>
+                <span className="stat-card-subtitle">AI Co-Pilot Exchanges</span>
+              </div>
+            </div>
+
+            {/* Workspaces List Anchor */}
+            <div id="workspaces-list-section"></div>
 
             {/* Empty State vs Workspaces List */}
             {sessions.length === 0 && !loading ? (
@@ -995,7 +1148,7 @@ export default function StudyMode() {
                 </div>
                 <button 
                   className="add-content-btn" 
-                  onClick={() => handleCreateSession('My First Study Workspace')}
+                  onClick={() => handleOpenCreateModal('My First Study Workspace')}
                   style={{ maxWidth: '240px', background: 'linear-gradient(135deg, rgba(102, 184, 255, 0.2), rgba(72, 239, 179, 0.2))' }}
                 >
                   <Plus size={16} />
@@ -1237,6 +1390,92 @@ export default function StudyMode() {
                 </div>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Workspace Modal */}
+      {showCreateModal && (
+        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <div className="modal-header-left">
+                <div className="modal-icon"><Plus size={18} /></div>
+                <h2 className="modal-title">Create Study Workspace</h2>
+              </div>
+              <button className="modal-close" onClick={() => setShowCreateModal(false)} aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateWorkspaceSubmit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {createModalError && (
+                  <div style={{
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#f87171',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600
+                  }}>
+                    {createModalError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)' }}>
+                    Workspace Name <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="modal-input"
+                    placeholder="e.g. Organic Chemistry, Quantum Physics..."
+                    value={newWorkspaceTitle}
+                    onChange={(e) => {
+                      setNewWorkspaceTitle(e.target.value)
+                      if (createModalError) setCreateModalError('')
+                    }}
+                    maxLength={100}
+                    autoFocus
+                    required
+                  />
+                  <span style={{ fontSize: '0.7rem', color: 'rgba(255, 255, 255, 0.4)', textAlign: 'right' }}>
+                    {newWorkspaceTitle.length} / 100
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)' }}>
+                    Description (Optional)
+                  </label>
+                  <textarea
+                    className="modal-textarea"
+                    placeholder="Brief notes or summary about this workspace..."
+                    value={newWorkspaceDesc}
+                    onChange={(e) => setNewWorkspaceDesc(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="modal-btn cancel-btn" onClick={() => setShowCreateModal(false)}>
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="modal-btn add-btn" 
+                  disabled={!newWorkspaceTitle.trim() || creatingWorkspace}
+                >
+                  {creatingWorkspace ? 'Creating...' : 'Create Workspace'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

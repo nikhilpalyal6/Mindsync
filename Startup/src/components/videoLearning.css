@@ -130,7 +130,7 @@
 }
 
 .vl-right-panel {
-  width: 400px;
+  width: 460px;
   display: flex;
   flex-direction: column;
   background-color: var(--vl-bg-secondary);
