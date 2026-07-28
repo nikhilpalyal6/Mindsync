@@ -297,3 +297,21 @@ html, body {
   overflow: hidden !important;
   gap: 12px !important;
 }
+
+.study-container {
+  flex: 1 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+}
+
+.dashboard-hero-section {
+  flex-shrink: 0 !important;
+}
+
+.dashboard-stats-grid {
+  flex-shrink: 0 !important;
+}
