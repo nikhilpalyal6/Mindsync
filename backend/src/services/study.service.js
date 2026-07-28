@@ -1,6 +1,7 @@
 import StudySession from '../models/studySession.model.js';
 import StudyActivity from '../models/studyActivity.model.js';
 import ApiError from '../utils/ApiError.js';
+import resourceService from './resource.service.js';
 
 class StudyService {
   async logActivity(userId, { session = null, sessionTitle = '', action, details = '' }) {
@@ -34,6 +35,70 @@ class StudyService {
   }
 
   async createSession(userId, { title, description = '', metadata = {} }) {
+    // Check if this is a resource-triggered session creation
+    const isResourceSession = 
+      title?.endsWith('Workspace') || 
+      description?.startsWith('PDF Document:') || 
+      description?.startsWith('Web resources:') || 
+      description?.startsWith('Pasted text content.') || 
+      metadata?.pasteUrl || 
+      metadata?.pasteText;
+
+    if (isResourceSession) {
+      // Find or create a single active session (prevents duplicates)
+      const session = await resourceService.findOrCreateActiveSession(userId, title);
+
+      if (session.title === 'My Study Session') {
+        session.title = title;
+      }
+      if (description) {
+        session.description = (session.description && session.description !== 'Auto-created active study session')
+          ? `${session.description}\n${description}`
+          : description;
+      }
+
+      // Link any metadata payload to resources array
+      if (metadata.pdf || description?.startsWith('PDF Document:')) {
+        const pdfName = metadata.pdf?.filename || description?.replace('PDF Document: ', '') || 'Document.pdf';
+        await resourceService.linkResourceToSession(session, {
+          type: 'pdf',
+          url: pdfName,
+          title: pdfName,
+          data: metadata.pdf || { filename: pdfName }
+        });
+      } else if (metadata.youtube || metadata.pasteUrl || description?.startsWith('Web resources:')) {
+        const videoUrl = metadata.youtube?.videoUrl || metadata.pasteUrl || description?.replace('Web resources: ', '') || '';
+        if (videoUrl) {
+          await resourceService.linkResourceToSession(session, {
+            type: 'youtube',
+            url: videoUrl,
+            title: metadata.youtube?.title || 'YouTube Video',
+            data: metadata.youtube || { videoUrl }
+          });
+        }
+      } else if (metadata.pasteText || description?.startsWith('Pasted text content.')) {
+        const noteContent = metadata.pasteText || '';
+        await resourceService.linkResourceToSession(session, {
+          type: 'notes',
+          url: 'default_notes_id',
+          title: 'Lecture Notes',
+          data: { content: noteContent }
+        });
+      }
+
+      const savedSession = await session.save();
+
+      await this.logActivity(userId, {
+        session: savedSession._id,
+        sessionTitle: savedSession.title,
+        action: 'updated',
+        details: `Linked resource to active workspace "${savedSession.title}"`
+      });
+
+      return savedSession;
+    }
+
+    // Default flow: create new session
     const session = new StudySession({
       user: userId,
       title: title || 'Untitled Study Session',
@@ -67,14 +132,67 @@ class StudyService {
       'title', 'description', 'pinned', 'lastOpened', 'metadata',
       'pdfCount', 'youtubeCount', 'notesCount', 'flashcardsCount', 'quizCount', 'chatCount'
     ];
-    allowedUpdates.forEach((field) => {
+    
+    for (const field of allowedUpdates) {
       if (updates[field] !== undefined) {
-        session[field] = updates[field];
         if (field === 'metadata') {
+          // Merge metadata instead of replacing to avoid losing other resource keys
+          session.metadata = {
+            ...(session.metadata || {}),
+            ...(updates.metadata || {})
+          };
           session.markModified('metadata');
+        } else {
+          session[field] = updates[field];
         }
       }
-    });
+    }
+
+    // Link updated resource to array and update counts atomically
+    if (updates.metadata) {
+      const meta = updates.metadata;
+
+      // Sync PDF
+      if (meta.pdf && (meta.pdf.filename || meta.pdf.pdfFilename)) {
+        const pdfUrl = meta.pdf.pdfFilename || meta.pdf.filename;
+        const pdfTitle = meta.pdf.filename || meta.pdf.pdfFilename || 'PDF Document';
+        await resourceService.linkResourceToSession(session, {
+          type: 'pdf',
+          url: pdfUrl,
+          title: pdfTitle,
+          data: meta.pdf
+        });
+      }
+
+      // Sync YouTube
+      if (meta.youtube && meta.youtube.videoUrl) {
+        await resourceService.linkResourceToSession(session, {
+          type: 'youtube',
+          url: meta.youtube.videoUrl,
+          title: meta.youtube.title || 'YouTube Video',
+          data: meta.youtube
+        });
+      }
+
+      // Sync Notes
+      if (meta.notes && meta.notes.noteId) {
+        await resourceService.linkResourceToSession(session, {
+          type: 'notes',
+          url: meta.notes.noteId,
+          title: meta.notes.title || 'Note',
+          data: meta.notes
+        });
+      } else if (meta.notesContent || meta.noteContent || (meta.notes && (meta.notes.content || meta.notes.notesContent))) {
+        const notesId = 'default_notes_id';
+        const notesTitle = meta.notes?.title || 'Lecture Notes';
+        await resourceService.linkResourceToSession(session, {
+          type: 'notes',
+          url: notesId,
+          title: notesTitle,
+          data: meta.notes || { content: meta.notesContent || meta.noteContent }
+        });
+      }
+    }
 
     const updatedSession = await session.save();
 

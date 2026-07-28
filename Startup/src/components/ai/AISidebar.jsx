@@ -1,5 +1,6 @@
 import React from 'react';
 import ChatLayout from '../chat/ChatLayout';
+import './AISidebar.css';
 
 export const AISidebar = React.memo(({ session }) => {
   return (

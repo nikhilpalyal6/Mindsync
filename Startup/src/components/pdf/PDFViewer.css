@@ -1,0 +1,14 @@
+/* PDF Viewer scrollable viewport styles */
+.pdf-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 0;
+  background-color: #0d1017;
+  scroll-behavior: smooth;
+  width: 100%;
+}

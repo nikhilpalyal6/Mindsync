@@ -10,8 +10,25 @@ class ApiError extends Error {
   }
 }
 
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+const subscribeTokenRefresh = (cb) => {
+  refreshSubscribers.push(cb);
+};
+
+const onRefreshed = () => {
+  refreshSubscribers.forEach((cb) => cb());
+  refreshSubscribers = [];
+};
+
+const onRefreshFailed = (err) => {
+  refreshSubscribers.forEach((cb) => cb(err));
+  refreshSubscribers = [];
+};
+
 const apiRequest = async (endpoint, options = {}) => {
-  const { timeout = 10000, ...fetchOptions } = options
+  const { timeout = 60000, ...fetchOptions } = options
 
   // Check offline status
   if (!navigator.onLine) {
@@ -43,6 +60,20 @@ const apiRequest = async (endpoint, options = {}) => {
 
     if (!response.ok) {
       if (response.status === 401 && !endpoint.includes('/auth/refresh-token') && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/logout')) {
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            subscribeTokenRefresh((err) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve(apiRequest(endpoint, options));
+              }
+            });
+          });
+        }
+
+        isRefreshing = true;
+
         try {
           const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
             method: 'POST',
@@ -50,23 +81,19 @@ const apiRequest = async (endpoint, options = {}) => {
           });
           
           if (refreshResponse.ok) {
-            const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
-              credentials: 'include',
-              headers: {
-                'Content-Type': 'application/json',
-                ...fetchOptions.headers,
-              },
-              signal: controller.signal,
-              ...fetchOptions,
-            });
-            
-            if (retryResponse.ok) {
-              const retryData = await retryResponse.json();
-              return retryData.data;
-            }
+            isRefreshing = false;
+            onRefreshed();
+            return await apiRequest(endpoint, options);
+          } else {
+            isRefreshing = false;
+            const err = new ApiError('Session expired. Please log in again.', 401);
+            onRefreshFailed(err);
+            throw err;
           }
         } catch (refreshError) {
-          console.error('Silent token refresh failed:', refreshError);
+          isRefreshing = false;
+          onRefreshFailed(refreshError);
+          throw refreshError;
         }
       }
 
@@ -365,8 +392,11 @@ export const getStudyActivities = async () => {
   return await api.get('/study/activity');
 };
 
-export const getAIConversations = async (studySessionId) => {
-  return await api.get(`/ai/conversations?studySessionId=${studySessionId}`);
+export const getAIConversations = async (studySessionId, resourceId) => {
+  const query = resourceId
+    ? `studySessionId=${studySessionId}&resourceId=${encodeURIComponent(resourceId)}`
+    : `studySessionId=${studySessionId}`;
+  return await api.get(`/ai/conversations?${query}`);
 };
 
 export const createAIConversation = async (data) => {

@@ -52,7 +52,7 @@ class YouTubeService {
         };
       }
     } catch (err) {
-      logger.warn(`[YouTube Service] Failed to fetch oEmbed metadata for ${videoId}: ${err.message}`);
+      logger.warn(`[YouTube Service] Failed to fetch oEmbed metadata for ${videoId}: ${err.stack}`);
     }
 
     // Fallback metadata
@@ -73,96 +73,113 @@ class YouTubeService {
    * Extract chapters from description or generate interval timestamps from transcript
    */
   extractOrGenerateChapters(descriptionText, transcriptItems) {
-    // 1. Try extracting chapters from description
-    if (descriptionText) {
-      const timestampRegex = /(?:(\d{1,2}):)?(\d{2}):(\d{2})\s+[-–—]?\s*([^\n]+)/g;
-      const matches = [...descriptionText.matchAll(timestampRegex)];
-      if (matches.length > 0) {
-        const chapters = matches.map(m => ({
-          time: m[1] ? `${m[1]}:${m[2]}:${m[3]}` : `${m[2]}:${m[3]}`,
-          title: m[4].trim()
-        }));
-        logger.info(`[Chapters Generated] Extracted ${chapters.length} chapters from description`);
-        return chapters;
-      }
-    }
-
-    // 2. Generate interval checkpoints from transcript items if available
-    if (transcriptItems && transcriptItems.length > 0) {
-      const chapters = [];
-      const intervalSec = 180; // Every 3 minutes
-      let lastCheckpoint = -intervalSec;
-
-      transcriptItems.forEach((item, index) => {
-        const sec = item.seconds !== undefined ? item.seconds : this.parseTimeToSeconds(item.time);
-        if (index === 0 || sec - lastCheckpoint >= intervalSec) {
-          lastCheckpoint = sec;
-          chapters.push({
-            time: item.time || '00:00',
-            title: index === 0 ? 'Introduction' : `Key Concept (${item.time})`
-          });
+    try {
+      // 1. Try extracting chapters from description
+      if (descriptionText) {
+        const timestampRegex = /(?:(\d{1,2}):)?(\d{2}):(\d{2})\s+[-–—]?\s*([^\n]+)/g;
+        const matches = [...descriptionText.matchAll(timestampRegex)];
+        if (matches.length > 0) {
+          const chapters = matches.map(m => ({
+            time: m[1] ? `${m[1]}:${m[2]}:${m[3]}` : `${m[2]}:${m[3]}`,
+            title: m[4].trim()
+          }));
+          logger.info(`[Chapters Generated] Extracted ${chapters.length} chapters from description`);
+          return chapters;
         }
-      });
-
-      if (chapters.length > 0) {
-        logger.info(`[Chapters Generated] Generated ${chapters.length} timestamp checkpoints from transcript`);
-        return chapters;
       }
-    }
 
-    logger.info(`[Chapters Generated] Fallback default chapters set`);
-    return [
-      { time: '00:00', title: 'Introduction' },
-      { time: '02:15', title: 'Main Topic' },
-      { time: '05:30', title: 'Key Concepts' }
-    ];
+      // 2. Generate interval checkpoints from transcript items if available
+      if (transcriptItems && transcriptItems.length > 0) {
+        const chapters = [];
+        const intervalSec = 180; // Every 3 minutes
+        let lastCheckpoint = -intervalSec;
+
+        transcriptItems.forEach((item, index) => {
+          const sec = item.seconds !== undefined ? item.seconds : this.parseTimeToSeconds(item.time);
+          if (index === 0 || sec - lastCheckpoint >= intervalSec) {
+            lastCheckpoint = sec;
+            chapters.push({
+              time: item.time || '00:00',
+              title: index === 0 ? 'Introduction' : `Key Concept (${item.time})`
+            });
+          }
+        });
+
+        if (chapters.length > 0) {
+          logger.info(`[Chapters Generated] Generated ${chapters.length} timestamp checkpoints from transcript`);
+          return chapters;
+        }
+      }
+
+      logger.info(`[Chapters Generated] No chapters generated (no fallback placeholders)`);
+      return [];
+    } catch (err) {
+      logger.error(`[EXCEPTION IN extractOrGenerateChapters] Stack: ${err.stack}`);
+      throw err;
+    }
   }
 
   /**
    * Main Pipeline: Process YouTube Video URL, fetch metadata, transcript, chapters, and multilingual translation
    */
   async processVideo(videoUrl, existingYoutubeData = null) {
-    const videoId = this.extractVideoId(videoUrl);
-    if (!videoId) {
-      throw new Error('Invalid YouTube video URL format.');
+    try {
+      logger.info(`[START processVideo] Video URL: ${videoUrl}`);
+      const videoId = this.extractVideoId(videoUrl);
+      logger.info(`Video ID: ${videoId}`);
+      if (!videoId) {
+        throw new Error('Invalid YouTube video URL format.');
+      }
+
+      logger.info('Calling fetchMetadata...');
+      const metadata = await this.fetchMetadata(videoId, videoUrl);
+
+      logger.info('Calling getTranscript...');
+      const transcriptResult = await youtubeTranscriptService.getTranscript(videoUrl, existingYoutubeData);
+      logger.info(`Transcript fetched? ${transcriptResult ? 'Yes' : 'No'}. Length: ${transcriptResult?.transcript?.length || 0}`);
+
+      logger.info('Chapter generation started...');
+      const chapters = this.extractOrGenerateChapters('', transcriptResult.transcriptItems);
+      logger.info(`Chapter generation finished. Count: ${chapters?.length || 0}`);
+
+      logger.info('Translation started...');
+      const translationResult = await youtubeTranslationService.processTranslation({
+        videoId,
+        originalTranscript: transcriptResult.transcript,
+        originalTranscriptItems: transcriptResult.transcriptItems,
+        transcriptLanguageHint: transcriptResult.languageCode || null,
+        existingYoutubeData
+      });
+      logger.info('Translation finished.');
+
+      return {
+        videoId,
+        videoUrl,
+        title: metadata.title,
+        authorName: metadata.authorName,
+        authorUrl: metadata.authorUrl,
+        thumbnailUrl: metadata.thumbnailUrl,
+        duration: metadata.duration,
+        publishedDate: metadata.publishedDate,
+        chapters,
+        originalTranscript: translationResult.originalTranscript,
+        originalTranscriptItems: translationResult.originalTranscriptItems,
+        englishTranscript: translationResult.englishTranscript,
+        englishTranscriptItems: translationResult.englishTranscriptItems,
+        transcriptItems: translationResult.englishTranscriptItems || translationResult.originalTranscriptItems,
+        transcript: translationResult.englishTranscript || translationResult.originalTranscript,
+        transcriptLanguage: translationResult.transcriptLanguage,
+        translationStatus: translationResult.translationStatus || 'completed',
+        translated: translationResult.translated,
+        translatedAt: translationResult.translatedAt,
+        hasTranscript: transcriptResult.hasTranscript,
+        transcriptMessage: transcriptResult.message || null,
+        lastOpened: new Date().toISOString()
+      };
+    } catch (err) {
+      logger.error(`[EXCEPTION IN processVideo] Stack: ${err.stack}`);
+      throw err;
     }
-
-    const metadata = await this.fetchMetadata(videoId, videoUrl);
-    const transcriptResult = await youtubeTranscriptService.getTranscript(videoUrl, existingYoutubeData);
-    const chapters = this.extractOrGenerateChapters('', transcriptResult.transcriptItems);
-
-    const translationResult = await youtubeTranslationService.processTranslation({
-      videoId,
-      originalTranscript: transcriptResult.transcript,
-      originalTranscriptItems: transcriptResult.transcriptItems,
-      transcriptLanguageHint: transcriptResult.languageCode || null,
-      existingYoutubeData
-    });
-
-    return {
-      videoId,
-      videoUrl,
-      title: metadata.title,
-      authorName: metadata.authorName,
-      authorUrl: metadata.authorUrl,
-      thumbnailUrl: metadata.thumbnailUrl,
-      duration: metadata.duration,
-      publishedDate: metadata.publishedDate,
-      chapters,
-      originalTranscript: translationResult.originalTranscript,
-      originalTranscriptItems: translationResult.originalTranscriptItems,
-      englishTranscript: translationResult.englishTranscript,
-      englishTranscriptItems: translationResult.englishTranscriptItems,
-      transcriptItems: translationResult.englishTranscriptItems || translationResult.originalTranscriptItems,
-      transcript: translationResult.englishTranscript || translationResult.originalTranscript,
-      transcriptLanguage: translationResult.transcriptLanguage,
-      translationStatus: translationResult.translationStatus || 'completed',
-      translated: translationResult.translated,
-      translatedAt: translationResult.translatedAt,
-      hasTranscript: transcriptResult.hasTranscript,
-      transcriptMessage: transcriptResult.message || null,
-      lastOpened: new Date().toISOString()
-    };
   }
 }
 

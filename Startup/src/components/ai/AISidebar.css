@@ -1,0 +1,23 @@
+/* AI Sidebar Layout Styles */
+.ai-sidebar-container {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Constrain right panel features to prevent any scrolling or stretching, style as a card */
+.pdf-learning-panel,
+.notes-learning-panel {
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  background-color: rgba(15, 18, 26, 0.7) !important;
+}

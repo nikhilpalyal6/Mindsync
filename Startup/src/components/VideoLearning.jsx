@@ -22,6 +22,7 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
   // Polling ref to prevent duplicate polling and handle cleanups
   const pollingTimerRef = useRef(null);
   const pollCountRef = useRef(0);
+  const isMountedRef = useRef(true);
 
   // Helper to convert HH:MM:SS or MM:SS to seconds
   const parseTimeToSeconds = (timeStr) => {
@@ -41,12 +42,20 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
     }
   }, []);
 
-  // Cleanup poll timer on component unmount
+  // Cleanup poll timer on component unmount and handle isMountedRef
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       stopPolling();
     };
   }, [stopPolling]);
+
+  // Stop polling and reset youtubeData on changes to videoUrl or session?._id
+  useEffect(() => {
+    stopPolling();
+    setYoutubeData(null);
+  }, [videoUrl, session?._id, stopPolling]);
 
   // Extract Video ID when videoUrl changes
   useEffect(() => {
@@ -62,7 +71,9 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
     } catch (e) {
       console.error("Error parsing Video URL", e);
     }
-    setVideoId(id);
+    if (isMountedRef.current) {
+      setVideoId(id);
+    }
   }, [videoUrl]);
 
   // Load YouTube Intelligence and start polling if processing
@@ -74,17 +85,22 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
       const origItems = youtubeData.originalTranscriptItems || youtubeData.transcriptItems || [];
       if (origItems.length > 0) {
         console.log(`[Transcript Loaded from Cache] Reused youtubeData state (${origItems.length} items)`);
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
         return;
       }
     }
 
-    setLoading(true);
+    if (isMountedRef.current) {
+      setLoading(true);
+    }
     console.log('[Transcript Processing Started]');
 
     try {
       const res = await fetchYouTubeData(session._id, videoUrl);
-      // Minimal Fix: apiRequest returns data.data directly, so res is the payload object
+      if (!isMountedRef.current) return;
+
       if (res) {
         const data = res;
 
@@ -93,10 +109,8 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
         console.log('[Frontend Transcript Updated]');
         console.log('[Chapters Updated]');
 
-        const hasItems = (data.originalTranscriptItems && data.originalTranscriptItems.length > 0) || (data.transcriptItems && data.transcriptItems.length > 0);
-
-        // If completed or has items immediately
-        if (data.processingStatus === 'completed' || hasItems) {
+        // If completed or failed immediately
+        if (data.processingStatus === 'completed' || data.processingStatus === 'failed') {
           console.log('[Transcript Processing Completed]');
           setLoading(false);
           return;
@@ -108,26 +122,36 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
           pollCountRef.current = 0;
 
           pollingTimerRef.current = setInterval(async () => {
+            if (!isMountedRef.current) {
+              stopPolling();
+              return;
+            }
+
             pollCountRef.current += 1;
             console.log(`[Polling Attempt ${pollCountRef.current}/30] Checking YouTube status...`);
 
             if (pollCountRef.current > 30) {
               stopPolling();
-              setLoading(false);
+              if (isMountedRef.current) {
+                setLoading(false);
+              }
               return;
             }
 
             try {
               const pollRes = await fetchYouTubeData(session._id, videoUrl);
+              if (!isMountedRef.current) {
+                stopPolling();
+                return;
+              }
+
               if (pollRes) {
                 const pollData = pollRes;
 
                 // Update single source of truth state
                 setYoutubeData(pollData);
 
-                const pollHasItems = (pollData.originalTranscriptItems && pollData.originalTranscriptItems.length > 0) || (pollData.transcriptItems && pollData.transcriptItems.length > 0);
-
-                if (pollData.processingStatus === 'completed' || pollHasItems || pollData.processingStatus === 'failed') {
+                if (pollData.processingStatus === 'completed' || pollData.processingStatus === 'failed') {
                   stopPolling();
                   console.log('[Transcript Processing Completed]');
                   console.log('[Frontend Transcript Updated]');
@@ -138,7 +162,9 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
             } catch (pollErr) {
               console.error('Polling error:', pollErr);
               stopPolling();
-              setLoading(false);
+              if (isMountedRef.current) {
+                setLoading(false);
+              }
             }
           }, 2000);
         } else {
@@ -147,7 +173,9 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
       }
     } catch (err) {
       console.error('[YouTube Intelligence Error] Failed to load video intelligence:', err);
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [videoUrl, session?._id, stopPolling]);
 
@@ -163,13 +191,7 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
   const isEn = youtubeData?.transcriptLanguage === 'en' || !youtubeData?.translated;
   const engItems = youtubeData?.englishTranscriptItems || (isEn ? origItems : []);
 
-  const chapters = (youtubeData?.chapters && youtubeData.chapters.length > 0)
-    ? youtubeData.chapters
-    : (origItems.length > 0 ? [
-        { time: '00:00', title: 'Introduction' },
-        { time: '02:15', title: 'Main Topic' },
-        { time: '05:30', title: 'Key Concepts' }
-      ] : []);
+  const chapters = youtubeData?.chapters || [];
 
   // Chapter Click -> Seek Video Player
   const handleChapterClick = (timeStr) => {

@@ -5,10 +5,10 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 
 class AIController {
   getConversations = asyncHandler(async (req, res) => {
-    const { studySessionId } = req.query;
+    const { studySessionId, resourceId } = req.query;
     const userId = req.user._id;
 
-    const conversations = await aiService.getConversations(userId, studySessionId);
+    const conversations = await aiService.getConversations(userId, studySessionId, resourceId);
 
     res.status(HTTP_STATUS.OK).json(
       ApiResponse.success(conversations, 'AI conversations retrieved successfully')
@@ -16,11 +16,12 @@ class AIController {
   });
 
   createConversation = asyncHandler(async (req, res) => {
-    const { studySessionId, title } = req.body;
+    const { studySessionId, resourceId, title } = req.body;
     const userId = req.user._id;
 
     const conversation = await aiService.createConversation(userId, {
       studySessionId,
+      resourceId,
       title,
     });
 

@@ -239,3 +239,61 @@
 @keyframes pdf-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Prevent any double/global scrollbars on the document body or main page structure */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.study-mode-page {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.study-main {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.study-header {
+  padding: 8px 16px !important;
+}
+
+.study-workspace-main {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important; /* Disables outer scrolling */
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  padding: 12px 16px 16px 16px !important;
+  gap: 12px !important;
+}
+
+.study-right-panel {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important; /* Disables right panel outer scrolling */
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  padding: 12px 16px 16px 16px !important;
+  gap: 12px !important;
+}
+
+/* Ensure the workspace content panels wrapper constraints height and has tight spacing */
+.study-workspace-panels-wrapper {
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  gap: 12px !important;
+}

@@ -25,6 +25,18 @@ export const ChatLayout = React.memo(({ session }) => {
   const [showManager, setShowManager] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Derive active resource identifier
+  const activeResourceType = (session?.metadata?.activeResourceType || session?.metadata?.lastTab || 'pdf').toLowerCase();
+  let resourceId = '';
+
+  if (activeResourceType === 'pdf' && session?.metadata?.pdf) {
+    resourceId = session.metadata.pdf.pdfFilename || session.metadata.pdf.filename || '';
+  } else if (activeResourceType === 'youtube' && session?.metadata?.youtube) {
+    resourceId = session.metadata.youtube.videoUrl || '';
+  } else if (activeResourceType === 'notes') {
+    resourceId = session?.metadata?.notes?.noteId || 'default_notes_id';
+  }
+
   // Auto-scroll to bottom of messages
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,28 +52,32 @@ export const ChatLayout = React.memo(({ session }) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getAIConversations(session._id);
+      const res = await getAIConversations(session._id, resourceId);
       const convList = res || [];
       setConversations(convList);
 
       if (convList.length > 0) {
-        // Keep active or select first thread
-        const current = convList.find(c => c._id === activeConversation?._id) || convList[0];
+        // Select first thread for this resource
+        const current = convList[0];
         setActiveConversation(current);
-        console.log(`[Existing Conversation Loaded] Restored conversation ${current._id} for workshop ${session._id}`);
+        console.log(`[Existing Conversation Loaded] Restored conversation ${current._id} for resource ${resourceId}`);
       } else {
-        // Create initial primary conversation automatically if none exists for this workshop
-        const newConv = await createAIConversation({ studySessionId: session._id, title: `${session.title || 'Study Workshop'} Chat` });
+        // Create initial primary conversation automatically if none exists for this resource
+        const newConv = await createAIConversation({
+          studySessionId: session._id,
+          resourceId,
+          title: resourceId ? `${activeResourceType.toUpperCase()} Chat` : 'General Discussion'
+        });
         setConversations([newConv]);
         setActiveConversation(newConv);
-        console.log(`[Workshop Conversation Restored] Created primary conversation ${newConv._id} for workshop ${session._id}`);
+        console.log(`[Resource Conversation Created] Created conversation ${newConv._id} for resource ${resourceId}`);
       }
     } catch (err) {
       setError(err.message || 'Failed to load conversations');
     } finally {
       setLoading(false);
     }
-  }, [session?._id]);
+  }, [session?._id, resourceId, activeResourceType]);
 
   useEffect(() => {
     fetchConversations();
@@ -87,7 +103,7 @@ export const ChatLayout = React.memo(({ session }) => {
     if (!session?._id) return;
     try {
       const title = `Chat - ${conversations.length + 1}`;
-      const res = await createAIConversation({ studySessionId: session._id, title });
+      const res = await createAIConversation({ studySessionId: session._id, resourceId, title });
       const newConv = res;
       setConversations(prev => [newConv, ...prev]);
       setActiveConversation(newConv);

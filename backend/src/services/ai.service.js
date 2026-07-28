@@ -6,15 +6,26 @@ import aiProviderService from './ai/aiProvider.service.js';
 import contextBuilderService from './context/contextBuilder.service.js';
 
 class AIService {
-  async getConversations(userId, studySessionId) {
+  async getConversations(userId, studySessionId, resourceId) {
     if (!studySessionId) {
       throw ApiError.badRequest('studySessionId query parameter is required');
     }
 
-    let conversations = await AIConversation.find({
+    const query = {
       user: userId,
       studySession: studySessionId,
-    })
+    };
+
+    if (resourceId) {
+      query.resourceId = resourceId;
+    } else {
+      query.$or = [
+        { resourceId: { $exists: false } },
+        { resourceId: '' }
+      ];
+    }
+
+    let conversations = await AIConversation.find(query)
       .sort({ lastMessageAt: -1 })
       .lean();
 
@@ -23,7 +34,8 @@ class AIService {
       const defaultConv = await AIConversation.create({
         user: userId,
         studySession: studySessionId,
-        title: 'General Discussion',
+        resourceId: resourceId || '',
+        title: resourceId ? 'Resource Chat' : 'General Discussion',
       });
       conversations = [defaultConv.toObject()];
     }
@@ -31,7 +43,7 @@ class AIService {
     return conversations;
   }
 
-  async createConversation(userId, { studySessionId, title }) {
+  async createConversation(userId, { studySessionId, resourceId, title }) {
     if (!studySessionId) {
       throw ApiError.badRequest('studySessionId is required to create a conversation');
     }
@@ -39,6 +51,7 @@ class AIService {
     const conversation = await AIConversation.create({
       user: userId,
       studySession: studySessionId,
+      resourceId: resourceId || '',
       title: title?.trim() || 'New Chat',
     });
 

@@ -14,6 +14,11 @@ const aiConversationSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    resourceId: {
+      type: String,
+      default: '',
+      index: true,
+    },
     title: {
       type: String,
       default: 'New Chat',
@@ -30,7 +35,8 @@ const aiConversationSchema = new mongoose.Schema(
   }
 );
 
-aiConversationSchema.index({ studySession: 1, lastMessageAt: -1 });
+// Compound index including resourceId for fast loading
+aiConversationSchema.index({ studySession: 1, resourceId: 1, lastMessageAt: -1 });
 
 const AIConversation = mongoose.model('AIConversation', aiConversationSchema);
 export default AIConversation;

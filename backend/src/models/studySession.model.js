@@ -51,6 +51,18 @@ const studySessionSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+    resources: {
+      type: Array,
+      default: []
+    },
+    resourceCount: {
+      type: Number,
+      default: 0
+    },
+    videoCount: {
+      type: Number,
+      default: 0
+    },
     metadata: {
       type: mongoose.Schema.Types.Mixed,
       default: {}

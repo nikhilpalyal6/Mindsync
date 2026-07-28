@@ -38,13 +38,7 @@ class YouTubeTranscriptService {
 
     if (!videoId) {
       logger.warn(`[YouTube Transcript] Invalid video URL: ${videoUrl}`);
-      return {
-        videoId: null,
-        hasTranscript: false,
-        transcriptItems: [],
-        transcript: '',
-        message: 'Invalid YouTube URL provided.'
-      };
+      throw new Error('Invalid YouTube video URL format.');
     }
 
     // 1. Check Cache: Return cached transcript if already fetched
@@ -59,8 +53,8 @@ class YouTubeTranscriptService {
       };
     }
 
-    logger.info(`[Transcript Fetch Started] Video ID: ${videoId}`);
-    logger.info(`[DEBUG] Transcript request started for videoId: ${videoId}`);
+    // STEP 2: Transcript request started
+    logger.info(`[STEP 2] Transcript request started for videoId: ${videoId}`);
 
     // 2. Fetch Transcript using youtube-transcript library with timedtext fallback
     try {
@@ -90,8 +84,8 @@ class YouTubeTranscriptService {
           .map(item => `[${item.time}] ${item.text}`)
           .join('\n');
 
-        logger.info(`[Transcript Fetched] Extracted ${transcriptItems.length} transcript segments`);
-        logger.info(`[DEBUG] Transcript length: ${transcriptString.length} characters`);
+        // STEP 3: Transcript received
+        logger.info(`[STEP 3] Transcript received. Length: ${transcriptString.length}, Language: en`);
 
         return {
           videoId,
@@ -121,7 +115,15 @@ class YouTubeTranscriptService {
           const track = captionTracks.find(t => t.languageCode === 'en' || t.languageCode?.startsWith('en')) || captionTracks[0];
 
           if (track && track.baseUrl) {
-            const captionRes = await fetch(track.baseUrl);
+            // Unescape \u0026 to & for the baseUrl query params
+            const cleanUrl = track.baseUrl
+              .replace(/\\u0026/g, '&')
+              .replace(/\\u002F/g, '/')
+              .replace(/\\u003d/g, '=')
+              .replace(/&amp;/g, '&');
+            logger.info(`[DEBUG] Fetching captions from timedtext clean URL: ${cleanUrl}`);
+
+            const captionRes = await fetch(cleanUrl);
             if (captionRes.ok) {
               const xml = await captionRes.text();
               const textMatches = [...xml.matchAll(/<text start="([\d\.]+)" dur="([\d\.]+)".*?>(.*?)<\/text>/g)];
@@ -146,8 +148,8 @@ class YouTubeTranscriptService {
                   .map(item => `[${item.time}] ${item.text}`)
                   .join('\n');
 
-                logger.info(`[Transcript Fetched] Timedtext fallback extracted ${transcriptItems.length} transcript segments`);
-                logger.info(`[DEBUG] Transcript length (fallback): ${transcriptString.length} characters`);
+                // STEP 3: Transcript received
+                logger.info(`[STEP 3] Transcript received. Length: ${transcriptString.length}, Language: ${track.languageCode || 'unknown'}`);
 
                 return {
                   videoId,
@@ -165,16 +167,9 @@ class YouTubeTranscriptService {
       logger.error(`[DEBUG] Timedtext fallback error for ${videoId}: ${fallbackErr.message}. Stack: ${fallbackErr.stack}`);
     }
 
-    // 4. Friendly Status for Unavailable Captions
-    logger.info(`[Transcript Unavailable] No caption track found for ID: ${videoId}`);
-    return {
-      videoId,
-      hasTranscript: false,
-      transcriptItems: [],
-      transcript: '',
-      message: 'I can see the video, but no transcript is available yet.',
-      cached: false
-    };
+    // 4. Throw error for unavailable/failed captions instead of returning empty lists silently
+    logger.warn(`[Transcript Unavailable] No caption track found for ID: ${videoId}`);
+    throw new Error('No transcript captions could be extracted for this YouTube video. Captions may be disabled, unavailable, or restricted.');
   }
 }
 

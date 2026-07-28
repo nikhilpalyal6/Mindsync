@@ -192,6 +192,7 @@ export default function StudyMode() {
 
   // Active Workspace View Tab (PDF, YouTube, Notes resource launcher)
   const [activeTab, setActiveTab] = useState('pdf')
+  const [showAddMenu, setShowAddMenu] = useState(false)
 
   // Modals & Upload logic
   const [showPasteModal, setShowPasteModal] = useState(false)
@@ -212,16 +213,29 @@ export default function StudyMode() {
   const fileInputRef = useRef(null)
   const profileDropdownRef = useRef(null)
   const sidebarRef = useRef(null)
+  const isMountedRef = useRef(true)
+
+  // Handle component mounting lifecycle
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Load Sessions and Recent Activity
   const fetchSessionsAndActivities = useCallback(async (selectLastOpened = false) => {
-    setLoading(true)
-    setError(null)
+    if (isMountedRef.current) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const [resSessions, resActivities] = await Promise.allSettled([
         getStudySessions(),
         getStudyActivities()
       ])
+
+      if (!isMountedRef.current) return;
 
       const fetchedSessions = resSessions.status === 'fulfilled' ? (resSessions.value || []) : []
       setSessions(fetchedSessions)
@@ -231,9 +245,13 @@ export default function StudyMode() {
       }
 
     } catch (err) {
-      setError(err.message || 'Failed to load study sessions.')
+      if (isMountedRef.current) {
+        setError(err.message || 'Failed to load study sessions.')
+      }
     } finally {
-      setLoading(false)
+      if (isMountedRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -440,6 +458,69 @@ export default function StudyMode() {
     }
   }
 
+  const handleSelectResource = async (resource) => {
+    try {
+      const updatedMeta = {
+        ...(activeSession.metadata || {}),
+        activeResourceType: resource.type,
+        lastTab: resource.type,
+        lastOpened: new Date().toISOString()
+      }
+
+      if (resource.type === 'pdf') {
+        updatedMeta.pdf = resource.data
+        setActiveTab('pdf')
+      } else if (resource.type === 'youtube') {
+        updatedMeta.youtube = resource.data
+        setVideoUrl(resource.url)
+        setActiveTab('youtube')
+      } else if (resource.type === 'notes') {
+        updatedMeta.notes = resource.data
+        setActiveTab('notes')
+      }
+
+      setActiveSession(prev => ({
+        ...prev,
+        metadata: updatedMeta
+      }))
+
+      const res = await updateStudySession(activeSession._id, { metadata: updatedMeta })
+      setActiveSession(res)
+      setSessions(prev => prev.map(s => s._id === res._id ? res : s))
+    } catch (err) {
+      console.error('Failed to switch resource:', err)
+    }
+  }
+
+  const handleAddNotes = async () => {
+    try {
+      const noteTitle = window.prompt("Enter Note Title:", "My Revision Notes") || "My Notes"
+      const noteId = `note_${Date.now()}`
+      
+      const updatedMeta = {
+        ...(activeSession.metadata || {}),
+        notes: {
+          noteId,
+          title: noteTitle,
+          content: '',
+          lastOpened: new Date().toISOString()
+        },
+        activeResourceType: 'notes',
+        lastTab: 'notes'
+      }
+
+      const res = await updateStudySession(activeSession._id, {
+        metadata: updatedMeta
+      })
+
+      setActiveSession(res)
+      setSessions(prev => prev.map(s => s._id === res._id ? res : s))
+      setActiveTab('notes')
+    } catch (err) {
+      console.error('Failed to create new note resource:', err)
+    }
+  }
+
   // PDF File Upload handler
   const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
   const handleUploadClick = () => fileInputRef.current?.click()
@@ -459,26 +540,60 @@ export default function StudyMode() {
     setUploadError('')
 
     try {
-      const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace'
-      const res = await createStudySession({ 
-        title: sessionTitle, 
-        description: `PDF Document: ${file.name}`
-      })
-      const newSession = res
-      setSessions(prev => [newSession, ...prev])
-      selectSession(newSession)
+      if (activeSession) {
+        const updatedMeta = {
+          ...(activeSession.metadata || {}),
+          pdf: {
+            filename: file.name,
+            pdfFilename: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            fileData: fileUrl, // placeholder local DataUrl, PDFWorkspace will extract & save
+            lastOpened: new Date().toISOString()
+          },
+          activeResourceType: 'pdf',
+          lastTab: 'pdf'
+        };
+
+        const res = await updateStudySession(activeSession._id, {
+          metadata: updatedMeta
+        });
+        setActiveSession(res);
+        setSessions(prev => prev.map(s => s._id === res._id ? res : s));
+        setActiveTab('pdf');
+      } else {
+        const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace'
+        const res = await createStudySession({ 
+          title: sessionTitle, 
+          description: `PDF Document: ${file.name}`,
+          metadata: {
+            pdf: {
+              filename: file.name,
+              pdfFilename: file.name,
+              fileSize: file.size,
+              fileType: file.type,
+              fileData: fileUrl,
+              lastOpened: new Date().toISOString()
+            }
+          }
+        })
+        const newSession = res
+        setSessions(prev => [newSession, ...prev])
+        selectSession(newSession)
+        
+        navigate('/study/viewer', {
+          state: {
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            fileUrl
+          }
+        })
+      }
     } catch (err) {
       console.error('Failed to auto-create workspace for PDF:', err)
     }
 
-    navigate('/study/viewer', {
-      state: {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        fileUrl
-      }
-    })
     e.target.value = ''
   }
 
@@ -497,15 +612,11 @@ export default function StudyMode() {
               activeResourceType: 'youtube',
               lastTab: 'youtube'
             }
-            await updateStudySession(activeSession._id, {
-              metadata: updatedMeta,
-              youtubeCount: Math.max((activeSession.youtubeCount || 0), 1)
+            const res = await updateStudySession(activeSession._id, {
+              metadata: updatedMeta
             })
-            setActiveSession(prev => ({
-              ...prev,
-              metadata: updatedMeta,
-              youtubeCount: Math.max((prev?.youtubeCount || 0), 1)
-            }))
+            setActiveSession(res)
+            setSessions(prev => prev.map(s => s._id === res._id ? res : s))
             setActiveTab('youtube')
           } catch (err) {
             console.error('Failed to save YouTube metadata to MongoDB:', err)
@@ -517,19 +628,45 @@ export default function StudyMode() {
         return
       }
 
-      try {
-        const sessionTitle = pasteUrl ? 'Web Link Study Workspace' : 'Lecture Notes Workspace'
-        const description = pasteUrl ? `Web resources: ${pasteUrl}` : 'Pasted text content.'
-        const res = await createStudySession({
-          title: sessionTitle,
-          description,
-          metadata: { pasteUrl, pasteText: pasteText.substring(0, 100) }
-        })
-        const newSession = res
-        setSessions(prev => [newSession, ...prev])
-        selectSession(newSession)
-      } catch (err) {
-        console.error('Failed to create session for pasted content:', err)
+      if (activeSession) {
+        try {
+          const noteTitle = pasteUrl ? 'Web Link Notes' : 'Lecture Notes';
+          const updatedMeta = {
+            ...(activeSession.metadata || {}),
+            notes: {
+              noteId: `note_${Date.now()}`,
+              title: noteTitle,
+              content: pasteText || pasteUrl || '',
+              lastOpened: new Date().toISOString()
+            },
+            activeResourceType: 'notes',
+            lastTab: 'notes'
+          }
+
+          const res = await updateStudySession(activeSession._id, {
+            metadata: updatedMeta
+          })
+          setActiveSession(res)
+          setSessions(prev => prev.map(s => s._id === res._id ? res : s))
+          setActiveTab('notes')
+        } catch (err) {
+          console.error('Failed to save note resource:', err)
+        }
+      } else {
+        try {
+          const sessionTitle = pasteUrl ? 'Web Link Study Workspace' : 'Lecture Notes Workspace'
+          const description = pasteUrl ? `Web resources: ${pasteUrl}` : 'Pasted text content.'
+          const res = await createStudySession({
+            title: sessionTitle,
+            description,
+            metadata: { pasteUrl, pasteText: pasteText.substring(0, 100) }
+          })
+          const newSession = res
+          setSessions(prev => [newSession, ...prev])
+          selectSession(newSession)
+        } catch (err) {
+          console.error('Failed to create session for pasted content:', err)
+        }
       }
 
       setPasteUrl('')
@@ -931,45 +1068,343 @@ export default function StudyMode() {
 
         {activeSession ? (
           /* Active Session Workspace */
-          <div className="study-workspace-container">
-            <div className="study-workspace-main">
-              {/* Session Control Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="study-workspace-container" style={{ display: 'flex', width: '100%', gap: '16px', flex: 1, minHeight: 0 }}>
+            {/* Resources Navigation Sidebar */}
+            <aside className="resources-sidebar" style={{
+              width: '240px',
+              backgroundColor: 'rgba(15, 18, 26, 0.5)',
+              borderRight: '1px solid rgba(255, 255, 255, 0.06)',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '16px',
+              gap: '16px',
+              flexShrink: 0
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: 0 }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: 'rgba(255, 255, 255, 0.4)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
+                  Resources
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', flex: 1, paddingRight: '4px' }}>
+                  {/* PDFs Group */}
+                  <div>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      📄 PDFs
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {(activeSession.resources || []).filter(r => r.type === 'pdf').map(res => {
+                        const isActive = activeTab === 'pdf' && (activeSession.metadata?.pdf?.pdfFilename === res.url || activeSession.metadata?.pdf?.filename === res.url);
+                        return (
+                          <button
+                            key={res.url}
+                            onClick={() => handleSelectResource(res)}
+                            style={{
+                              background: isActive ? 'rgba(102, 184, 255, 0.12)' : 'none',
+                              border: 'none',
+                              color: isActive ? '#66b8ff' : 'rgba(255, 255, 255, 0.65)',
+                              textAlign: 'left',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              fontWeight: isActive ? 600 : 500,
+                              cursor: 'pointer',
+                              width: '100%',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '2px'
+                            }}
+                            onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#fff'; } }}
+                            onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; } }}
+                          >
+                            <span style={{ fontSize: '0.9rem' }}>📄</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{res.title}</span>
+                          </button>
+                        );
+                      })}
+                      {(activeSession.resources || []).filter(r => r.type === 'pdf').length === 0 && (
+                        <span style={{ fontSize: '0.775rem', color: 'rgba(255, 255, 255, 0.3)', fontStyle: 'italic', paddingLeft: '8px' }}>No PDFs</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Videos Group */}
+                  <div>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      ▶ Videos
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {(activeSession.resources || []).filter(r => r.type === 'youtube').map(res => {
+                        const isActive = activeTab === 'youtube' && videoUrl === res.url;
+                        return (
+                          <button
+                            key={res.url}
+                            onClick={() => handleSelectResource(res)}
+                            style={{
+                              background: isActive ? 'rgba(102, 184, 255, 0.12)' : 'none',
+                              border: 'none',
+                              color: isActive ? '#66b8ff' : 'rgba(255, 255, 255, 0.65)',
+                              textAlign: 'left',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              fontWeight: isActive ? 600 : 500,
+                              cursor: 'pointer',
+                              width: '100%',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '2px'
+                            }}
+                            onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#fff'; } }}
+                            onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; } }}
+                          >
+                            <span style={{ fontSize: '0.9rem' }}>🎥</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{res.title}</span>
+                          </button>
+                        );
+                      })}
+                      {(activeSession.resources || []).filter(r => r.type === 'youtube').length === 0 && (
+                        <span style={{ fontSize: '0.775rem', color: 'rgba(255, 255, 255, 0.3)', fontStyle: 'italic', paddingLeft: '8px' }}>No Videos</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Notes Group */}
+                  <div>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      📝 Notes
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {(activeSession.resources || []).filter(r => r.type === 'notes').map(res => {
+                        const isActive = activeTab === 'notes' && activeSession.metadata?.notes?.noteId === res.url;
+                        return (
+                          <button
+                            key={res.url}
+                            onClick={() => handleSelectResource(res)}
+                            style={{
+                              background: isActive ? 'rgba(102, 184, 255, 0.12)' : 'none',
+                              border: 'none',
+                              color: isActive ? '#66b8ff' : 'rgba(255, 255, 255, 0.65)',
+                              textAlign: 'left',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              fontWeight: isActive ? 600 : 500,
+                              cursor: 'pointer',
+                              width: '100%',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '2px'
+                            }}
+                            onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#fff'; } }}
+                            onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; } }}
+                          >
+                            <span style={{ fontSize: '0.9rem' }}>📝</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{res.title}</span>
+                          </button>
+                        );
+                      })}
+                      {(activeSession.resources || []).filter(r => r.type === 'notes').length === 0 && (
+                        <span style={{ fontSize: '0.775rem', color: 'rgba(255, 255, 255, 0.3)', fontStyle: 'italic', paddingLeft: '8px' }}>No Notes</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Add Resource Button & Dropdown Options */}
+              <div style={{ marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' }}>
+                <button
+                  onClick={() => setShowAddMenu(!showAddMenu)}
+                  style={{
+                    backgroundColor: 'rgba(167, 139, 250, 0.12)',
+                    border: '1px solid rgba(167, 139, 250, 0.3)',
+                    borderRadius: '6px',
+                    color: '#a78bfa',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    width: '100%'
+                  }}
+                >
+                  + Add Resource
+                </button>
+                {showAddMenu && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '44px',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: 'rgba(20, 25, 35, 0.95)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '6px',
+                    padding: '4px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    zIndex: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px'
+                  }}>
+                    <button
+                      onClick={() => {
+                        handleUploadClick();
+                        setShowAddMenu(false);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.8)',
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        width: '100%'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.04)'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      📄 Add PDF
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowPasteModal(true);
+                        setShowAddMenu(false);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.8)',
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        width: '100%'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.04)'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      ▶ Add YouTube
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleAddNotes();
+                        setShowAddMenu(false);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.8)',
+                        padding: '6px 12px',
+                        fontSize: '0.75rem',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        width: '100%'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.04)'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      📝 Add Notes
+                    </button>
+                  </div>
+                )}
+              </div>
+            </aside>
+
+            <div className="study-workspace-main" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+              {/* Flat Notion-style Workspace Header */}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                borderBottom: '1px solid rgba(255,255,255,0.05)', 
+                paddingBottom: '10px',
+                marginBottom: '4px',
+                width: '100%',
+                flexShrink: 0
+              }}>
+                {/* Left Section: Back button and Workspace Title */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <button 
                     onClick={() => setActiveSession(null)}
-                    style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', padding: '4px 10px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer' }}
+                    style={{ 
+                      fontSize: '0.8rem', 
+                      color: 'rgba(255,255,255,0.6)', 
+                      padding: '5px 10px', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      backgroundColor: 'rgba(255,255,255,0.02)',
+                      fontWeight: 500
+                    }}
                   >
-                    ← All Workspaces
+                    ← Back
                   </button>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', margin: 0 }}>
-                    {activeSession.title}
-                  </h2>
-                  <button 
-                    onClick={(e) => handleTogglePinSession(activeSession, e)}
-                    style={{ fontSize: '1.1rem', cursor: 'pointer', background: 'none', border: 'none' }}
-                  >
-                    {activeSession.pinned ? '📌' : '⭐'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+                      {activeSession.title}
+                    </h2>
+                    <button 
+                      onClick={(e) => handleTogglePinSession(activeSession, e)}
+                      style={{ fontSize: '1rem', cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
+                    >
+                      {activeSession.pinned ? '📌' : '⭐'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Workspace Content Tabs */}
+                {/* Right Section: Workspace Resource Tabs */}
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button 
                     onClick={() => handleTabChange('pdf')}
                     className={`workspace-tab-btn ${activeTab === 'pdf' ? 'active' : ''}`}
+                    style={{ padding: '6px 12px', fontSize: '0.775rem' }}
                   >
                     📁 PDF
                   </button>
                   <button 
                     onClick={() => handleTabChange('youtube')}
                     className={`workspace-tab-btn ${activeTab === 'youtube' ? 'active' : ''}`}
+                    style={{ padding: '6px 12px', fontSize: '0.775rem' }}
                   >
                     🎥 YouTube
                   </button>
                   <button 
                     onClick={() => handleTabChange('notes')}
                     className={`workspace-tab-btn ${activeTab === 'notes' ? 'active' : ''}`}
+                    style={{ padding: '6px 12px', fontSize: '0.775rem' }}
                   >
                     📝 Notes
                   </button>
@@ -977,7 +1412,7 @@ export default function StudyMode() {
               </div>
 
               {/* Workspace Content Panels */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+              <div className="study-workspace-panels-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, minHeight: 0 }}>
                 {activeTab === 'pdf' && (
                   <PDFWorkspace session={activeSession} />
                 )}
