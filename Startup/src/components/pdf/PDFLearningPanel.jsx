@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { MessageSquare, FileText, Layers, HelpCircle, TrendingUp, Sparkles } from 'lucide-react';
 import AISidebar from '../ai/AISidebar';
 import SummaryPanel from '../summary/SummaryPanel';
+import FlashcardPanel from '../summary/FlashcardPanel';
 
 export const PDFLearningPanel = React.memo(({ session }) => {
   const [activeFeature, setActiveFeature] = useState('ask-pdf');
+  const resourceId = session?.metadata?.pdf?.pdfFilename || session?.metadata?.pdf?.filename || '';
 
   return (
     <div className="pdf-learning-panel" style={{
@@ -41,7 +43,7 @@ export const PDFLearningPanel = React.memo(({ session }) => {
           padding: '2px 8px',
           borderRadius: '4px'
         }}>
-          Ask PDF Active
+          {activeFeature === 'ask-pdf' ? 'Ask PDF Active' : `${activeFeature} active`}
         </span>
       </div>
 
@@ -100,13 +102,13 @@ export const PDFLearningPanel = React.memo(({ session }) => {
         <button
           onClick={() => setActiveFeature('flashcards')}
           style={{
-            background: activeFeature === 'flashcards' ? 'rgba(255, 255, 255, 0.1)' : 'none',
-            border: '1px solid transparent',
-            color: 'rgba(255, 255, 255, 0.4)',
+            background: activeFeature === 'flashcards' ? 'rgba(102, 184, 255, 0.15)' : 'none',
+            border: activeFeature === 'flashcards' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
+            color: activeFeature === 'flashcards' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
-            fontWeight: 500,
+            fontWeight: 600,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -146,6 +148,8 @@ export const PDFLearningPanel = React.memo(({ session }) => {
           <AISidebar session={session} />
         ) : activeFeature === 'summary' ? (
           <SummaryPanel session={session} resourceType="pdf" />
+        ) : activeFeature === 'flashcards' ? (
+          <FlashcardPanel session={session} resourceId={resourceId} resourceType="pdf" />
         ) : (
           <div style={{
             flex: 1,

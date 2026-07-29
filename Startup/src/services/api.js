@@ -431,6 +431,18 @@ export const fetchYouTubeData = async (sessionId, videoUrl) => {
   return await api.post(`/study/${sessionId}/youtube/fetch`, { videoUrl });
 };
 
+export const generateFlashcards = async (data = {}) => {
+  return await api.post('/ai/flashcards/generate', data);
+};
+
+export const getFlashcards = async (studySessionId, resourceId) => {
+  return await api.get(`/ai/flashcards/${encodeURIComponent(resourceId)}?studySessionId=${studySessionId}`);
+};
+
+export const updateFlashcardState = async (resourceId, cardId, data = {}) => {
+  return await api.patch(`/ai/flashcards/${encodeURIComponent(resourceId)}/cards/${encodeURIComponent(cardId)}`, data);
+};
+
 // General API methods
 export const api = {
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),

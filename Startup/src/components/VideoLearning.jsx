@@ -2,11 +2,26 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import './videoLearning.css';
 import AISidebar from './ai/AISidebar';
 import SummaryPanel from './summary/SummaryPanel';
+import FlashcardPanel from './summary/FlashcardPanel';
 import { fetchYouTubeData } from '../services/api';
 
-export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }) {
+export default function VideoLearning({ videoUrl, resourceId, session, onBack, onSwitchTab, onSessionUpdate }) {
+  // Helper to find the saved resource inside session.resources using unique resourceId
+  const getSavedResource = useCallback(() => {
+    if (!session?.resources) return null;
+    if (resourceId) {
+      return session.resources.find(r => r._id === resourceId && r.type === 'youtube');
+    }
+    // Fallback if resourceId is not yet populated
+    return session.resources.find(r => r.type === 'youtube' && r.url === videoUrl);
+  }, [session?.resources, resourceId, videoUrl]);
+
   // 1. Single Source of Truth for YouTube Intelligence
   const [youtubeData, setYoutubeData] = useState(() => {
+    const savedRes = getSavedResource();
+    if (savedRes) {
+      return savedRes.data;
+    }
     return session?.metadata?.youtube && session.metadata.youtube.videoUrl === videoUrl
       ? session.metadata.youtube
       : null;
@@ -51,11 +66,41 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
     };
   }, [stopPolling]);
 
-  // Stop polling and reset youtubeData on changes to videoUrl or session?._id
+  // Propagate complete updated resource object back to parent (StudyMode)
+  const propagateResourceUpdate = useCallback((newYoutubeData) => {
+    if (!onSessionUpdate || !session) return;
+    const existingResource = getSavedResource();
+    if (!existingResource) return;
+
+    // Propagate the complete updated resource object back to the parent,
+    // including transcriptItems, originalTranscriptItems, englishTranscriptItems,
+    // chapters, processingStatus, summary, AI-generated data, and all resource metadata.
+    const updatedResource = {
+      ...existingResource,
+      title: newYoutubeData.title || existingResource.title || 'YouTube Video',
+      data: {
+        ...(existingResource.data || {}),
+        ...newYoutubeData
+      },
+      updatedAt: new Date()
+    };
+
+    onSessionUpdate(updatedResource);
+  }, [onSessionUpdate, session, getSavedResource]);
+
+  // Stop polling and reset/load youtubeData on changes to resourceId, videoUrl, or session?._id
   useEffect(() => {
     stopPolling();
-    setYoutubeData(null);
-  }, [videoUrl, session?._id, stopPolling]);
+    const savedRes = getSavedResource();
+    let savedData = null;
+    if (savedRes) {
+      savedData = savedRes.data;
+    }
+    if (!savedData && session?.metadata?.youtube && session.metadata.youtube.videoUrl === videoUrl) {
+      savedData = session.metadata.youtube;
+    }
+    setYoutubeData(savedData);
+  }, [resourceId, videoUrl, session?._id, session?.metadata?.youtube, stopPolling, getSavedResource]);
 
   // Extract Video ID when videoUrl changes
   useEffect(() => {
@@ -80,16 +125,18 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
   const loadVideoIntelligence = useCallback(async () => {
     if (!videoUrl || !session?._id) return;
 
-    // Check if initial cached state already contains valid transcript items
-    if (youtubeData && youtubeData.videoUrl === videoUrl) {
-      const origItems = youtubeData.originalTranscriptItems || youtubeData.transcriptItems || [];
-      if (origItems.length > 0) {
-        console.log(`[Transcript Loaded from Cache] Reused youtubeData state (${origItems.length} items)`);
-        if (isMountedRef.current) {
-          setLoading(false);
-        }
-        return;
+    // Check if initial cached state already contains valid transcript items or chapters or is completed
+    const origItems = youtubeData?.originalTranscriptItems || youtubeData?.transcriptItems || [];
+    const hasChapters = youtubeData?.chapters && youtubeData.chapters.length > 0;
+    if (
+      youtubeData &&
+      (youtubeData.processingStatus === 'completed' || origItems.length > 0 || hasChapters)
+    ) {
+      console.log(`[Transcript Loaded from Cache] Reused youtubeData state (${origItems.length} items, completed/cached)`);
+      if (isMountedRef.current) {
+        setLoading(false);
       }
+      return;
     }
 
     if (isMountedRef.current) {
@@ -108,6 +155,9 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
         setYoutubeData(data);
         console.log('[Frontend Transcript Updated]');
         console.log('[Chapters Updated]');
+
+        // Immediately update parent StudyMode state
+        propagateResourceUpdate(data);
 
         // If completed or failed immediately
         if (data.processingStatus === 'completed' || data.processingStatus === 'failed') {
@@ -151,6 +201,9 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
                 // Update single source of truth state
                 setYoutubeData(pollData);
 
+                // Immediately update parent StudyMode state
+                propagateResourceUpdate(pollData);
+
                 if (pollData.processingStatus === 'completed' || pollData.processingStatus === 'failed') {
                   stopPolling();
                   console.log('[Transcript Processing Completed]');
@@ -177,7 +230,7 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
         setLoading(false);
       }
     }
-  }, [videoUrl, session?._id, stopPolling]);
+  }, [videoUrl, session?._id, stopPolling, youtubeData, propagateResourceUpdate]);
 
   useEffect(() => {
     loadVideoIntelligence();
@@ -449,6 +502,9 @@ export default function VideoLearning({ videoUrl, session, onBack, onSwitchTab }
             )}
             {activeToolTab === 'summary' && (
               <SummaryPanel session={session} resourceType="youtube" />
+            )}
+            {activeToolTab === 'flashcards' && (
+              <FlashcardPanel session={session} resourceId={videoUrl || session?.metadata?.youtube?.videoUrl || ''} resourceType="youtube" />
             )}
           </div>
         </div>

@@ -492,6 +492,27 @@ export default function StudyMode() {
     }
   }
 
+  const handleSessionResourceUpdate = (updatedResource) => {
+    if (!activeSession || !updatedResource?._id) return;
+
+    // Immutably replace only the modified resource inside session.resources using resourceId (_id)
+    const updatedResources = (activeSession.resources || []).map(r =>
+      r._id === updatedResource._id ? updatedResource : r
+    );
+
+    const updatedSession = {
+      ...activeSession,
+      resources: updatedResources,
+      metadata: {
+        ...(activeSession.metadata || {}),
+        youtube: updatedResource.type === 'youtube' ? updatedResource.data : activeSession.metadata?.youtube
+      }
+    };
+
+    setActiveSession(updatedSession);
+    setSessions(prev => prev.map(s => s._id === updatedSession._id ? updatedSession : s));
+  };
+
   const handleAddNotes = async () => {
     try {
       const noteTitle = window.prompt("Enter Note Title:", "My Revision Notes") || "My Notes"
@@ -799,7 +820,18 @@ export default function StudyMode() {
   }
 
   if (videoUrl && activeTab === 'youtube') {
-    return <VideoLearning videoUrl={videoUrl} session={activeSession} onBack={handleBackFromVideo} onSwitchTab={handleSwitchFromVideo} />
+    const ytResource = activeSession?.resources?.find(r => r.type === 'youtube' && r.url === videoUrl);
+    const activeResourceId = ytResource?._id || '';
+    return (
+      <VideoLearning 
+        videoUrl={videoUrl} 
+        resourceId={activeResourceId}
+        session={activeSession} 
+        onBack={handleBackFromVideo} 
+        onSwitchTab={handleSwitchFromVideo} 
+        onSessionUpdate={handleSessionResourceUpdate}
+      />
+    );
   }
 
   return (
@@ -1419,12 +1451,20 @@ export default function StudyMode() {
 
                 {activeTab === 'youtube' && (
                   videoUrl ? (
-                    <VideoLearning 
-                      videoUrl={videoUrl} 
-                      session={activeSession} 
-                      onBack={() => setVideoUrl('')} 
-                      onSwitchTab={handleTabChange} 
-                    />
+                    (() => {
+                      const ytResource = activeSession?.resources?.find(r => r.type === 'youtube' && r.url === videoUrl);
+                      const activeResourceId = ytResource?._id || '';
+                      return (
+                        <VideoLearning 
+                          videoUrl={videoUrl} 
+                          resourceId={activeResourceId}
+                          session={activeSession} 
+                          onBack={() => setVideoUrl('')} 
+                          onSwitchTab={handleTabChange} 
+                          onSessionUpdate={handleSessionResourceUpdate}
+                        />
+                      );
+                    })()
                   ) : (
                     <div className="workspace-placeholder-box">
                       <Video size={48} style={{ color: 'rgba(255,255,255,0.3)' }} />

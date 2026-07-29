@@ -1,5 +1,6 @@
 import StudySession from '../models/studySession.model.js';
 import logger from '../config/logger.js';
+import mongoose from 'mongoose';
 
 class ResourceService {
   /**
@@ -44,6 +45,14 @@ class ResourceService {
         session.resources = [];
       }
 
+      // Ensure all existing resources in the session have an _id
+      session.resources = session.resources.map(r => {
+        if (!r._id) {
+          r._id = new mongoose.Types.ObjectId().toString();
+        }
+        return r;
+      });
+
       // Check for duplicate resource
       const existingResourceIndex = session.resources.findIndex(
         r => r.type === type && r.url === url
@@ -62,11 +71,13 @@ class ResourceService {
         session.resources[existingResourceIndex] = {
           ...session.resources[existingResourceIndex],
           ...resourcePayload,
+          _id: session.resources[existingResourceIndex]._id || new mongoose.Types.ObjectId().toString(),
           addedAt: session.resources[existingResourceIndex].addedAt || new Date()
         };
       } else {
         logger.info(`[Resource Service] Appending new resource to list`);
         session.resources.push({
+          _id: new mongoose.Types.ObjectId().toString(),
           ...resourcePayload,
           addedAt: new Date()
         });

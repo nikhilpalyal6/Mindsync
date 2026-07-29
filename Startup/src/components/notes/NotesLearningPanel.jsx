@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { MessageSquare, FileText, Layers, HelpCircle, TrendingUp, Sparkles, Edit3 } from 'lucide-react';
 import AISidebar from '../ai/AISidebar';
 import SummaryPanel from '../summary/SummaryPanel';
+import FlashcardPanel from '../summary/FlashcardPanel';
 
 export const NotesLearningPanel = React.memo(({ session }) => {
   const [activeFeature, setActiveFeature] = useState('ask-notes');
+  const resourceId = session?.metadata?.notes?.noteId || 'default_notes_id';
 
   return (
     <div className="notes-learning-panel" style={{
@@ -41,7 +43,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           padding: '2px 8px',
           borderRadius: '4px'
         }}>
-          Ask Notes Active
+          {activeFeature === 'ask-notes' ? 'Ask Notes Active' : `${activeFeature} active`}
         </span>
       </div>
 
@@ -100,13 +102,13 @@ export const NotesLearningPanel = React.memo(({ session }) => {
         <button
           onClick={() => setActiveFeature('flashcards')}
           style={{
-            background: activeFeature === 'flashcards' ? 'rgba(255, 255, 255, 0.1)' : 'none',
-            border: '1px solid transparent',
-            color: 'rgba(255, 255, 255, 0.4)',
+            background: activeFeature === 'flashcards' ? 'rgba(167, 139, 250, 0.15)' : 'none',
+            border: activeFeature === 'flashcards' ? '1px solid rgba(167, 139, 250, 0.3)' : '1px solid transparent',
+            color: activeFeature === 'flashcards' ? '#a78bfa' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
-            fontWeight: 500,
+            fontWeight: 600,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -146,6 +148,8 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           <AISidebar session={session} />
         ) : activeFeature === 'summary' ? (
           <SummaryPanel session={session} resourceType="notes" />
+        ) : activeFeature === 'flashcards' ? (
+          <FlashcardPanel session={session} resourceId={resourceId} resourceType="notes" />
         ) : (
           <div style={{
             flex: 1,
@@ -179,7 +183,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
               Notes {activeFeature} Module
             </h4>
             <p style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.45)', margin: 0, maxWidth: '240px', lineHeight: '1.4' }}>
-              Available in an upcoming phase
+              Available in upcoming phase
             </p>
           </div>
         )}
