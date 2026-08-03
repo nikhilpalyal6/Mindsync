@@ -240,14 +240,6 @@
   to { transform: rotate(360deg); }
 }
 
-/* Prevent any double/global scrollbars on the document body or main page structure */
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
 .study-mode-page {
   height: 100vh !important;
   max-height: 100vh !important;
@@ -264,6 +256,7 @@ html, body {
 
 .study-header {
   padding: 8px 16px !important;
+  position: relative !important;
 }
 
 .study-workspace-main {

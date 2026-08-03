@@ -3,6 +3,7 @@ import './videoLearning.css';
 import AISidebar from './ai/AISidebar';
 import SummaryPanel from './summary/SummaryPanel';
 import FlashcardPanel from './summary/FlashcardPanel';
+import QuizPanel from './summary/QuizPanel';
 import { fetchYouTubeData } from '../services/api';
 
 export default function VideoLearning({ videoUrl, resourceId, session, onBack, onSwitchTab, onSessionUpdate }) {
@@ -505,6 +506,9 @@ export default function VideoLearning({ videoUrl, resourceId, session, onBack, o
             )}
             {activeToolTab === 'flashcards' && (
               <FlashcardPanel session={session} resourceId={videoUrl || session?.metadata?.youtube?.videoUrl || ''} resourceType="youtube" />
+            )}
+            {activeToolTab === 'quizzes' && (
+              <QuizPanel session={session} resourceId={videoUrl || session?.metadata?.youtube?.videoUrl || ''} resourceType="youtube" />
             )}
           </div>
         </div>

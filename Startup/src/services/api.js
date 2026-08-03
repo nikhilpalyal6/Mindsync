@@ -443,6 +443,18 @@ export const updateFlashcardState = async (resourceId, cardId, data = {}) => {
   return await api.patch(`/ai/flashcards/${encodeURIComponent(resourceId)}/cards/${encodeURIComponent(cardId)}`, data);
 };
 
+export const generateQuiz = async (data = {}) => {
+  return await api.post('/ai/quiz/generate', data);
+};
+
+export const getQuiz = async (studySessionId, resourceId) => {
+  return await api.get(`/ai/quiz/${encodeURIComponent(resourceId)}?studySessionId=${studySessionId}`);
+};
+
+export const updateQuestionState = async (resourceId, questionId, data = {}) => {
+  return await api.patch(`/ai/quiz/${encodeURIComponent(resourceId)}/question/${encodeURIComponent(questionId)}`, data);
+};
+
 // General API methods
 export const api = {
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),

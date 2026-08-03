@@ -2,14 +2,21 @@
   --hero-max: 980px;
 }
 
+.home-root{
+  width: 100%;
+  display: block;
+  position: relative;
+}
+
 .home-page{
-  /* hero height equals viewport minus navbar height so combined fits exactly */
-  height: calc(100vh - var(--nav-height));
+  /* hero height - allow natural height for scrolling */
+  min-height: auto;
+  height: auto;
   position:relative;
   display:flex;
   align-items:center;
   justify-content:flex-start;
-  padding:0;
+  padding: 80px 0 40px 0;
   width:100%;
   background: radial-gradient(1200px 400px at 90% 70%, rgba(120,80,160,0.12), transparent),
               radial-gradient(800px 300px at 10% 20%, rgba(80,120,200,0.07), transparent);
@@ -264,7 +271,7 @@
 .section-features .section-sub{margin-bottom:1.25rem}
 
 /* add vertical spacing to sections so titles sit a little lower relative to previous section */
-.section{padding:56px 0}
+.section{padding:56px 0; min-height: 400px;}
 
 /* subtle per-section tints to differentiate sections while keeping theme-friendly opacity */
 .section-features{background-color:rgba(102,184,255,0.02)} /* very light blue tint */

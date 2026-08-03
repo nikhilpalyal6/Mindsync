@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { protect } from '../../middleware/auth.middleware.js';
 import aiController from '../../controllers/ai.controller.js';
 import flashcardController from '../../controllers/flashcard.controller.js';
+import quizController from '../../controllers/quiz.controller.js';
 
 const router = Router();
 
@@ -29,5 +30,15 @@ router.route('/flashcards/:resourceId')
 
 router.route('/flashcards/:resourceId/cards/:cardId')
   .patch(flashcardController.updateFlashcardState);
+
+// AI Quiz Routes
+router.route('/quiz/generate')
+  .post(quizController.generateQuiz);
+
+router.route('/quiz/:resourceId')
+  .get(quizController.getQuiz);
+
+router.route('/quiz/:resourceId/question/:questionId')
+  .patch(quizController.updateQuestionState);
 
 export default router;

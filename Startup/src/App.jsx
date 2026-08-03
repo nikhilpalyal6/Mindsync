@@ -55,11 +55,12 @@ function AppContent() {
   }, []);
 
   return (
-    <div>
+    <div className="app-container">
       <ScrollToTop />
       {!isAuthPage && !isStudyMode && !isAdminRoute && <Navbar />}
       <Toast />
-      <Routes>
+      <div className="main-content">
+        <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<GuestRoute><Auth /></GuestRoute>} />
         <Route path="/signup" element={<GuestRoute><Auth /></GuestRoute>} />
@@ -91,6 +92,7 @@ function AppContent() {
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </div>
       {!isAuthPage && !isStudyMode && !isAdminRoute && <Footer />}
     </div>
   )
