@@ -13,6 +13,7 @@ export const PDFViewer = React.memo(({
   pageNumber,
   scale,
   fitMode,
+  resourceId,
   onDocumentLoadSuccess,
   onDocumentLoadError,
   onPageChange,
@@ -23,6 +24,47 @@ export const PDFViewer = React.memo(({
   const [containerWidth, setContainerWidth] = useState(800);
   const [numPages, setNumPages] = useState(0);
   const isScrollingToPageRef = useRef(false);
+
+  // Selection Floating Toolbar State
+  const [showToolbar, setShowToolbar] = useState(false);
+  const [toolbarCoords, setToolbarCoords] = useState({ x: 0, y: 0 });
+  const [selectedText, setSelectedText] = useState('');
+
+  const handleSelection = useCallback(() => {
+    setTimeout(() => {
+      const selection = window.getSelection();
+      const text = selection.toString().trim();
+      
+      if (text && containerRef.current) {
+        try {
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          const viewportRect = containerRef.current.getBoundingClientRect();
+          
+          setToolbarCoords({
+            x: rect.left - viewportRect.left + (rect.width / 2) + containerRef.current.scrollLeft,
+            y: rect.top - viewportRect.top - 45 + containerRef.current.scrollTop
+          });
+          setSelectedText(text);
+          setShowToolbar(true);
+        } catch (err) {
+          console.warn('Error computing selection coords:', err);
+        }
+      } else {
+        setShowToolbar(false);
+      }
+    }, 50);
+  }, []);
+
+  useEffect(() => {
+    const handleDocumentClick = (e) => {
+      if (showToolbar && !e.target.closest('.pdf-context-toolbar')) {
+        setShowToolbar(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => document.removeEventListener('mousedown', handleDocumentClick);
+  }, [showToolbar]);
 
   // Responsive width calculation for Fit Width mode
   useEffect(() => {
@@ -94,6 +136,7 @@ export const PDFViewer = React.memo(({
       className="pdf-viewport" 
       ref={containerRef}
       onScroll={handleScroll}
+      onMouseUp={handleSelection}
       style={{
         flex: 1,
         overflowY: 'auto',
@@ -102,9 +145,75 @@ export const PDFViewer = React.memo(({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        scrollBehavior: 'smooth'
+        scrollBehavior: 'smooth',
+        position: 'relative'
       }}
     >
+      {/* Floating selection contextual toolbar */}
+      {showToolbar && (
+        <div 
+          className="pdf-context-toolbar" 
+          style={{
+            position: 'absolute',
+            left: `${toolbarCoords.x}px`,
+            top: `${toolbarCoords.y}px`,
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2px',
+            backgroundColor: 'rgba(15, 18, 26, 0.95)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '8px',
+            padding: '4px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(8px)',
+            animation: 'fadeIn 0.15s ease-out'
+          }}
+        >
+          <button 
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('trigger-explain', {
+                detail: { concept: selectedText, resourceId, source: 'pdf' }
+              }));
+              setShowToolbar(false);
+            }}
+            style={{
+              border: 'none', background: 'none', color: '#66b8ff', fontSize: '0.725rem', fontWeight: 700, padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'
+            }}
+          >
+            Explain
+          </button>
+          <button 
+            onClick={() => {
+              navigator.clipboard.writeText(selectedText);
+              setShowToolbar(false);
+            }}
+            style={{
+              border: 'none', background: 'none', color: '#fff', fontSize: '0.725rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'
+            }}
+          >
+            Copy
+          </button>
+          <button 
+            onClick={() => setShowToolbar(false)}
+            style={{
+              border: 'none', background: 'none', color: '#fff', fontSize: '0.725rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'
+            }}
+          >
+            Highlight
+          </button>
+          <button 
+            onClick={() => setShowToolbar(false)}
+            style={{
+              border: 'none', background: 'none', color: '#fff', fontSize: '0.725rem', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer'
+            }}
+          >
+            Notes
+          </button>
+        </div>
+      )}
+
       <Document
         file={file}
         onLoadSuccess={handleDocumentLoad}

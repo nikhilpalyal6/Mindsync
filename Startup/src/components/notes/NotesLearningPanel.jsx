@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquare, FileText, Layers, HelpCircle, TrendingUp, Sparkles, Edit3 } from 'lucide-react';
+import { MessageSquare, FileText, Layers, HelpCircle, TrendingUp, Sparkles, Edit3, BookOpen } from 'lucide-react';
 import AISidebar from '../ai/AISidebar';
 import SummaryPanel from '../summary/SummaryPanel';
 import FlashcardPanel from '../summary/FlashcardPanel';
@@ -48,22 +48,22 @@ export const NotesLearningPanel = React.memo(({ session }) => {
         </span>
       </div>
 
-      {/* Navigation Tools Bar */}
+      {/* Mini Workspace Panel Tabs Header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
+        padding: '10px 14px',
         gap: '6px',
-        padding: '8px 12px',
         borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-        backgroundColor: 'rgba(20, 25, 35, 0.5)',
-        overflowX: 'auto'
+        overflowX: 'auto',
+        scrollbarWidth: 'none'
       }}>
         <button
           onClick={() => setActiveFeature('ask-notes')}
           style={{
-            background: activeFeature === 'ask-notes' ? 'rgba(167, 139, 250, 0.15)' : 'none',
-            border: activeFeature === 'ask-notes' ? '1px solid rgba(167, 139, 250, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'ask-notes' ? '#a78bfa' : 'rgba(255, 255, 255, 0.6)',
+            background: activeFeature === 'ask-notes' ? 'rgba(102, 184, 255, 0.15)' : 'none',
+            border: activeFeature === 'ask-notes' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
+            color: activeFeature === 'ask-notes' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -76,15 +76,15 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           }}
         >
           <MessageSquare size={13} />
-          <span>Ask Notes</span>
+          <span>Ask AI</span>
         </button>
 
         <button
           onClick={() => setActiveFeature('summary')}
           style={{
-            background: activeFeature === 'summary' ? 'rgba(167, 139, 250, 0.15)' : 'none',
-            border: activeFeature === 'summary' ? '1px solid rgba(167, 139, 250, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'summary' ? '#a78bfa' : 'rgba(255, 255, 255, 0.6)',
+            background: activeFeature === 'summary' ? 'rgba(102, 184, 255, 0.15)' : 'none',
+            border: activeFeature === 'summary' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
+            color: activeFeature === 'summary' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -103,9 +103,9 @@ export const NotesLearningPanel = React.memo(({ session }) => {
         <button
           onClick={() => setActiveFeature('flashcards')}
           style={{
-            background: activeFeature === 'flashcards' ? 'rgba(167, 139, 250, 0.15)' : 'none',
-            border: activeFeature === 'flashcards' ? '1px solid rgba(167, 139, 250, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'flashcards' ? '#a78bfa' : 'rgba(255, 255, 255, 0.6)',
+            background: activeFeature === 'flashcards' ? 'rgba(102, 184, 255, 0.15)' : 'none',
+            border: activeFeature === 'flashcards' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
+            color: activeFeature === 'flashcards' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -118,15 +118,15 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           }}
         >
           <Layers size={13} />
-          <span>Flashcards</span>
+          <span>Cards</span>
         </button>
 
         <button
           onClick={() => setActiveFeature('quiz')}
           style={{
-            background: activeFeature === 'quiz' ? 'rgba(167, 139, 250, 0.15)' : 'none',
-            border: activeFeature === 'quiz' ? '1px solid rgba(167, 139, 250, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'quiz' ? '#a78bfa' : 'rgba(255, 255, 255, 0.6)',
+            background: activeFeature === 'quiz' ? 'rgba(102, 184, 255, 0.15)' : 'none',
+            border: activeFeature === 'quiz' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
+            color: activeFeature === 'quiz' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -140,6 +140,40 @@ export const NotesLearningPanel = React.memo(({ session }) => {
         >
           <HelpCircle size={13} />
           <span>Quiz</span>
+        </button>
+
+        <button
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('trigger-explain', {
+              detail: { concept: '', resourceId, source: 'notes' }
+            }));
+          }}
+          style={{
+            background: 'rgba(102, 184, 255, 0.06)',
+            border: '1px solid rgba(102, 184, 255, 0.25)',
+            color: '#66b8ff',
+            padding: '5px 10px',
+            borderRadius: '6px',
+            fontSize: '0.775rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(102, 184, 255, 0.15)';
+            e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.45)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(102, 184, 255, 0.06)';
+            e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.25)';
+          }}
+        >
+          <Sparkles size={13} />
+          <span>Explain</span>
         </button>
       </div>
 

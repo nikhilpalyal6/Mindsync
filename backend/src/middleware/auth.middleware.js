@@ -9,15 +9,21 @@ import asyncHandler from '../utils/asyncHandler.js';
  * Attaches authenticated user to req.user.
  */
 export const protect = asyncHandler(async (req, _res, next) => {
+  console.log('[DEBUG AUTH] Entering protect middleware. URI:', req.originalUrl);
   const token = getAccessTokenFromRequest(req);
 
   if (!token) {
+    console.log('[DEBUG AUTH] No token found in request');
     throw ApiError.unauthorized('Authentication required');
   }
 
+  console.log('[DEBUG AUTH] Token found. Verifying token...');
   const decoded = verifyAccessToken(token);
+  console.log('[DEBUG AUTH] Token verified. Decoded ID:', decoded.id);
 
+  console.log('[DEBUG AUTH] Fetching user from DB...');
   const user = await User.findById(decoded.id).select('-password -refreshToken');
+  console.log('[DEBUG AUTH] DB Fetch done. User exists?', !!user);
 
   if (!user) {
     throw ApiError.unauthorized('User no longer exists');
@@ -28,6 +34,7 @@ export const protect = asyncHandler(async (req, _res, next) => {
   }
 
   req.user = user;
+  console.log('[DEBUG AUTH] Passing to next handler');
   next();
 });
 

@@ -35,6 +35,10 @@ export default function VideoLearning({ videoUrl, resourceId, session, onBack, o
   const [transcriptMode, setTranscriptMode] = useState('english'); // 'english' | 'original'
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    window.currentActiveResource = { id: resourceId, type: 'youtube' };
+  }, [resourceId]);
+
   // Polling ref to prevent duplicate polling and handle cleanups
   const pollingTimerRef = useRef(null);
   const pollCountRef = useRef(0);
@@ -461,9 +465,67 @@ export default function VideoLearning({ videoUrl, resourceId, session, onBack, o
                     </div>
                   ) : displayedTranscriptItems.length > 0 ? (
                     displayedTranscriptItems.map((item, index) => (
-                      <div key={index} className="vl-transcript-item" onClick={() => handleChapterClick(item.time)} style={{ cursor: 'pointer' }}>
+                      <div 
+                        key={index} 
+                        className="vl-transcript-item" 
+                        onClick={() => handleChapterClick(item.time)} 
+                        style={{ cursor: 'pointer', position: 'relative' }}
+                      >
                         <span className="vl-time">{item.time}</span>
                         <p>{item.text}</p>
+                        
+                        {/* Hover Actions Menu */}
+                        <div className="vl-transcript-hover-actions" style={{
+                          position: 'absolute',
+                          right: '8px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          display: 'none',
+                          alignItems: 'center',
+                          gap: '4px',
+                          backgroundColor: 'rgba(15, 18, 26, 0.95)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '6px',
+                          padding: '2px 4px',
+                          zIndex: 10,
+                          boxShadow: '0 4px 10px rgba(0,0,0,0.4)'
+                        }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.dispatchEvent(new CustomEvent('trigger-explain', {
+                                detail: { concept: item.text, resourceId, source: 'youtube' }
+                              }));
+                            }}
+                            style={{
+                              border: 'none', background: 'none', color: '#66b8ff', fontSize: '0.675rem', fontWeight: 700, padding: '3px 6px', borderRadius: '4px', cursor: 'pointer'
+                            }}
+                          >
+                            Explain
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(item.text);
+                            }}
+                            style={{
+                              border: 'none', background: 'none', color: '#fff', fontSize: '0.675rem', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer'
+                            }}
+                          >
+                            Copy
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              console.log('Bookmark:', item.text);
+                            }}
+                            style={{
+                              border: 'none', background: 'none', color: '#fff', fontSize: '0.675rem', padding: '3px 6px', borderRadius: '4px', cursor: 'pointer'
+                            }}
+                          >
+                            Bookmark
+                          </button>
+                        </div>
                       </div>
                     ))
                   ) : (
@@ -480,11 +542,23 @@ export default function VideoLearning({ videoUrl, resourceId, session, onBack, o
         {/* Right Panel: AI Tutor */}
         <div className="vl-right-panel">
           <div className="vl-tools-nav">
-            {['Chat', 'Flashcards', 'Quizzes', 'Podcast', 'Summary', 'Notes'].map((tool) => (
+            {['Chat', 'Flashcards', 'Quizzes', 'Podcast', 'Summary', 'Notes', 'Explain'].map((tool) => (
               <button
                 key={tool}
                 className={`vl-tool-btn ${activeToolTab === tool.toLowerCase() ? 'active' : ''}`}
-                onClick={() => setActiveToolTab(tool.toLowerCase())}
+                onClick={() => {
+                  if (tool === 'Explain') {
+                    window.dispatchEvent(new CustomEvent('trigger-explain', {
+                      detail: { 
+                        concept: '', 
+                        resourceId: videoUrl || session?.metadata?.youtube?.videoUrl || '', 
+                        source: 'youtube' 
+                      }
+                    }));
+                  } else {
+                    setActiveToolTab(tool.toLowerCase());
+                  }
+                }}
               >
                 {tool === 'Chat' && <span className="status-dot"></span>}
                 {tool === 'Flashcards' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2" /></svg>}
@@ -492,6 +566,7 @@ export default function VideoLearning({ videoUrl, resourceId, session, onBack, o
                 {tool === 'Podcast' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /></svg>}
                 {tool === 'Summary' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6" /></svg>}
                 {tool === 'Notes' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /></svg>}
+                {tool === 'Explain' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 19.5V3A2.5 2.5 0 0 1 6.5 5.5H20v14" /></svg>}
                 {tool}
               </button>
             ))}

@@ -24,6 +24,7 @@ router.route('/:sessionId/youtube/fetch')
   .post(youtubeController.fetchYouTubeData);
 
 router.route('/:id')
+  .get(studyController.getSessionById)
   .patch(studyController.updateSession)
   .delete(studyController.deleteSession);
 

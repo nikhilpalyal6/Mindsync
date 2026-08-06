@@ -20,6 +20,11 @@ export const PDFWorkspace = React.memo(({ session }) => {
   const [scale, setScale] = useState(1.0);
   const [fitMode, setFitMode] = useState('page');
   const fileInputRef = useRef(null);
+  const resourceId = session?.metadata?.pdf?.pdfFilename || session?.metadata?.pdf?.filename || fileName || 'pdf_doc';
+
+  useEffect(() => {
+    window.currentActiveResource = { id: resourceId, type: 'pdf' };
+  }, [resourceId]);
 
   // Restore PDF state from in-memory cache or MongoDB on session mount or session switch
   useEffect(() => {
@@ -325,6 +330,7 @@ export const PDFWorkspace = React.memo(({ session }) => {
           pageNumber={pageNumber}
           scale={scale}
           fitMode={fitMode}
+          resourceId={resourceId}
           onDocumentLoadSuccess={onDocumentLoadSuccess}
           onDocumentLoadError={onDocumentLoadError}
           onPageChange={handlePageChange}

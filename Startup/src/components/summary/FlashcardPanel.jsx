@@ -14,7 +14,7 @@ import {
   Check, 
   Info
 } from 'lucide-react';
-import { getFlashcards, generateFlashcards, updateFlashcardState } from '../../services/api';
+import { getFlashcards, generateFlashcards, updateFlashcardState, generateExplanation, getExplanations } from '../../services/api';
 
 export const FlashcardPanel = React.memo(({ session, resourceId, resourceType }) => {
   const studySessionId = session?._id;
@@ -28,6 +28,25 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
   const [isShuffled, setIsShuffled] = useState(false);
   const [metadata, setMetadata] = useState(null);
   const [isCached, setIsCached] = useState(false);
+
+  const [explanationsList, setExplanationsList] = useState([]);
+  const [generatingExplain, setGeneratingExplain] = useState(false);
+
+  const loadExplanations = useCallback(async () => {
+    if (!resourceId || !studySessionId) return;
+    try {
+      const res = await getExplanations(resourceId, studySessionId);
+      if (res?.success && Array.isArray(res.data)) {
+        setExplanationsList(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load explanations:', err);
+    }
+  }, [resourceId, studySessionId]);
+
+  useEffect(() => {
+    loadExplanations();
+  }, [loadExplanations]);
 
   // Prevent Spacebar page scrolling
   const containerRef = useRef(null);
@@ -526,6 +545,112 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
                   }}>
                     {activeCard.answer}
                   </p>
+
+                  <button
+                    disabled={generatingExplain}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const concept = activeCard.explanation || activeCard.front;
+                      if (!concept) return;
+                      
+                      const existing = explanationsList.find(
+                        ex => ex.concept.toLowerCase() === concept.toLowerCase()
+                      );
+                      
+                      if (existing) {
+                        window.dispatchEvent(new CustomEvent('trigger-explain', {
+                          detail: {
+                            concept,
+                            resourceId,
+                            source: 'flashcard',
+                            explanationData: existing
+                          }
+                        }));
+                      } else {
+                        setGeneratingExplain(true);
+                        try {
+                          const res = await generateExplanation({
+                            concept,
+                            resourceId,
+                            studySessionId,
+                            difficulty: 'Medium'
+                          });
+                          if (res?.success && res.data) {
+                            setExplanationsList(prev => [...prev, res.data]);
+                            window.dispatchEvent(new CustomEvent('trigger-explain', {
+                              detail: {
+                                concept,
+                                resourceId,
+                                source: 'flashcard',
+                                explanationData: res.data
+                              }
+                            }));
+                          }
+                        } catch (err) {
+                          console.error('Failed to generate explanation:', err);
+                        } finally {
+                          setGeneratingExplain(false);
+                        }
+                      }
+                    }}
+                    style={{
+                      marginTop: '14px',
+                      background: generatingExplain 
+                        ? 'linear-gradient(135deg, rgba(102, 184, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)' 
+                        : 'linear-gradient(135deg, rgba(102, 184, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
+                      border: '1px solid rgba(102, 184, 255, 0.35)',
+                      borderRadius: '100px',
+                      color: '#ffffff',
+                      padding: '8px 18px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: generatingExplain ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      position: 'relative',
+                      zIndex: 20,
+                      backdropFilter: 'blur(12px)',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)'
+                    }}
+                    onMouseOver={(e) => {
+                      if (!generatingExplain) {
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 184, 255, 0.35)';
+                        e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.6)';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!generatingExplain) {
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)';
+                        e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.35)';
+                        e.currentTarget.style.transform = 'none';
+                      }
+                    }}
+                  >
+                    <Sparkles 
+                      size={12} 
+                      className={generatingExplain ? "spin-icon" : ""}
+                      style={{ color: '#66b8ff' }} 
+                    />
+                    <span>{generatingExplain ? 'Generating...' : 'Explain Concept'}</span>
+                    
+                    {explanationsList.some(ex => ex.concept.toLowerCase() === (activeCard.explanation || activeCard.front || '').toLowerCase()) && (
+                      <span style={{
+                        fontSize: '0.6rem',
+                        backgroundColor: 'rgba(52, 211, 153, 0.2)',
+                        border: '1px solid rgba(52, 211, 153, 0.4)',
+                        color: '#34d399',
+                        padding: '1px 6px',
+                        borderRadius: '100px',
+                        marginLeft: '4px',
+                        fontWeight: 800
+                      }}>
+                        Cached
+                      </span>
+                    )}
+                  </button>
 
                   <div style={{ 
                     position: 'absolute', 

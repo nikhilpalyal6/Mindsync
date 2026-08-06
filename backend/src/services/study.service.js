@@ -1,7 +1,105 @@
+import mongoose from 'mongoose';
 import StudySession from '../models/studySession.model.js';
 import StudyActivity from '../models/studyActivity.model.js';
 import ApiError from '../utils/ApiError.js';
 import resourceService from './resource.service.js';
+
+// Recursive helper to perform deep merges on Mongoose objects/documents
+function deepMerge(target, source) {
+  if (!source || typeof source !== 'object') return target;
+  if (!target || typeof target !== 'object') return source;
+
+  const result = Array.isArray(target) ? [...target] : { ...target };
+
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deepMerge(target[key], source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
+async function migrateLegacySession(session) {
+  let needsSave = false;
+  if (!session.resources) {
+    session.resources = [];
+    needsSave = true;
+  }
+  
+  if (session.resources.length === 0) {
+    const meta = session.metadata || {};
+    
+    // Migrate YouTube resources
+    if (meta.youtube && (meta.youtube.videoUrl || meta.youtube.url)) {
+      const url = meta.youtube.videoUrl || meta.youtube.url;
+      const alreadyExists = session.resources.some(r => r.type === 'youtube' && r.url === url);
+      if (!alreadyExists) {
+        session.resources.push({
+          _id: new mongoose.Types.ObjectId().toString(),
+          type: 'youtube',
+          url: url,
+          title: meta.youtube.title || 'YouTube Video',
+          data: meta.youtube,
+          addedAt: session.createdAt || new Date(),
+          updatedAt: session.updatedAt || new Date()
+        });
+        needsSave = true;
+      }
+    }
+    
+    // Migrate PDF resources
+    if (meta.pdf && (meta.pdf.filename || meta.pdf.pdfFilename || meta.pdf.fileData)) {
+      const url = meta.pdf.filename || meta.pdf.pdfFilename || 'Document.pdf';
+      const alreadyExists = session.resources.some(r => r.type === 'pdf' && r.url === url);
+      if (!alreadyExists) {
+        session.resources.push({
+          _id: new mongoose.Types.ObjectId().toString(),
+          type: 'pdf',
+          url: url,
+          title: url,
+          data: meta.pdf,
+          addedAt: session.createdAt || new Date(),
+          updatedAt: session.updatedAt || new Date()
+        });
+        needsSave = true;
+      }
+    }
+    
+    // Migrate Notes resources
+    if (meta.notes && meta.notes.content) {
+      const alreadyExists = session.resources.some(r => r.type === 'notes');
+      if (!alreadyExists) {
+        session.resources.push({
+          _id: new mongoose.Types.ObjectId().toString(),
+          type: 'notes',
+          url: 'default_notes_id',
+          title: 'Revision Notes',
+          data: meta.notes,
+          addedAt: session.createdAt || new Date(),
+          updatedAt: session.updatedAt || new Date()
+        });
+        needsSave = true;
+      }
+    }
+  }
+
+  // Ensure all existing resources have an _id
+  session.resources = session.resources.map(r => {
+    if (!r._id) {
+      r._id = new mongoose.Types.ObjectId().toString();
+      needsSave = true;
+    }
+    return r;
+  });
+
+  if (needsSave) {
+    console.log(`[Migration] Migrating legacy study session resources: "${session.title}"`);
+    session.markModified('resources');
+    await session.save();
+  }
+}
 
 class StudyService {
   async logActivity(userId, { session = null, sessionTitle = '', action, details = '' }) {
@@ -19,6 +117,7 @@ class StudyService {
   }
 
   async getSessions(userId, { search } = {}) {
+    console.log('[DEBUG SERVICE] Entering getSessions. User ID:', userId);
     const query = { user: userId };
 
     if (search) {
@@ -29,9 +128,26 @@ class StudyService {
       ];
     }
 
-    return await StudySession.find(query)
+    console.log('[DEBUG SERVICE] Running StudySession.find with projection for lightweight cards. Query:', JSON.stringify(query));
+    
+    // Select only lightweight dashboard fields to optimize payload and network bandwidth
+    const result = await StudySession.find(query)
+      .select('_id title description pinned lastOpened pdfCount youtubeCount notesCount flashcardsCount quizCount chatCount progress thumbnail createdAt updatedAt')
       .sort({ pinned: -1, lastOpened: -1 })
       .lean();
+      
+    console.log('[DEBUG SERVICE] StudySession.find returned successfully. Count:', result?.length);
+    return result;
+  }
+
+  async getSessionById(userId, sessionId) {
+    console.log('[DEBUG SERVICE] Entering getSessionById. User ID:', userId, 'Session ID:', sessionId);
+    const session = await StudySession.findOne({ _id: sessionId, user: userId });
+    if (!session) {
+      throw ApiError.notFound('Study session not found');
+    }
+    await migrateLegacySession(session);
+    return session.toObject();
   }
 
   async createSession(userId, { title, description = '', metadata = {} }) {
@@ -136,11 +252,8 @@ class StudyService {
     for (const field of allowedUpdates) {
       if (updates[field] !== undefined) {
         if (field === 'metadata') {
-          // Merge metadata instead of replacing to avoid losing other resource keys
-          session.metadata = {
-            ...(session.metadata || {}),
-            ...(updates.metadata || {})
-          };
+          // Perform a deep merge to avoid losing sub-keys (like base64 fileData or transcript arrays)
+          session.metadata = deepMerge(session.metadata || {}, updates.metadata || {});
           session.markModified('metadata');
         } else {
           session[field] = updates[field];

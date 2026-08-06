@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { Search, RefreshCw, MoreVertical, Pin, Trash2, Edit3, Copy, Archive, FileText, Video, BookOpen, Layers, HelpCircle, MessageSquare, Plus, Clock, Folder, Sparkles } from 'lucide-react'
 import { 
   getStudySessions, 
+  getStudySessionById,
   createStudySession, 
   updateStudySession, 
   deleteStudySession,
@@ -265,8 +266,61 @@ export default function StudyMode() {
     setActiveSession(session)
     localStorage.setItem('mindsync_last_study_session_id', session._id)
 
+    let fullSession = session;
+    try {
+      const res = await getStudySessionById(session._id);
+      if (res) {
+        fullSession = (res.success && res.data) ? res.data : res;
+
+        // Rebuild resources array client-side if it is empty but metadata contains data (fallback)
+        if ((!fullSession.resources || fullSession.resources.length === 0) && fullSession.metadata) {
+          const meta = fullSession.metadata;
+          const resources = [];
+
+          if (meta.youtube && (meta.youtube.videoUrl || meta.youtube.url)) {
+            resources.push({
+              _id: meta.youtube.videoId || `yt_${Date.now()}`,
+              type: 'youtube',
+              url: meta.youtube.videoUrl || meta.youtube.url,
+              title: meta.youtube.title || 'YouTube Video',
+              data: meta.youtube,
+              addedAt: fullSession.createdAt || new Date(),
+              updatedAt: fullSession.updatedAt || new Date()
+            });
+          }
+          if (meta.pdf && (meta.pdf.filename || meta.pdf.pdfFilename)) {
+            resources.push({
+              _id: `pdf_${Date.now()}`,
+              type: 'pdf',
+              url: meta.pdf.pdfFilename || meta.pdf.filename,
+              title: meta.pdf.filename || meta.pdf.pdfFilename || 'Document.pdf',
+              data: meta.pdf,
+              addedAt: fullSession.createdAt || new Date(),
+              updatedAt: fullSession.updatedAt || new Date()
+            });
+          }
+          if (meta.notes && (meta.notes.content || meta.notes.notesContent)) {
+            resources.push({
+              _id: 'default_notes_id',
+              type: 'notes',
+              url: 'default_notes_id',
+              title: meta.notes.title || 'Revision Notes',
+              data: meta.notes,
+              addedAt: fullSession.createdAt || new Date(),
+              updatedAt: fullSession.updatedAt || new Date()
+            });
+          }
+          fullSession.resources = resources;
+        }
+
+        setActiveSession(fullSession);
+      }
+    } catch (err) {
+      console.error('Failed to load full study session:', err);
+    }
+
     // Read metadata from MongoDB document
-    const meta = session.metadata || {}
+    const meta = fullSession.metadata || {}
     const restoredResource = meta.activeResourceType || meta.lastTab || 'pdf'
     setActiveTab(restoredResource)
 
@@ -276,11 +330,11 @@ export default function StudyMode() {
       setVideoUrl('')
     }
 
-    console.log(`[Persistent Workspace] Workshop Opened from Home: ${session.title}`)
+    console.log(`[Persistent Workspace] Workshop Opened from Home: ${fullSession.title}`)
     console.log(`[Persistent Workspace] Resource Restored from MongoDB: ${restoredResource.toUpperCase()}`)
 
     try {
-      await updateStudySession(session._id, { lastOpened: new Date() })
+      await updateStudySession(fullSession._id, { lastOpened: new Date() })
       const [resSessions, resActivities] = await Promise.all([
         getStudySessions(),
         getStudyActivities()

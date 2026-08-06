@@ -3,6 +3,7 @@ import { protect } from '../../middleware/auth.middleware.js';
 import aiController from '../../controllers/ai.controller.js';
 import flashcardController from '../../controllers/flashcard.controller.js';
 import quizController from '../../controllers/quiz.controller.js';
+import explainController from '../../controllers/explain.controller.js';
 
 const router = Router();
 
@@ -40,5 +41,15 @@ router.route('/quiz/:resourceId')
 
 router.route('/quiz/:resourceId/question/:questionId')
   .patch(quizController.updateQuestionState);
+
+// AI Explain Mode Routes
+router.route('/explain')
+  .post(explainController.generateExplanation);
+
+router.route('/explain/:resourceId')
+  .get(explainController.getExplanations);
+
+router.route('/explain/:id')
+  .patch(explainController.updateExplanationFeedback);
 
 export default router;

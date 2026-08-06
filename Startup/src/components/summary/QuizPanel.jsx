@@ -25,7 +25,7 @@ import {
   Calendar,
   Layers2
 } from 'lucide-react';
-import { getQuiz, generateQuiz, updateQuestionState } from '../../services/api';
+import { getQuiz, generateQuiz, updateQuestionState, generateExplanation, getExplanations } from '../../services/api';
 
 export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
   const studySessionId = session?._id;
@@ -34,6 +34,25 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
   const [questions, setQuestions] = useState([]);
   const [originalQuestions, setOriginalQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const [explanationsList, setExplanationsList] = useState([]);
+  const [generatingExplain, setGeneratingExplain] = useState(false);
+
+  const loadExplanations = useCallback(async () => {
+    if (!resourceId || !studySessionId) return;
+    try {
+      const res = await getExplanations(resourceId, studySessionId);
+      if (res?.success && Array.isArray(res.data)) {
+        setExplanationsList(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load explanations:', err);
+    }
+  }, [resourceId, studySessionId]);
+
+  useEffect(() => {
+    loadExplanations();
+  }, [loadExplanations]);
   
   // Dashboard & Configuration States
   const [quizType, setQuizType] = useState('Mixed');
@@ -968,14 +987,58 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
           </div>
         </div>
 
-        {/* FUTURE PREMIUM PLACEHOLDERS (COMING SOON) */}
+        {/* PREMIUM FEATURES */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <h4 style={{ fontSize: '0.75rem', fontWeight: 700, color: 'rgba(255, 255, 255, 0.3)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
             Premium Features
           </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', opacity: 0.4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {/* Active Explain Mode Card */}
+            <div 
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('trigger-explain', {
+                  detail: { concept: '', resourceId, source: 'quiz' }
+                }));
+              }}
+              style={{
+                padding: '10px',
+                borderRadius: '8px',
+                border: '1px solid rgba(102, 184, 255, 0.25)',
+                backgroundColor: 'rgba(102, 184, 255, 0.04)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(102, 184, 255, 0.08)';
+                e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.4)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(102, 184, 255, 0.04)';
+                e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.25)';
+              }}
+            >
+              <Sparkles size={12} style={{ color: '#66b8ff' }} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#66b8ff' }}>
+                Explain Mode
+              </span>
+              <span style={{
+                fontSize: '0.55rem',
+                fontWeight: 700,
+                color: '#66b8ff',
+                backgroundColor: 'rgba(102, 184, 255, 0.15)',
+                padding: '1px 4px',
+                borderRadius: '3px',
+                marginLeft: 'auto'
+              }}>
+                ACTIVE
+              </span>
+            </div>
+
+            {/* Other Coming Soon Placeholders */}
             {[
-              { label: 'Explain Mode', icon: <Search size={12} /> },
               { label: 'Study Planner', icon: <Calendar size={12} /> },
               { label: 'Mind Maps', icon: <Map size={12} /> },
               { label: 'Deep Search', icon: <Layers2 size={12} /> }
@@ -990,7 +1053,8 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  cursor: 'not-allowed'
+                  cursor: 'not-allowed',
+                  opacity: 0.4
                 }}
               >
                 {p.icon}
@@ -1163,6 +1227,131 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
             🎉 Excellent mastery! No weak topics found.
           </div>
         )}
+
+        {/* Collapsible Review list for Exam Mode */}
+        <div style={{
+          padding: '12px 14px',
+          backgroundColor: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.06)',
+          borderRadius: '10px',
+          marginTop: '8px'
+        }}>
+          <h4 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff', margin: '0 0 10px 0', textTransform: 'uppercase' }}>
+            Review Questions
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+            {questions.map((q, idx) => (
+              <div key={q.id || idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '10px' }}>
+                <div style={{ fontSize: '0.775rem', fontWeight: 600, color: '#fff', marginBottom: '4px' }}>
+                  Q{idx + 1}: {q.question}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: q.isCorrect ? '#4ade80' : '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{q.isCorrect ? '✓ Correct' : '✗ Incorrect'}</span>
+                  <button
+                    disabled={generatingExplain}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const concept = q.explanation || q.question;
+                      if (!concept) return;
+                      
+                      const existing = explanationsList.find(
+                        ex => ex.concept.toLowerCase() === concept.toLowerCase()
+                      );
+                      
+                      if (existing) {
+                        window.dispatchEvent(new CustomEvent('trigger-explain', {
+                          detail: {
+                            concept,
+                            resourceId,
+                            source: 'quiz',
+                            explanationData: existing
+                          }
+                        }));
+                      } else {
+                        setGeneratingExplain(true);
+                        try {
+                          const res = await generateExplanation({
+                            concept,
+                            resourceId,
+                            studySessionId,
+                            difficulty: 'Medium'
+                          });
+                          if (res?.success && res.data) {
+                            setExplanationsList(prev => [...prev, res.data]);
+                            window.dispatchEvent(new CustomEvent('trigger-explain', {
+                              detail: {
+                                concept,
+                                resourceId,
+                                source: 'quiz',
+                                explanationData: res.data
+                              }
+                            }));
+                          }
+                        } catch (err) {
+                          console.error('Failed to generate explanation:', err);
+                        } finally {
+                          setGeneratingExplain(false);
+                        }
+                      }
+                    }}
+                    style={{
+                      background: generatingExplain 
+                        ? 'linear-gradient(135deg, rgba(102, 184, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)' 
+                        : 'linear-gradient(135deg, rgba(102, 184, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
+                      border: '1px solid rgba(102, 184, 255, 0.35)',
+                      borderRadius: '100px',
+                      color: '#ffffff',
+                      padding: '4px 10px',
+                      fontSize: '0.675rem',
+                      fontWeight: 700,
+                      cursor: generatingExplain ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      backdropFilter: 'blur(12px)',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                    }}
+                    onMouseOver={(e) => {
+                      if (!generatingExplain) {
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 184, 255, 0.3)';
+                        e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.6)';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!generatingExplain) {
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                        e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.35)';
+                      }
+                    }}
+                  >
+                    <Sparkles 
+                      size={10} 
+                      className={generatingExplain ? "spin-icon" : ""}
+                      style={{ color: '#66b8ff' }} 
+                    />
+                    <span>{generatingExplain ? 'Generating...' : 'Explain'}</span>
+
+                    {explanationsList.some(ex => ex.concept.toLowerCase() === (q.explanation || q.question || '').toLowerCase()) && (
+                      <span style={{
+                        fontSize: '0.55rem',
+                        backgroundColor: 'rgba(52, 211, 153, 0.2)',
+                        border: '1px solid rgba(52, 211, 153, 0.4)',
+                        color: '#34d399',
+                        padding: '1px 4px',
+                        borderRadius: '100px',
+                        marginLeft: '4px',
+                        fontWeight: 800
+                      }}>
+                        Cached
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Action Row */}
         <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
@@ -1490,21 +1679,148 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
         </div>
 
         {/* Question Explanation display */}
-        {showExplanation && questions[currentIndex]?.explanation && (
-          <div style={{
-            padding: '12px',
-            backgroundColor: 'rgba(102, 184, 255, 0.04)',
-            border: '1px solid rgba(102, 184, 255, 0.12)',
-            borderRadius: '8px',
-            marginTop: '8px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-              <Info size={12} style={{ color: '#66b8ff' }} />
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#66b8ff', textTransform: 'uppercase' }}>Explanation</span>
+        {showExplanation && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+            {/* Correct/Incorrect & Explain Answer premium bar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              backgroundColor: questions[currentIndex]?.isCorrect ? 'rgba(52, 211, 153, 0.08)' : 'rgba(248, 113, 113, 0.08)',
+              border: questions[currentIndex]?.isCorrect ? '1px solid rgba(52, 211, 153, 0.25)' : '1px solid rgba(248, 113, 113, 0.25)'
+            }}>
+              <span style={{
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: questions[currentIndex]?.isCorrect ? '#4ade80' : '#f87171'
+              }}>
+                {questions[currentIndex]?.isCorrect ? '✓ Correct' : '✗ Incorrect'}
+              </span>
+
+              <button
+                disabled={generatingExplain}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const q = questions[currentIndex];
+                  const concept = q?.explanation || q?.question;
+                  if (!concept) return;
+                  
+                  const existing = explanationsList.find(
+                    ex => ex.concept.toLowerCase() === concept.toLowerCase()
+                  );
+                  
+                  if (existing) {
+                    window.dispatchEvent(new CustomEvent('trigger-explain', {
+                      detail: {
+                        concept,
+                        resourceId,
+                        source: 'quiz',
+                        explanationData: existing
+                      }
+                    }));
+                  } else {
+                    setGeneratingExplain(true);
+                    try {
+                      const res = await generateExplanation({
+                        concept,
+                        resourceId,
+                        studySessionId,
+                        difficulty: 'Medium'
+                      });
+                      if (res?.success && res.data) {
+                        setExplanationsList(prev => [...prev, res.data]);
+                        window.dispatchEvent(new CustomEvent('trigger-explain', {
+                          detail: {
+                            concept,
+                            resourceId,
+                            source: 'quiz',
+                            explanationData: res.data
+                          }
+                        }));
+                      }
+                    } catch (err) {
+                      console.error('Failed to generate explanation:', err);
+                    } finally {
+                      setGeneratingExplain(false);
+                    }
+                  }
+                }}
+                style={{
+                  background: generatingExplain 
+                    ? 'linear-gradient(135deg, rgba(102, 184, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)' 
+                    : 'linear-gradient(135deg, rgba(102, 184, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
+                  border: '1px solid rgba(102, 184, 255, 0.35)',
+                  borderRadius: '100px',
+                  color: '#ffffff',
+                  padding: '8px 18px',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  cursor: generatingExplain ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backdropFilter: 'blur(12px)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)'
+                }}
+                onMouseOver={(e) => {
+                  if (!generatingExplain) {
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 184, 255, 0.35)';
+                    e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.6)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!generatingExplain) {
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.35)';
+                    e.currentTarget.style.transform = 'none';
+                  }
+                }}
+              >
+                <Sparkles 
+                  size={12} 
+                  className={generatingExplain ? "spin-icon" : ""}
+                  style={{ color: '#66b8ff' }} 
+                />
+                <span>{generatingExplain ? 'Generating...' : 'Explain Answer'}</span>
+
+                {questions[currentIndex] && explanationsList.some(ex => ex.concept.toLowerCase() === (questions[currentIndex].explanation || questions[currentIndex].question || '').toLowerCase()) && (
+                  <span style={{
+                    fontSize: '0.6rem',
+                    backgroundColor: 'rgba(52, 211, 153, 0.2)',
+                    border: '1px solid rgba(52, 211, 153, 0.4)',
+                    color: '#34d399',
+                    padding: '1px 6px',
+                    borderRadius: '100px',
+                    marginLeft: '4px',
+                    fontWeight: 800
+                  }}>
+                    Cached
+                  </span>
+                )}
+              </button>
             </div>
-            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: '1.4' }}>
-              {questions[currentIndex].explanation}
-            </p>
+
+            {/* Explanation details text */}
+            {questions[currentIndex]?.explanation && (
+              <div style={{
+                padding: '12px',
+                backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '8px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                  <Info size={12} style={{ color: '#66b8ff' }} />
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#66b8ff', textTransform: 'uppercase' }}>Explanation Details</span>
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: '1.4' }}>
+                  {questions[currentIndex].explanation}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

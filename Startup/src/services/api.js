@@ -28,17 +28,23 @@ const onRefreshFailed = (err) => {
 };
 
 const apiRequest = async (endpoint, options = {}) => {
+  console.log(`[API REQUEST] Outgoing to: ${endpoint}`);
   const { timeout = 60000, ...fetchOptions } = options
 
   // Check offline status
   if (!navigator.onLine) {
+    console.warn('[API REQUEST] Device is offline');
     throw new ApiError('You are offline. Please check your internet connection.', 0)
   }
 
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    const timeoutId = setTimeout(() => {
+      console.warn(`[API REQUEST] Request to ${endpoint} timed out after ${timeout}ms`);
+      controller.abort();
+    }, timeout)
 
+    console.log(`[API REQUEST] Fetching ${API_BASE_URL}${endpoint}...`);
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       credentials: 'include',
       headers: {
@@ -49,12 +55,14 @@ const apiRequest = async (endpoint, options = {}) => {
       ...fetchOptions,
     })
 
+    console.log(`[API REQUEST] Response received for ${endpoint}. Status: ${response.status}`);
     clearTimeout(timeoutId)
 
     let data;
     try {
       data = await response.json();
     } catch (_jsonError) {
+      console.error(`[API REQUEST] Failed to parse JSON for ${endpoint}`);
       throw new ApiError('Failed to parse server response.', response.status);
     }
 
@@ -376,6 +384,10 @@ export const getStudySessions = async (params = {}) => {
   return await api.get(`/study?${query}`);
 };
 
+export const getStudySessionById = async (id) => {
+  return await api.get(`/study/${encodeURIComponent(id)}`);
+};
+
 export const createStudySession = async (data) => {
   return await api.post('/study', data);
 };
@@ -453,6 +465,18 @@ export const getQuiz = async (studySessionId, resourceId) => {
 
 export const updateQuestionState = async (resourceId, questionId, data = {}) => {
   return await api.patch(`/ai/quiz/${encodeURIComponent(resourceId)}/question/${encodeURIComponent(questionId)}`, data);
+};
+
+export const generateExplanation = async (data = {}) => {
+  return await api.post('/ai/explain', data);
+};
+
+export const getExplanations = async (resourceId, studySessionId) => {
+  return await api.get(`/ai/explain/${encodeURIComponent(resourceId)}?studySessionId=${studySessionId}`);
+};
+
+export const updateExplanationFeedback = async (id, data = {}) => {
+  return await api.patch(`/ai/explain/${encodeURIComponent(id)}`, data);
 };
 
 // General API methods

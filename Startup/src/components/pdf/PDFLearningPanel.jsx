@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MessageSquare, FileText, Layers, HelpCircle, TrendingUp, Sparkles } from 'lucide-react';
+import { MessageSquare, FileText, Layers, HelpCircle, TrendingUp, Sparkles, BookOpen } from 'lucide-react';
 import AISidebar from '../ai/AISidebar';
 import SummaryPanel from '../summary/SummaryPanel';
 import FlashcardPanel from '../summary/FlashcardPanel';
@@ -48,15 +48,15 @@ export const PDFLearningPanel = React.memo(({ session }) => {
         </span>
       </div>
 
-      {/* Navigation Tools Bar */}
+      {/* Mini Workspace Panel Tabs Header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
+        padding: '10px 14px',
         gap: '6px',
-        padding: '8px 12px',
         borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-        backgroundColor: 'rgba(20, 25, 35, 0.5)',
-        overflowX: 'auto'
+        overflowX: 'auto',
+        scrollbarWidth: 'none'
       }}>
         <button
           onClick={() => setActiveFeature('ask-pdf')}
@@ -76,7 +76,7 @@ export const PDFLearningPanel = React.memo(({ session }) => {
           }}
         >
           <MessageSquare size={13} />
-          <span>Ask PDF</span>
+          <span>Ask AI</span>
         </button>
 
         <button
@@ -118,7 +118,7 @@ export const PDFLearningPanel = React.memo(({ session }) => {
           }}
         >
           <Layers size={13} />
-          <span>Flashcards</span>
+          <span>Cards</span>
         </button>
 
         <button
@@ -140,6 +140,40 @@ export const PDFLearningPanel = React.memo(({ session }) => {
         >
           <HelpCircle size={13} />
           <span>Quiz</span>
+        </button>
+
+        <button
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('trigger-explain', {
+              detail: { concept: '', resourceId, source: 'pdf' }
+            }));
+          }}
+          style={{
+            background: 'rgba(102, 184, 255, 0.06)',
+            border: '1px solid rgba(102, 184, 255, 0.25)',
+            color: '#66b8ff',
+            padding: '5px 10px',
+            borderRadius: '6px',
+            fontSize: '0.775rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(102, 184, 255, 0.15)';
+            e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.45)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(102, 184, 255, 0.06)';
+            e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.25)';
+          }}
+        >
+          <Sparkles size={13} />
+          <span>Explain</span>
         </button>
       </div>
 

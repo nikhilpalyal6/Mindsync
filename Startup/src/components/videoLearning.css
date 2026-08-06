@@ -592,3 +592,7 @@
   width: 16px;
   height: 16px;
 }
+
+.vl-transcript-item:hover .vl-transcript-hover-actions {
+  display: flex !important;
+}
