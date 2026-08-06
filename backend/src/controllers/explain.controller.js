@@ -5,13 +5,14 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 
 class ExplainController {
   generateExplanation = asyncHandler(async (req, res) => {
-    const { concept, resourceId, studySessionId, difficulty, mode } = req.body;
+    const { concept, resourceId, resourceType, studySessionId, difficulty, mode } = req.body;
     const userId = req.user._id;
 
     const result = await explainService.explainConcept({
       userId,
       concept,
       resourceId,
+      resourceType,
       studySessionId,
       difficulty,
       mode

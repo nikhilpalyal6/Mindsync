@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Sparkles, RefreshCw, FileText, Zap, Key, Lightbulb, Check, AlertCircle } from 'lucide-react';
 import { generateSummary, getSummary } from '../../services/api';
 
-export const SummaryPanel = React.memo(({ session, resourceType }) => {
+export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) => {
   const [summaryType, setSummaryType] = useState('quick');
   const [summaryContent, setSummaryContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ export const SummaryPanel = React.memo(({ session, resourceType }) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getSummary(session._id, resourceType, summaryType);
+      const res = await getSummary(session._id, resourceType, summaryType, resourceId);
       if (res && res.found && res.summaryContent) {
         setSummaryContent(res.summaryContent);
         setIsCached(true);
@@ -32,7 +32,7 @@ export const SummaryPanel = React.memo(({ session, resourceType }) => {
     } finally {
       setLoading(false);
     }
-  }, [session?._id, resourceType, summaryType]);
+  }, [session?._id, resourceId, resourceType, summaryType]);
 
   useEffect(() => {
     loadSavedSummary();
@@ -46,7 +46,9 @@ export const SummaryPanel = React.memo(({ session, resourceType }) => {
     try {
       const res = await generateSummary(session._id, {
         summaryType,
-        forceRefresh
+        forceRefresh,
+        resourceId,
+        resourceType
       });
 
       if (res && res.summaryContent) {

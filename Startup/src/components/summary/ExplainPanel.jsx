@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { generateExplanation, getExplanations, updateExplanationFeedback } from '../../services/api';
 
-export default function ExplainPanel({ session }) {
+export default function ExplainPanel({ session, resourceId, resourceType }) {
   const studySessionId = session?._id;
   const [isOpen, setIsOpen] = useState(false);
   const [conceptInput, setConceptInput] = useState('');
@@ -13,8 +13,8 @@ export default function ExplainPanel({ session }) {
   const [currentExplanation, setCurrentExplanation] = useState(null);
   const [history, setHistory] = useState([]);
   const [feedbackRegistered, setFeedbackRegistered] = useState(null);
-  const [resourceIdState, setResourceIdState] = useState('');
-  const [sourceState, setSourceState] = useState('pdf'); // 'pdf' | 'youtube' | 'notes' | 'flashcard' | 'quiz'
+  const [resourceIdState, setResourceIdState] = useState(resourceId || '');
+  const [sourceState, setSourceState] = useState(resourceType || 'pdf'); // 'pdf' | 'youtube' | 'notes' | 'flashcard' | 'quiz'
   const [width, setWidth] = useState(480);
   const isResizing = useRef(false);
 
@@ -65,6 +65,16 @@ export default function ExplainPanel({ session }) {
     }
   }, [studySessionId]);
 
+  useEffect(() => {
+    if (resourceId) {
+      setResourceIdState(resourceId);
+      loadHistory(resourceId);
+    }
+    if (resourceType) {
+      setSourceState(resourceType);
+    }
+  }, [resourceId, resourceType, loadHistory]);
+
   const handleExplain = useCallback(async (conceptName, difficultyLevel = 'Medium', mode = null, customResId = null, customSource = null) => {
     if (!conceptName || !conceptName.trim()) return;
     
@@ -85,6 +95,7 @@ export default function ExplainPanel({ session }) {
       const res = await generateExplanation({
         concept: conceptName.trim(),
         resourceId: targetResId,
+        resourceType: targetSource,
         studySessionId,
         difficulty: difficultyLevel,
         mode

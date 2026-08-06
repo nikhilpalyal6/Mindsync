@@ -15,7 +15,7 @@ import {
   sendAIMessage 
 } from '../../services/api';
 
-export const ChatLayout = React.memo(({ session }) => {
+export const ChatLayout = React.memo(({ session, activeResource }) => {
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -25,16 +25,26 @@ export const ChatLayout = React.memo(({ session }) => {
   const [showManager, setShowManager] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Derive active resource identifier
-  const activeResourceType = (session?.metadata?.activeResourceType || session?.metadata?.lastTab || 'pdf').toLowerCase();
+  // Derive active resource type and ID dynamically
+  const activeResourceType = (activeResource?.type || session?.metadata?.activeResourceType || session?.metadata?.lastTab || 'pdf').toLowerCase();
   let resourceId = '';
 
-  if (activeResourceType === 'pdf' && session?.metadata?.pdf) {
-    resourceId = session.metadata.pdf.pdfFilename || session.metadata.pdf.filename || '';
-  } else if (activeResourceType === 'youtube' && session?.metadata?.youtube) {
-    resourceId = session.metadata.youtube.videoUrl || '';
-  } else if (activeResourceType === 'notes') {
-    resourceId = session?.metadata?.notes?.noteId || 'default_notes_id';
+  if (activeResource) {
+    if (activeResource.type === 'pdf') {
+      resourceId = activeResource.title || '';
+    } else if (activeResource.type === 'youtube') {
+      resourceId = activeResource.url || activeResource.title || '';
+    } else if (activeResource.type === 'notes') {
+      resourceId = activeResource._id || 'default_notes_id';
+    }
+  } else {
+    if (activeResourceType === 'pdf' && session?.metadata?.pdf) {
+      resourceId = session.metadata.pdf.pdfFilename || session.metadata.pdf.filename || '';
+    } else if (activeResourceType === 'youtube' && session?.metadata?.youtube) {
+      resourceId = session.metadata.youtube.videoUrl || '';
+    } else if (activeResourceType === 'notes') {
+      resourceId = session?.metadata?.notes?.noteId || 'default_notes_id';
+    }
   }
 
   // Auto-scroll to bottom of messages

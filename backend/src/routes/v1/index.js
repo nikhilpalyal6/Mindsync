@@ -5,6 +5,7 @@ import userRoutes from './user.routes.js';
 import adminRoutes from './admin.routes.js';
 import studyRoutes from './study.routes.js';
 import aiRoutes from './ai.routes.js';
+import pdfRoutes from './pdf.routes.js';
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use('/user', userRoutes);
 router.use('/admin', adminRoutes);
 router.use('/study', studyRoutes);
 router.use('/ai', aiRoutes);
+router.use('/pdf', pdfRoutes);
 
 export default router;

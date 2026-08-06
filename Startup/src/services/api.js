@@ -435,8 +435,9 @@ export const generateSummary = async (sessionId, data = {}) => {
   return await api.post(`/study/${sessionId}/summary`, data);
 };
 
-export const getSummary = async (sessionId, resourceType, summaryType = 'quick') => {
-  return await api.get(`/study/${sessionId}/summary?resourceType=${resourceType}&summaryType=${summaryType}`);
+export const getSummary = async (sessionId, resourceType, summaryType = 'quick', resourceId = '') => {
+  const query = `resourceType=${resourceType}&summaryType=${summaryType}${resourceId ? `&resourceId=${encodeURIComponent(resourceId)}` : ''}`;
+  return await api.get(`/study/${sessionId}/summary?${query}`);
 };
 
 export const fetchYouTubeData = async (sessionId, videoUrl) => {
@@ -477,6 +478,14 @@ export const getExplanations = async (resourceId, studySessionId) => {
 
 export const updateExplanationFeedback = async (id, data = {}) => {
   return await api.patch(`/ai/explain/${encodeURIComponent(id)}`, data);
+};
+
+export const getPDFChatHistory = async (workspaceId, resourceId) => {
+  return await api.get(`/pdf/chat?workspaceId=${encodeURIComponent(workspaceId)}&resourceId=${encodeURIComponent(resourceId)}`);
+};
+
+export const sendPDFChatMessage = async (workspaceId, resourceId, message) => {
+  return await api.post('/pdf/chat', { workspaceId, resourceId, message });
 };
 
 // General API methods

@@ -3,6 +3,7 @@ import aiProviderService from '../ai/aiProvider.service.js';
 import ApiError from '../../utils/ApiError.js';
 import logger from '../../config/logger.js';
 import crypto from 'crypto';
+import pdfExtractorService from '../pdf/pdfExtractor.service.js';
 
 class FlashcardService {
   /**
@@ -15,7 +16,7 @@ class FlashcardService {
     // 1. Find resource in resources array
     if (session.resources && Array.isArray(session.resources)) {
       const res = session.resources.find(
-        r => r.url === resourceId || (r.type === resourceType && r.url === resourceId)
+        r => r.url === resourceId || r.title === resourceId || (r.type === resourceType && (r.url === resourceId || r.title === resourceId))
       );
       if (res) {
         title = res.title || '';
@@ -36,10 +37,8 @@ class FlashcardService {
       const meta = session.metadata;
       if (resourceType === 'pdf') {
         const pdf = meta.pdf || {};
-        if (pdf.pdfFilename === resourceId || pdf.filename === resourceId || meta.pdfFilename === resourceId) {
-          content = pdf.extractedText || meta.extractedText || '';
-          title = pdf.filename || pdf.pdfFilename || '';
-        }
+        content = pdf.extractedText || meta.extractedText || '';
+        title = pdf.filename || pdf.pdfFilename || '';
       } else if (resourceType === 'youtube') {
         const yt = meta.youtube || meta.video || {};
         if (yt.videoUrl === resourceId || yt.url === resourceId || meta.youtubeUrl === resourceId) {
@@ -135,7 +134,34 @@ class FlashcardService {
     }
 
     // 4. Extract content
-    const { content, title } = this.getResourceContent(session, resourceId, resourceType);
+    let { content, title } = this.getResourceContent(session, resourceId, resourceType);
+    if (resourceType === 'pdf' && (!content || !content.trim())) {
+      const pdfMeta = session.metadata?.pdf || {};
+      const fileData = pdfMeta.fileData || (session.resources?.find(r => r.type === 'pdf')?.data?.fileData);
+      if (fileData) {
+        logger.info(`[Flashcard Engine] Auto-extracting empty PDF text...`);
+        const extractedText = await pdfExtractorService.extractTextFromBase64(fileData);
+        if (extractedText) {
+          if (session.metadata?.pdf) {
+            session.metadata.pdf.extractedText = extractedText;
+            session.markModified('metadata');
+          }
+          if (session.resources) {
+            session.resources.forEach(r => {
+              if (r.type === 'pdf') {
+                if (!r.data) r.data = {};
+                r.data.extractedText = extractedText;
+              }
+            });
+            session.markModified('resources');
+          }
+          await session.save();
+          content = extractedText;
+          title = pdfMeta.filename || 'PDF Document';
+        }
+      }
+    }
+
     if (!content || !content.trim()) {
       throw ApiError.badRequest('No learning material found for this resource. Please make sure the content has been processed or transcript extracted.');
     }

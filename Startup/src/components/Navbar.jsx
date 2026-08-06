@@ -107,8 +107,8 @@ export default function Navbar() {
             <div className="profile-menu" ref={dropdownRef}>
               <button type="button" className="profile-button" onClick={() => setIsDropdownOpen((prev) => !prev)} aria-haspopup="true" aria-expanded={isDropdownOpen}>
                 <span className="profile-avatar">
-                  {user.profileImage ? (
-                    <img src={user.profileImage} alt={user.name || user.username} />
+                  {user.profileImage || user.avatar ? (
+                    <img src={user.profileImage || user.avatar} alt={user.name || user.username} />
                   ) : (
                     <span>{(user.name || user.username || 'U').charAt(0).toUpperCase()}</span>
                   )}
@@ -122,8 +122,8 @@ export default function Navbar() {
                 <div className="profile-dropdown" role="menu" aria-label="Profile menu">
                   <div className="dropdown-header">
                     <div className="dropdown-avatar">
-                      {user.profileImage ? (
-                        <img src={user.profileImage} alt={user.name || user.username} />
+                      {user.profileImage || user.avatar ? (
+                        <img src={user.profileImage || user.avatar} alt={user.name || user.username} />
                       ) : (
                         <span>{(user.name || user.username || 'U').charAt(0).toUpperCase()}</span>
                       )}

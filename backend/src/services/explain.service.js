@@ -3,12 +3,13 @@ import aiProviderService from './ai/aiProvider.service.js';
 import ApiError from '../utils/ApiError.js';
 import logger from '../config/logger.js';
 import mongoose from 'mongoose';
+import pdfExtractorService from './pdf/pdfExtractor.service.js';
 
 class ExplainService {
   /**
    * Explain a concept: AI Reuse First flow -> AI router query -> Cache save
    */
-  async explainConcept({ userId, concept, resourceId, studySessionId, difficulty = 'Medium', mode }) {
+  async explainConcept({ userId, concept, resourceId, resourceType, studySessionId, difficulty = 'Medium', mode }) {
     if (!concept || !resourceId || !studySessionId) {
       throw ApiError.badRequest('Missing concept, resourceId, or studySessionId');
     }
@@ -28,14 +29,66 @@ class ExplainService {
     }
 
     // 2. Find matching resource
-    const resourceIndex = session.resources.findIndex(
-      r => r._id === resourceId || r.url === resourceId
+    let resourceIndex = session.resources.findIndex(
+      r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId
     );
+
+    // If resource is not in array but metadata has it, link it
+    if (resourceIndex === -1 && session.metadata) {
+      const type = resourceType || (session.metadata.activeResourceType || session.metadata.lastTab || 'pdf').toLowerCase();
+      let title = 'Resource';
+      let data = {};
+      if (type === 'pdf' && session.metadata.pdf) {
+        title = session.metadata.pdf.filename || 'PDF Document';
+        data = session.metadata.pdf;
+      } else if (type === 'youtube' && session.metadata.youtube) {
+        title = session.metadata.youtube.title || 'YouTube Video';
+        data = session.metadata.youtube;
+      } else if (type === 'notes' && session.metadata.notes) {
+        title = session.metadata.notes.title || 'Notes';
+        data = session.metadata.notes;
+      }
+
+      session.resources.push({
+        type,
+        url: resourceId,
+        title,
+        data,
+        addedAt: new Date(),
+        updatedAt: new Date()
+      });
+      await session.save();
+      resourceIndex = session.resources.length - 1;
+    }
+
     if (resourceIndex === -1) {
       throw ApiError.notFound('Resource not found in session');
     }
 
     const resource = session.resources[resourceIndex];
+
+    // Auto-extract text if PDF and empty
+    if (resource.type === 'pdf' && (!resource.data?.extractedText || !resource.data.extractedText.trim())) {
+      const pdfMeta = session.metadata?.pdf || {};
+      const fileData = pdfMeta.fileData || resource.data?.fileData;
+      if (fileData) {
+        logger.info(`[Explain Engine] Auto-extracting empty PDF text...`);
+        const extractedText = await pdfExtractorService.extractTextFromBase64(fileData);
+        if (extractedText) {
+          if (session.metadata?.pdf) {
+            session.metadata.pdf.extractedText = extractedText;
+            session.markModified('metadata');
+          }
+          resource.data = {
+            ...(resource.data || {}),
+            extractedText
+          };
+          session.resources[resourceIndex] = resource;
+          session.markModified('resources');
+          await session.save();
+        }
+      }
+    }
 
     // Ensure ai container exists on resource
     if (!resource.ai) resource.ai = {};
@@ -104,6 +157,24 @@ class ExplainService {
       const match = resource.data.learningObjectives.find(o => o.toLowerCase().includes(concept.toLowerCase()));
       if (match) {
         backgroundContext += `[Learning objective context]: ${match}\n`;
+      }
+    }
+
+    // E. Ground with raw text content directly
+    if (resource.type === 'pdf') {
+      const pdfText = resource.data?.extractedText || session.metadata?.pdf?.extractedText || '';
+      if (pdfText) {
+        backgroundContext += `[Extracted PDF text content]:\n${pdfText.slice(0, 4000)}\n`;
+      }
+    } else if (resource.type === 'notes') {
+      const notesText = resource.data?.content || session.metadata?.notes?.content || '';
+      if (notesText) {
+        backgroundContext += `[Notes content]:\n${notesText.slice(0, 4000)}\n`;
+      }
+    } else if (resource.type === 'youtube') {
+      const ytTranscript = resource.data?.transcript || session.metadata?.youtube?.transcript || '';
+      if (ytTranscript) {
+        backgroundContext += `[Video transcript content]:\n${ytTranscript.slice(0, 4000)}\n`;
       }
     }
 
@@ -207,10 +278,10 @@ class ExplainService {
     }
 
     const resource = session.resources.find(
-      r => r._id === resourceId || r.url === resourceId
+      r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId
     );
     if (!resource) {
-      throw ApiError.notFound('Resource not found');
+      return [];
     }
 
     return resource.ai?.explanations || [];
@@ -230,7 +301,7 @@ class ExplainService {
     }
 
     const resourceIndex = session.resources.findIndex(
-      r => r._id === resourceId || r.url === resourceId
+      r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId
     );
     if (resourceIndex === -1) {
       throw ApiError.notFound('Resource not found in session');
