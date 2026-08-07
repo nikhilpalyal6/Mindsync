@@ -8,9 +8,9 @@ import PDFViewerPanel from './PDFViewerPanel';
 import VideoViewerPanel from './VideoViewerPanel';
 import NotesPanel from './NotesPanel';
 import MindMapPanel from './MindMapPanel';
-import AIChatSidebar from './AIChatSidebar';
+
 import ResourceToolbar from './ResourceToolbar';
-import PDFChatPanel from './PDFChatPanel';
+import ChatLayout from '../chat/ChatLayout';
 
 import SummaryPanel from '../summary/SummaryPanel';
 import FlashcardPanel from '../summary/FlashcardPanel';
@@ -30,10 +30,10 @@ export const StudyWorkspaceLayout = React.memo(({
   viewerState,
   filterState
 }) => {
-  const [isAiOpen, setIsAiOpen] = useState(false);
+  const [isAiOpen, setIsAiOpen] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { activeTab, switchTab } = tabState;
-  const { activeResource, handleSelectResource, handleSessionResourceUpdate } = resourceState;
+  const { activeResource, handleSelectResource, handleSessionResourceUpdate, handleDeleteResource, handleRenameResource, handleReplaceResource } = resourceState;
 
   const handleTabChange = (tabId) => {
     if (['overview', 'sources', 'notes_viewer', 'mindmap'].includes(tabId)) {
@@ -63,111 +63,6 @@ export const StudyWorkspaceLayout = React.memo(({
     }
   }
 
-  const renderCenterContent = () => {
-    switch (activeTab) {
-      case 'overview':
-        return (
-          <WorkspaceHome 
-            session={session}
-            onTabChange={switchTab}
-            activeResource={activeResource}
-            onSelectResource={handleSelectResource}
-            onUploadPdfClick={onUploadPdfClick}
-            onAddVideoClick={onAddVideoClick}
-            onAddNotesClick={onAddNotesClick}
-            onFileChange={onFileChange}
-          />
-        );
-      case 'sources':
-        return (
-          <SourcesPanel 
-            session={session}
-            onSelectResource={handleSelectResource}
-            onSwitchTab={switchTab}
-            filterState={filterState}
-          />
-        );
-      case 'pdf_chat':
-        return (
-          <PDFChatPanel 
-            session={session} 
-            resourceId={resourceId}
-            resourceType={resourceType} 
-          />
-        );
-      case 'pdf_viewer':
-        return <PDFViewerPanel session={session} activeResource={activeResource} />;
-      case 'video_viewer':
-        return (
-          <VideoViewerPanel 
-            session={session}
-            activeResource={activeResource}
-            onBack={() => switchTab('sources')}
-            onSwitchTab={switchTab}
-            onSessionUpdate={handleSessionResourceUpdate}
-          />
-        );
-      case 'notes_viewer':
-        return (
-          <NotesPanel 
-            session={session}
-            activeResource={activeResource}
-            onSessionUpdate={handleSessionResourceUpdate}
-          />
-        );
-      case 'summaries':
-        return (
-          <SummaryPanel 
-            session={session} 
-            resourceId={resourceId}
-            resourceType={resourceType} 
-          />
-        );
-      case 'flashcards':
-        return (
-          <FlashcardPanel 
-            session={session} 
-            resourceId={resourceId}
-            resourceType={resourceType} 
-          />
-        );
-      case 'quiz':
-        return (
-          <QuizPanel 
-            session={session} 
-            resourceId={resourceId}
-            resourceType={resourceType} 
-          />
-        );
-      case 'explain':
-        return (
-          <ExplainPanel 
-            session={session} 
-            resourceId={resourceId}
-            resourceType={resourceType} 
-          />
-        );
-      case 'notes':
-        return (
-          <NotesPanel 
-            session={session}
-            onSessionUpdate={handleSessionResourceUpdate}
-          />
-        );
-      case 'mindmap':
-        return <MindMapPanel session={session} />;
-      default:
-        return (
-          <WorkspaceHome 
-            session={session} 
-            onTabChange={switchTab} 
-            onSelectResource={handleSelectResource} 
-            onFileChange={onFileChange} 
-          />
-        );
-    }
-  };
-
   return (
     <div className="sw-layout">
       {/* 1. Permanent Left Sidebar (Resource Explorer) */}
@@ -180,6 +75,9 @@ export const StudyWorkspaceLayout = React.memo(({
         onSwitchTab={switchTab}
         isCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        onDeleteResource={handleDeleteResource}
+        onRenameResource={handleRenameResource}
+        onReplaceResource={handleReplaceResource}
       />
 
       {/* 2. Permanent Center Panel */}
@@ -201,26 +99,94 @@ export const StudyWorkspaceLayout = React.memo(({
         />
 
         {/* Secondary Resource Toolbar */}
-        {activeResource && !['overview', 'mindmap'].includes(activeTab) && (
-          <ResourceToolbar 
-            activeResource={activeResource}
-            activeTab={activeTab}
-            onTabChange={switchTab}
-          />
-        )}
+        <ResourceToolbar 
+          activeResource={activeResource}
+          activeTab={activeTab}
+          onTabChange={switchTab}
+        />
 
-        {/* Dynamic Center Contents */}
+        {/* Dynamic Center Contents (Permanently Mounted for state preservation) */}
         <div className="sw-center-content">
-          {renderCenterContent()}
+          {/* 1. Overview */}
+          <div style={{ display: (activeTab === 'overview' || !['sources', 'pdf_chat', 'video_chat', 'pdf_viewer', 'video_viewer', 'summaries', 'flashcards', 'quiz', 'explain', 'notes', 'notes_viewer', 'mindmap'].includes(activeTab)) ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
+            <WorkspaceHome 
+              session={session}
+              onTabChange={switchTab}
+              activeResource={activeResource}
+              onSelectResource={handleSelectResource}
+              onUploadPdfClick={onUploadPdfClick}
+              onAddVideoClick={onAddVideoClick}
+              onAddNotesClick={onAddNotesClick}
+              onFileChange={onFileChange}
+            />
+          </div>
+
+          {/* 2. Sources */}
+          <div style={{ display: activeTab === 'sources' ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
+            <SourcesPanel 
+              session={session}
+              onSelectResource={handleSelectResource}
+              onSwitchTab={switchTab}
+              filterState={filterState}
+              onDeleteResource={handleDeleteResource}
+              onRenameResource={handleRenameResource}
+              onReplaceResource={handleReplaceResource}
+              onUploadPdfClick={onUploadPdfClick}
+              onAddVideoClick={onAddVideoClick}
+              onAddNotesClick={onAddNotesClick}
+            />
+          </div>
+
+          {/* 3. AI Chat */}
+          <div style={{ display: (activeTab === 'pdf_chat' || activeTab === 'video_chat') ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden', padding: '24px', boxSizing: 'border-box' }}>
+            <ChatLayout session={session} activeResource={activeResource} />
+          </div>
+
+          {/* 4. PDF Viewer */}
+          <div style={{ display: activeTab === 'pdf_viewer' ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden' }}>
+            <PDFViewerPanel session={session} activeResource={activeResource} />
+          </div>
+
+          {/* 5. Video Viewer */}
+          <div style={{ display: activeTab === 'video_viewer' ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden' }}>
+            <VideoViewerPanel session={session} activeResource={activeResource} />
+          </div>
+
+          {/* 6. Summary */}
+          <div style={{ display: activeTab === 'summaries' ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
+            <SummaryPanel session={session} resourceId={resourceId} resourceType={resourceType} />
+          </div>
+
+          {/* 7. Flashcards */}
+          <div style={{ display: activeTab === 'flashcards' ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
+            <FlashcardPanel session={session} resourceId={resourceId} resourceType={resourceType} />
+          </div>
+
+          {/* 8. Quiz */}
+          <div style={{ display: activeTab === 'quiz' ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
+            <QuizPanel session={session} resourceId={resourceId} resourceType={resourceType} />
+          </div>
+
+          {/* 9. Explain */}
+          <div style={{ display: activeTab === 'explain' ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
+            <ExplainPanel session={session} resourceId={resourceId} resourceType={resourceType} />
+          </div>
+
+          {/* 10. Notes Editor */}
+          <div style={{ display: (activeTab === 'notes' || activeTab === 'notes_viewer') ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
+            <NotesPanel 
+              session={session}
+              activeResource={activeResource}
+              onSessionUpdate={handleSessionResourceUpdate}
+            />
+          </div>
+
+          {/* 11. Mind Map */}
+          <div style={{ display: activeTab === 'mindmap' ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden' }}>
+            <MindMapPanel session={session} />
+          </div>
         </div>
       </div>
-
-      {/* 3. Permanent Right AI Panel (AISidebar wrapping ChatLayout) */}
-      <AIChatSidebar 
-        session={session}
-        collapsed={!isAiOpen}
-        activeResource={activeResource}
-      />
     </div>
   );
 });

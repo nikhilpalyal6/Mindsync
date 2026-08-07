@@ -6,7 +6,16 @@ import FlashcardPanel from './summary/FlashcardPanel';
 import QuizPanel from './summary/QuizPanel';
 import { fetchYouTubeData } from '../services/api';
 
-export default function VideoLearning({ videoUrl, resourceId, session, onBack, onSwitchTab, onSessionUpdate }) {
+export default function VideoLearning({ 
+  videoUrl, 
+  resourceId, 
+  session, 
+  activeResource,
+  activeTab: parentActiveTab,
+  onBack, 
+  onSwitchTab, 
+  onSessionUpdate 
+}) {
   // Helper to find the saved resource inside session.resources using unique resourceId
   const getSavedResource = useCallback(() => {
     if (!session?.resources) return null;
@@ -31,6 +40,23 @@ export default function VideoLearning({ videoUrl, resourceId, session, onBack, o
   const [videoId, setVideoId] = useState('');
   const [activeTab, setActiveTab] = useState('chapters');
   const [activeToolTab, setActiveToolTab] = useState('chat');
+
+  useEffect(() => {
+    if (parentActiveTab) {
+      if (parentActiveTab === 'summaries') {
+        setActiveToolTab('summary');
+      } else if (parentActiveTab === 'flashcards') {
+        setActiveToolTab('flashcards');
+      } else if (parentActiveTab === 'quiz') {
+        setActiveToolTab('quizzes');
+      } else if (parentActiveTab === 'explain') {
+        setActiveToolTab('explain');
+      } else if (parentActiveTab === 'video_viewer') {
+        setActiveToolTab('chat');
+      }
+    }
+  }, [parentActiveTab]);
+
   const [seekSeconds, setSeekSeconds] = useState(0);
   const [transcriptMode, setTranscriptMode] = useState('english'); // 'english' | 'original'
   const [loading, setLoading] = useState(false);
@@ -574,7 +600,7 @@ export default function VideoLearning({ videoUrl, resourceId, session, onBack, o
 
           <div className="vl-ai-content" style={{ height: 'calc(100% - 50px)', overflow: 'hidden' }}>
             {activeToolTab === 'chat' && (
-              <AISidebar session={session} />
+              <AISidebar session={session} activeResource={activeResource} />
             )}
             {activeToolTab === 'summary' && (
               <SummaryPanel session={session} resourceType="youtube" />

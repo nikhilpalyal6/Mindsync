@@ -67,6 +67,62 @@ class StudyController {
     );
   });
 
+  deleteResource = asyncHandler(async (req, res) => {
+    const { sessionId, resourceId } = req.params;
+    const userId = req.user._id;
+
+    const session = await studyService.deleteResource(userId, sessionId, resourceId);
+
+    res.status(HTTP_STATUS.OK).json(
+      ApiResponse.success(session, 'Resource deleted successfully')
+    );
+  });
+
+  getResources = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = req.user._id;
+
+    const resources = await studyService.getResources(userId, sessionId);
+
+    res.status(HTTP_STATUS.OK).json(
+      ApiResponse.success(resources, 'Resources retrieved successfully')
+    );
+  });
+
+  addResource = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = req.user._id;
+
+    const session = await studyService.addResource(userId, sessionId, req.body);
+
+    res.status(HTTP_STATUS.CREATED).json(
+      ApiResponse.success(session, 'Resource added successfully')
+    );
+  });
+
+  renameResource = asyncHandler(async (req, res) => {
+    const { sessionId, resourceId } = req.params;
+    const { title } = req.body;
+    const userId = req.user._id;
+
+    const session = await studyService.renameResource(userId, sessionId, resourceId, title);
+
+    res.status(HTTP_STATUS.OK).json(
+      ApiResponse.success(session, 'Resource renamed successfully')
+    );
+  });
+
+  replaceResource = asyncHandler(async (req, res) => {
+    const { sessionId, resourceId } = req.params;
+    const userId = req.user._id;
+
+    const session = await studyService.replaceResource(userId, sessionId, resourceId, req.body);
+
+    res.status(HTTP_STATUS.OK).json(
+      ApiResponse.success(session, 'Resource replaced successfully')
+    );
+  });
+
   getActivities = asyncHandler(async (req, res) => {
     const userId = req.user._id;
     const activities = await studyService.getActivities(userId);

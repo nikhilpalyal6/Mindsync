@@ -10,7 +10,10 @@ export const WorkspaceSidebar = React.memo(({
   activeTab,
   onSwitchTab,
   isCollapsed,
-  onToggleSidebar
+  onToggleSidebar,
+  onDeleteResource,
+  onRenameResource,
+  onReplaceResource
 }) => {
   return (
     <aside className={`sw-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
@@ -51,6 +54,9 @@ export const WorkspaceSidebar = React.memo(({
         activeTab={activeTab}
         onSwitchTab={onSwitchTab}
         isCollapsed={isCollapsed}
+        onDeleteResource={onDeleteResource}
+        onRenameResource={onRenameResource}
+        onReplaceResource={onReplaceResource}
       />
     </aside>
   );

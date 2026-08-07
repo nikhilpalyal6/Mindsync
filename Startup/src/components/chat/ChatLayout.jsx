@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { RefreshCw, AlertTriangle, HelpCircle, FileText, BookOpen, Layers, Sparkles } from 'lucide-react';
 import ChatHeader from './ChatHeader';
 import ConversationList from './ConversationList';
 import MessageBubble from './MessageBubble';
@@ -31,19 +31,19 @@ export const ChatLayout = React.memo(({ session, activeResource }) => {
 
   if (activeResource) {
     if (activeResource.type === 'pdf') {
-      resourceId = activeResource.title || '';
+      resourceId = activeResource._id || activeResource.title || '';
     } else if (activeResource.type === 'youtube') {
-      resourceId = activeResource.url || activeResource.title || '';
+      resourceId = activeResource._id || activeResource.url || activeResource.title || '';
     } else if (activeResource.type === 'notes') {
       resourceId = activeResource._id || 'default_notes_id';
     }
   } else {
     if (activeResourceType === 'pdf' && session?.metadata?.pdf) {
-      resourceId = session.metadata.pdf.pdfFilename || session.metadata.pdf.filename || '';
+      resourceId = session.metadata.pdf._id || session.metadata.pdf.pdfFilename || session.metadata.pdf.filename || '';
     } else if (activeResourceType === 'youtube' && session?.metadata?.youtube) {
-      resourceId = session.metadata.youtube.videoUrl || '';
+      resourceId = session.metadata.youtube._id || session.metadata.youtube.videoUrl || '';
     } else if (activeResourceType === 'notes') {
-      resourceId = session?.metadata?.notes?.noteId || 'default_notes_id';
+      resourceId = session?.metadata?.notes?._id || session?.metadata?.notes?.noteId || 'default_notes_id';
     }
   }
 
@@ -201,6 +201,7 @@ export const ChatLayout = React.memo(({ session, activeResource }) => {
         sessionTitle={session?.title}
         activeConversation={activeConversation}
         conversations={conversations}
+        activeResource={activeResource}
         onSelectConversation={setActiveConversation}
         onCreateConversation={handleCreateThread}
         onOpenConversationManager={() => setShowManager(true)}
@@ -227,7 +228,29 @@ export const ChatLayout = React.memo(({ session, activeResource }) => {
             </button>
           </div>
         ) : messages.length === 0 ? (
-          <EmptyConversation onSelectPrompt={handleSelectPrompt} />
+          <EmptyConversation 
+            onSelectPrompt={handleSelectPrompt} 
+            resourceType={activeResourceType}
+            prompts={
+              activeResourceType === 'pdf' ? [
+                { label: 'Summarize Chapter 2', icon: FileText },
+                { label: 'Explain Page 18', icon: HelpCircle },
+                { label: 'Generate Flashcards', icon: Layers },
+                { label: 'Create Quiz', icon: BookOpen },
+                { label: 'Find Definitions', icon: Sparkles },
+                { label: 'Extract Important Topics', icon: Sparkles }
+              ] : activeResourceType === 'youtube' ? [
+                { label: 'Summarize video', icon: FileText },
+                { label: 'Explain the core concept', icon: HelpCircle },
+                { label: 'Generate practice quiz', icon: BookOpen },
+                { label: 'Extract chapters summary', icon: Layers }
+              ] : [
+                { label: 'Summarize notes', icon: FileText },
+                { label: 'Explain note concepts', icon: HelpCircle },
+                { label: 'Create revision quiz', icon: BookOpen }
+              ]
+            }
+          />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
             {messages.map((msg, i) => (

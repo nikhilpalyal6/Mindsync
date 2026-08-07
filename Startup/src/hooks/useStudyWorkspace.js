@@ -6,8 +6,14 @@ import {
   createStudySession, 
   updateStudySession, 
   deleteStudySession, 
-  getStudyActivities 
+  getStudyActivities,
+  deleteResource,
+  getResources,
+  addResource,
+  renameResource,
+  replaceResource
 } from '../services/api';
+import { showToast } from '../components/Toast';
 
 // Hook for Workspace Sessions state
 export function useWorkspaceState() {
@@ -249,9 +255,37 @@ export function useResourceState(activeSession, setActiveSession, setSessions) {
     return (activeSession?.resources || []).filter(r => r.type === 'notes');
   }, [activeSession?.resources]);
 
-  const handleSelectResource = useCallback((resource) => {
+  const handleSelectResource = useCallback(async (resource) => {
     setActiveResource(resource);
-  }, []);
+    if (!activeSession || !resource) return;
+
+    try {
+      const typeMap = {
+        pdf: 'pdf',
+        youtube: 'youtube',
+        notes: 'notes'
+      };
+      const activeType = typeMap[resource.type] || 'pdf';
+      
+      const updatedMeta = {
+        ...(activeSession.metadata || {}),
+        activeResourceType: activeType,
+        lastTab: activeType
+      };
+
+      const res = await updateStudySession(activeSession._id, {
+        metadata: updatedMeta
+      });
+      
+      if (res) {
+        const fullSession = (res.success && res.data) ? res.data : res;
+        setActiveSession(fullSession);
+        setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+      }
+    } catch (err) {
+      console.error('Failed to update active resource type on server:', err);
+    }
+  }, [activeSession, setActiveSession, setSessions]);
 
   const handleSessionResourceUpdate = useCallback((updatedResource) => {
     if (!activeSession || !updatedResource?._id) return;
@@ -273,6 +307,116 @@ export function useResourceState(activeSession, setActiveSession, setSessions) {
     setSessions(prev => prev.map(s => s._id === updatedSession._id ? updatedSession : s));
   }, [activeSession, setActiveSession, setSessions]);
 
+  const handleDeleteResource = useCallback(async (resource, activeTab, switchTab) => {
+    if (!activeSession || !resource) return;
+    
+    // Double confirmation dialog
+    if (!window.confirm(`Delete "${resource.title}"?\nThis action cannot be undone.`)) return;
+
+    try {
+      const res = await deleteResource(activeSession._id, resource._id || resource.url);
+      if (res) {
+        const fullSession = (res.success && res.data) ? res.data : res;
+        
+        // Update states reactively immediately (No Page Refresh Required!)
+        setActiveSession(fullSession);
+        setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+
+        // Check if the deleted resource was currently open
+        const isCurrentlyOpen = activeResource && (
+          activeResource._id === resource._id || 
+          activeResource.url === resource.url || 
+          activeResource.title === resource.title
+        );
+
+        if (isCurrentlyOpen) {
+          setActiveResource(null);
+          // Redirect if currently open
+          switchTab('sources');
+        }
+
+        // Show success toast
+        showToast(`${resource.type === 'pdf' ? 'PDF' : resource.type === 'youtube' ? 'Video' : 'Resource'} deleted successfully.`, 'success');
+      }
+    } catch (err) {
+      console.error('Failed to delete resource:', err);
+      showToast('Unable to delete resource.', 'error');
+    }
+  }, [activeSession, activeResource, setActiveSession, setSessions]);
+
+  const handleAddResource = useCallback(async (type, url, title, data) => {
+    if (!activeSession) return;
+    try {
+      const res = await addResource(activeSession._id, { type, url, title, data });
+      if (res) {
+        const fullSession = (res.success && res.data) ? res.data : res;
+        setActiveSession(fullSession);
+        setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+        showToast(`${type === 'pdf' ? 'PDF' : type === 'youtube' ? 'Video' : 'Resource'} uploaded successfully.`, 'success');
+        return fullSession;
+      }
+    } catch (err) {
+      console.error('Failed to add resource:', err);
+      showToast('Unable to add resource.', 'error');
+    }
+  }, [activeSession, setActiveSession, setSessions]);
+
+  const handleRenameResource = useCallback(async (resourceId, newTitle) => {
+    if (!activeSession) return;
+    try {
+      const res = await renameResource(activeSession._id, resourceId, newTitle);
+      if (res) {
+        const fullSession = (res.success && res.data) ? res.data : res;
+        
+        // Update states reactively immediately (No Page Refresh Required!)
+        setActiveSession(fullSession);
+        setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+
+        // If the renamed resource is currently active/selected, update its title reactively
+        if (activeResource && (activeResource._id === resourceId || activeResource.url === resourceId || activeResource.title === resourceId)) {
+          const updatedRes = fullSession.resources?.find(r => r._id === resourceId || r.title === newTitle);
+          if (updatedRes) {
+            setActiveResource(updatedRes);
+          }
+        }
+        
+        showToast('Resource renamed successfully.', 'success');
+        return fullSession;
+      }
+    } catch (err) {
+      console.error('Failed to rename resource:', err);
+      showToast('Unable to rename resource.', 'error');
+    }
+  }, [activeSession, activeResource, setActiveSession, setSessions]);
+
+  const handleReplaceResource = useCallback(async (resourceId, { url, title, data }) => {
+    if (!activeSession) return;
+    try {
+      const res = await replaceResource(activeSession._id, resourceId, { url, title, data });
+      if (res) {
+        const fullSession = (res.success && res.data) ? res.data : res;
+        
+        // Update states reactively immediately (No Page Refresh Required!)
+        setActiveSession(fullSession);
+        setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+
+        // If the replaced resource is currently active/selected, update its content reactively
+        if (activeResource && (activeResource._id === resourceId || activeResource.url === resourceId || activeResource.title === resourceId)) {
+          const updatedRes = fullSession.resources?.find(r => r._id === resourceId || r.url === url);
+          if (updatedRes) {
+            setActiveResource(updatedRes);
+          }
+        }
+
+        showToast('Resource replaced successfully.', 'success');
+        return fullSession;
+      }
+    } catch (err) {
+      console.error('Failed to replace resource:', err);
+      showToast('Unable to replace resource.', 'error');
+    }
+  }, [activeSession, activeResource, setActiveSession, setSessions]);
+
   return {
     activeResource,
     setActiveResource,
@@ -280,7 +424,11 @@ export function useResourceState(activeSession, setActiveSession, setSessions) {
     videos,
     notes,
     handleSelectResource,
-    handleSessionResourceUpdate
+    handleSessionResourceUpdate,
+    handleDeleteResource,
+    handleAddResource,
+    handleRenameResource,
+    handleReplaceResource
   };
 }
 

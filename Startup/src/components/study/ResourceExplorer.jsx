@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   FileText, 
   Video, 
@@ -8,14 +8,16 @@ import {
   ChevronDown, 
   ChevronRight, 
   Search, 
-  MoreVertical, 
   Trash2, 
-  Sparkles,
   Map,
-  CheckCircle2,
-  AlertCircle
+  Edit2,
+  Upload
 } from 'lucide-react';
-import { updateStudySession } from '../../services/api';
+import { pdfjs } from 'react-pdf';
+import { showToast } from '../../components/Toast';
+
+// Configure pdfjs worker
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export const ResourceExplorer = React.memo(({ 
   session, 
@@ -23,7 +25,10 @@ export const ResourceExplorer = React.memo(({
   onSelectResource,
   activeTab,
   onSwitchTab,
-  isCollapsed
+  isCollapsed,
+  onDeleteResource,
+  onRenameResource,
+  onReplaceResource
 }) => {
   const [expanded, setExpanded] = useState({
     pdf: true,
@@ -35,7 +40,10 @@ export const ResourceExplorer = React.memo(({
   });
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeMenuId, setActiveMenuId] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [tempTitle, setTempTitle] = useState('');
+  const [replacingId, setReplacingId] = useState(null);
+  const replaceInputRef = useRef(null);
 
   const toggleSection = (section) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
@@ -58,37 +66,93 @@ export const ResourceExplorer = React.memo(({
   // Handle resource deletion
   const handleDeleteResource = async (resource, e) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete "${resource.title}"?`)) return;
+    e.preventDefault();
+    if (onDeleteResource) {
+      await onDeleteResource(resource, activeTab, onSwitchTab);
+    }
+  };
 
-    try {
-      const updatedResources = resources.filter(r => r._id !== resource._id);
-      const updatedMeta = { ...session.metadata };
-      
-      if (resource.type === 'pdf') {
-        updatedMeta.pdf = null;
-      } else if (resource.type === 'youtube') {
-        updatedMeta.youtube = null;
-      } else if (resource.type === 'notes') {
-        updatedMeta.notes = null;
+  // Handle inline rename submit
+  const handleRenameSubmit = async (resourceId) => {
+    if (!tempTitle.trim()) {
+      setRenamingId(null);
+      return;
+    }
+    const titleToSave = tempTitle.trim();
+    setRenamingId(null);
+    if (onRenameResource) {
+      await onRenameResource(resourceId, titleToSave);
+    }
+  };
+
+  // Handle file replacement with client-side text extraction
+  const handleReplaceFileChange = async (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile && replacingId) {
+      if (selectedFile.type !== 'application/pdf') {
+        showToast('Please select a valid PDF document (.pdf)', 'error');
+        return;
       }
 
-      await updateStudySession(session._id, { 
-        resources: updatedResources,
-        metadata: updatedMeta
-      });
+      showToast('Processing replacement PDF...', 'info');
 
-      // Reload page state
-      window.location.reload();
-    } catch (err) {
-      console.error('Failed to delete resource:', err);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result;
+        let extractedText = '';
+        let pageCount = 0;
+
+        try {
+          const arrayBuffer = await selectedFile.arrayBuffer();
+          const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+          const pdfDoc = await loadingTask.promise;
+          pageCount = pdfDoc.numPages;
+          const pagesToRead = Math.min(pageCount, 50);
+
+          for (let pageNum = 1; pageNum <= pagesToRead; pageNum++) {
+            const page = await pdfDoc.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            if (pageText.trim()) {
+              extractedText += `[Page ${pageNum}]\n${pageText}\n\n`;
+            }
+          }
+          extractedText = extractedText.trim();
+        } catch (err) {
+          console.error('[PDF Replacement] Text extraction error:', err);
+        }
+
+        if (onReplaceResource) {
+          await onReplaceResource(replacingId, {
+            url: selectedFile.name,
+            title: selectedFile.name,
+            data: {
+              filename: selectedFile.name,
+              extractedText,
+              pageCount,
+              fileSize: selectedFile.size,
+              fileData: dataUrl,
+              lastOpened: new Date().toISOString()
+            }
+          });
+        }
+
+        setReplacingId(null);
+        if (replaceInputRef.current) {
+          replaceInputRef.current.value = '';
+        }
+      };
+
+      reader.readAsDataURL(selectedFile);
     }
   };
 
   // Helper to open a viewer
   const handleItemClick = (resource) => {
+    if (renamingId) return; // Prevent navigation while renaming
     onSelectResource(resource);
     if (resource.type === 'pdf') {
-      onSwitchTab('pdf_chat');
+      onSwitchTab('pdf_viewer');
     } else if (resource.type === 'youtube') {
       onSwitchTab('video_viewer');
     } else if (resource.type === 'notes') {
@@ -122,22 +186,22 @@ export const ResourceExplorer = React.memo(({
               key={item.id}
               onClick={() => onSwitchTab(item.tab)}
               style={{
-                background: isActive ? 'rgba(255, 255, 255, 0.05)' : 'none',
-                border: 'none',
+                width: '40px',
+                height: '40px',
+                borderRadius: '8px',
+                backgroundColor: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
+                border: isActive ? '1px solid rgba(255,255,255,0.1)' : '1px solid transparent',
                 color: isActive ? '#fff' : 'var(--text-secondary)',
                 cursor: 'pointer',
-                padding: '10px',
-                borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.15s ease'
+                transition: 'all 0.2s ease',
+                padding: 0
               }}
               title={item.label}
-              onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = '#fff'; }}
-              onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = 'var(--text-secondary)'; }}
             >
-              <Icon size={18} style={{ color: isActive ? '' : item.color }} />
+              <Icon size={18} style={{ color: isActive ? item.color : 'inherit' }} />
             </button>
           );
         })}
@@ -146,20 +210,47 @@ export const ResourceExplorer = React.memo(({
   }
 
   return (
-    <div className="explorer-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {/* Search Bar */}
-      <div className="explorer-search-wrapper">
-        <Search size={12} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
-        <input 
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, overflowY: 'auto', minHeight: 0, paddingRight: '4px' }}>
+      
+      {/* Hidden File Input for PDF Replacement */}
+      <input 
+        type="file"
+        ref={replaceInputRef}
+        onChange={handleReplaceFileChange}
+        accept="application/pdf"
+        style={{ display: 'none' }}
+      />
+
+      {/* Search Input */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+        border: '1px solid var(--glass-border)',
+        borderRadius: '6px',
+        padding: '6px 10px',
+        margin: '2px 0 6px 0'
+      }}>
+        <Search size={14} style={{ color: 'var(--text-muted)' }} />
+        <input
           type="text"
-          className="explorer-search-input"
-          placeholder="Filter resources..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Filter resources..."
+          style={{
+            background: 'none',
+            border: 'none',
+            outline: 'none',
+            color: '#fff',
+            fontSize: '13px',
+            width: '100%',
+            fontFamily: 'inherit'
+          }}
         />
       </div>
 
-      {/* PDFs SECTION */}
+      {/* PDF DOCUMENTS SECTION */}
       <div className="explorer-section">
         <div className="section-trigger" onClick={() => toggleSection('pdf')}>
           <div className="trigger-left">
@@ -179,17 +270,94 @@ export const ResourceExplorer = React.memo(({
                   className={`explorer-item ${isSelected ? 'active' : ''}`}
                   onClick={() => handleItemClick(res)}
                 >
-                  <div className="item-left">
+                  <div className="item-left" style={{ flex: 1, minWidth: 0 }}>
                     <FileText size={13} style={{ opacity: 0.7 }} />
-                    <span className="item-title" title={res.title}>{res.title}</span>
-                    <span className="ai-badge-tiny">Ready</span>
+                    {renamingId === res._id ? (
+                      <input
+                        type="text"
+                        value={tempTitle}
+                        onChange={(e) => setTempTitle(e.target.value)}
+                        onBlur={() => handleRenameSubmit(res._id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameSubmit(res._id);
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        autoFocus
+                        style={{
+                          backgroundColor: 'rgba(0,0,0,0.4)',
+                          border: '1px solid #66b8ff',
+                          borderRadius: '4px',
+                          color: '#fff',
+                          fontSize: '13px',
+                          padding: '2px 6px',
+                          width: '100%',
+                          outline: 'none',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <span className="item-title" title={res.title}>{res.title}</span>
+                        <span className="ai-badge-tiny">Ready</span>
+                      </>
+                    )}
                   </div>
                   
-                  <div className="explorer-item-menu">
-                    <button onClick={(e) => handleDeleteResource(res, e)} style={{ color: 'rgba(239, 68, 68, 0.7)', cursor: 'pointer' }} title="Delete">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                  {renamingId !== res._id && (
+                    <div className="explorer-item-menu" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setRenamingId(res._id);
+                          setTempTitle(res.title);
+                        }}
+                        style={{ background: 'none', border: 'none', padding: '4px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}
+                        title="Rename"
+                      >
+                        <Edit2 size={11} />
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setReplacingId(res._id);
+                          replaceInputRef.current?.click();
+                        }}
+                        style={{ background: 'none', border: 'none', padding: '4px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}
+                        title="Replace File"
+                      >
+                        <Upload size={11} />
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={(e) => handleDeleteResource(res, e)} 
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          padding: '4px',
+                          margin: 0,
+                          color: 'rgba(239, 68, 68, 0.8)', 
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s ease'
+                        }} 
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        title="Delete"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -220,17 +388,80 @@ export const ResourceExplorer = React.memo(({
                   className={`explorer-item ${isSelected ? 'active' : ''}`}
                   onClick={() => handleItemClick(res)}
                 >
-                  <div className="item-left">
+                  <div className="item-left" style={{ flex: 1, minWidth: 0 }}>
                     <Video size={13} style={{ opacity: 0.7 }} />
-                    <span className="item-title" title={res.title}>{res.title}</span>
-                    <span className="ai-badge-tiny">Ready</span>
+                    {renamingId === res._id ? (
+                      <input
+                        type="text"
+                        value={tempTitle}
+                        onChange={(e) => setTempTitle(e.target.value)}
+                        onBlur={() => handleRenameSubmit(res._id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameSubmit(res._id);
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        autoFocus
+                        style={{
+                          backgroundColor: 'rgba(0,0,0,0.4)',
+                          border: '1px solid #66b8ff',
+                          borderRadius: '4px',
+                          color: '#fff',
+                          fontSize: '13px',
+                          padding: '2px 6px',
+                          width: '100%',
+                          outline: 'none',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <span className="item-title" title={res.title}>{res.title}</span>
+                        <span className="ai-badge-tiny">Ready</span>
+                      </>
+                    )}
                   </div>
                   
-                  <div className="explorer-item-menu">
-                    <button onClick={(e) => handleDeleteResource(res, e)} style={{ color: 'rgba(239, 68, 68, 0.7)', cursor: 'pointer' }} title="Delete">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                  {renamingId !== res._id && (
+                    <div className="explorer-item-menu" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setRenamingId(res._id);
+                          setTempTitle(res.title);
+                        }}
+                        style={{ background: 'none', border: 'none', padding: '4px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}
+                        title="Rename"
+                      >
+                        <Edit2 size={11} />
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={(e) => handleDeleteResource(res, e)} 
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          padding: '4px',
+                          margin: 0,
+                          color: 'rgba(239, 68, 68, 0.8)', 
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s ease'
+                        }} 
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        title="Delete"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -261,16 +492,77 @@ export const ResourceExplorer = React.memo(({
                   className={`explorer-item ${isSelected ? 'active' : ''}`}
                   onClick={() => handleItemClick(res)}
                 >
-                  <div className="item-left">
+                  <div className="item-left" style={{ flex: 1, minWidth: 0 }}>
                     <BookOpen size={13} style={{ opacity: 0.7 }} />
-                    <span className="item-title" title={res.title}>{res.title}</span>
+                    {renamingId === res._id ? (
+                      <input
+                        type="text"
+                        value={tempTitle}
+                        onChange={(e) => setTempTitle(e.target.value)}
+                        onBlur={() => handleRenameSubmit(res._id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameSubmit(res._id);
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                        autoFocus
+                        style={{
+                          backgroundColor: 'rgba(0,0,0,0.4)',
+                          border: '1px solid #66b8ff',
+                          borderRadius: '4px',
+                          color: '#fff',
+                          fontSize: '13px',
+                          padding: '2px 6px',
+                          width: '100%',
+                          outline: 'none',
+                          fontFamily: 'inherit'
+                        }}
+                      />
+                    ) : (
+                      <span className="item-title" title={res.title}>{res.title}</span>
+                    )}
                   </div>
                   
-                  <div className="explorer-item-menu">
-                    <button onClick={(e) => handleDeleteResource(res, e)} style={{ color: 'rgba(239, 68, 68, 0.7)', cursor: 'pointer' }} title="Delete">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                  {renamingId !== res._id && (
+                    <div className="explorer-item-menu" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setRenamingId(res._id);
+                          setTempTitle(res.title);
+                        }}
+                        style={{ background: 'none', border: 'none', padding: '4px', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}
+                        title="Rename"
+                      >
+                        <Edit2 size={11} />
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={(e) => handleDeleteResource(res, e)} 
+                        style={{ 
+                          background: 'none', 
+                          border: 'none', 
+                          padding: '4px',
+                          margin: 0,
+                          color: 'rgba(239, 68, 68, 0.8)', 
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s ease'
+                        }} 
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        title="Delete"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -343,36 +635,7 @@ export const ResourceExplorer = React.memo(({
         )}
       </div>
 
-      {/* MIND MAPS SECTION */}
-      <div className="explorer-section">
-        <div className="section-trigger" onClick={() => toggleSection('mindmap')}>
-          <div className="trigger-left">
-            {expanded.mindmap ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            <Map size={14} style={{ color: 'var(--accent-green)' }} />
-            <span>Mind Maps</span>
-          </div>
-          <span className="section-count">{resources.length}</span>
-        </div>
-        {expanded.mindmap && (
-          <div className="section-children">
-            {resources.map(res => {
-              const isSelected = activeTab === 'mindmap' && activeResource?._id === res._id;
-              return (
-                <div 
-                  key={`mm-${res._id}`}
-                  className={`explorer-item ${isSelected ? 'active' : ''}`}
-                  onClick={() => handleAiItemClick(res, 'mindmap')}
-                >
-                  <div className="item-left">
-                    <Map size={13} style={{ opacity: 0.7 }} />
-                    <span className="item-title">Map: {res.title}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
     </div>
   );
 });

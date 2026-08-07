@@ -17,6 +17,8 @@ export const PDFViewer = React.memo(({
   onDocumentLoadSuccess,
   onDocumentLoadError,
   onPageChange,
+  onZoomIn,
+  onZoomOut,
   onRetry
 }) => {
   const containerRef = useRef(null);
@@ -128,6 +130,27 @@ export const PDFViewer = React.memo(({
       console.log(`[PDF Page Changed] Scroll detected Page ${currentVisiblePage}`);
     }
   }, [numPages, pageNumber, onPageChange]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          onZoomIn?.();
+        } else {
+          onZoomOut?.();
+        }
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [onZoomIn, onZoomOut]);
 
   const computedWidth = fitMode === 'width' ? containerWidth : undefined;
 

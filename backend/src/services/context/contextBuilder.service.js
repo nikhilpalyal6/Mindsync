@@ -1,5 +1,6 @@
 import StudySession from '../../models/studySession.model.js';
 import AIMessage from '../../models/aiMessage.model.js';
+import mongoose from 'mongoose';
 import logger from '../../config/logger.js';
 
 class ContextBuilderService {
@@ -22,16 +23,60 @@ class ContextBuilderService {
     }
 
     const metadata = session?.metadata || {};
-    const activeResourceType = (metadata.activeResourceType || metadata.lastTab || 'pdf').toLowerCase();
-    
-    logger.info(`[Resource Changed] Active Resource: ${activeResourceType.toUpperCase()}`);
+    let activeResourceType = (metadata.activeResourceType || metadata.lastTab || 'pdf').toLowerCase();
+    let activeResource = null;
 
-    // 2. Base System Persona Prompt
-    const baseSystemPrompt = 
-      'You are MindSync AI, an expert, encouraging, and clear AI learning co-pilot. ' +
-      'Your mission is to explain complex concepts, teach step-by-step, simplify difficult ideas, ' +
-      'provide practical real-world examples, answer questions, and foster an active learning environment. ' +
-      'Format your responses with clean Markdown, clear headings, bullet points, and code blocks where helpful.';
+    // Resolve resource type and resource object directly from the active conversation's resourceId if available
+    if (conversationId) {
+      try {
+        const AIConversation = mongoose.model('AIConversation');
+        const conversation = await AIConversation.findById(conversationId).lean();
+        if (conversation && conversation.resourceId) {
+          // Find resource in study session resources list
+          const foundRes = session?.resources?.find(r => 
+            (r._id && r._id.toString() === conversation.resourceId) || 
+            r.url === conversation.resourceId || 
+            r.title === conversation.resourceId
+          );
+          if (foundRes) {
+            activeResource = foundRes;
+            activeResourceType = foundRes.type.toLowerCase();
+            logger.info(`[Context Builder] Resolved active resource type "${activeResourceType}" from conversation resourceId "${conversation.resourceId}"`);
+          }
+        }
+      } catch (err) {
+        logger.error(`[Context Builder] Error resolving active resource from conversation: ${err.message}`);
+      }
+    }
+
+    logger.info(`[Resource Context] Active Pipeline: ${activeResourceType.toUpperCase()}`);
+
+    // 2. Base System Persona Prompt depending on resource type
+    let baseSystemPrompt = '';
+    if (activeResourceType === 'pdf') {
+      baseSystemPrompt = 
+        'You are MindSync PDF AI.\n' +
+        'The active resource is a PDF document.\n' +
+        'Only answer using the indexed PDF.\n' +
+        'Never mention YouTube.\n' +
+        'Never reference transcripts.\n' +
+        'If the answer is not inside the PDF, clearly say it isn\'t found.\n' +
+        'Format your responses with clean Markdown, clear headings, bullet points, and code blocks where helpful.';
+    } else if (activeResourceType === 'youtube') {
+      baseSystemPrompt = 
+        'You are MindSync Video AI.\n' +
+        'The active resource is a YouTube video.\n' +
+        'Only answer using the transcript.\n' +
+        'Never reference PDFs.\n' +
+        'Format your responses with clean Markdown, clear headings, bullet points, and code blocks where helpful.';
+    } else {
+      baseSystemPrompt = 
+        'You are MindSync Notes AI.\n' +
+        'The active resource is a Markdown Notes document.\n' +
+        'Only answer using the Notes.\n' +
+        'Never reference PDFs or YouTube.\n' +
+        'Format your responses with clean Markdown, clear headings, bullet points, and code blocks where helpful.';
+    }
 
     // 3. Workshop Summary Header (Included for all active resources)
     let workshopSection = '';
@@ -48,16 +93,17 @@ class ContextBuilderService {
     let activeResourceSection = '';
 
     if (activeResourceType === 'pdf') {
-      const pdfData = metadata.pdf || metadata.pdfList || (metadata.pdfFilename ? metadata : null);
+      const pdfData = activeResource?.data || metadata.pdf || metadata.pdfList || (metadata.pdfFilename ? metadata : null);
       activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: PDF DOCUMENT]\n`;
       if (pdfData) {
         activeResourceSection += `- Filename: ${pdfData.filename || pdfData.pdfFilename || 'Document.pdf'}\n`;
         if (pdfData.pageCount) activeResourceSection += `- Total Pages: ${pdfData.pageCount}\n`;
         if (pdfData.pageNumber || pdfData.activePage) activeResourceSection += `- Current Page: ${pdfData.pageNumber || pdfData.activePage}\n`;
         
-        if (pdfData.extractedText && pdfData.extractedText.trim()) {
-          activeResourceSection += `- Extracted PDF Content:\n${pdfData.extractedText.slice(0, 6000)}\n`;
-          logger.info(`[PDF Extracted] Using ${pdfData.extractedText.length} chars of PDF text for AI context`);
+        const text = pdfData.extractedText || '';
+        if (text.trim()) {
+          activeResourceSection += `- Extracted PDF Content:\n${text.slice(0, 6000)}\n`;
+          logger.info(`[PDF Extracted] Using ${text.length} chars of PDF text for AI context`);
         } else {
           activeResourceSection += `- Status: I can see that a PDF is open, but its contents haven't been processed yet.\n`;
         }
@@ -65,7 +111,7 @@ class ContextBuilderService {
         activeResourceSection += `- Status: I can see that a PDF is open, but no PDF file is selected yet.\n`;
       }
     } else if (activeResourceType === 'youtube') {
-      const youtubeData = metadata.youtube || metadata.video || (metadata.youtubeUrl ? metadata : null);
+      const youtubeData = activeResource?.data || metadata.youtube || metadata.video || (metadata.youtubeUrl ? metadata : null);
       activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: YOUTUBE VIDEO]\n`;
       if (youtubeData) {
         activeResourceSection += `- Video Title: ${youtubeData.title || youtubeData.videoTitle || 'Educational Video'}\n`;
@@ -90,7 +136,7 @@ class ContextBuilderService {
         activeResourceSection += `- Status: I can see the video tab is open, but no YouTube video link is loaded yet.\n`;
       }
     } else if (activeResourceType === 'notes') {
-      const notesData = metadata.notes || metadata.notesList || (metadata.noteTitle || metadata.noteContent ? [metadata] : []);
+      const notesData = activeResource?.data || metadata.notes || metadata.notesList || (metadata.noteTitle || metadata.noteContent ? [metadata] : []);
       activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: WORKSHOP NOTES]\n`;
       let hasNoteContent = false;
 

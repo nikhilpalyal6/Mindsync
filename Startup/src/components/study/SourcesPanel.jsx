@@ -16,7 +16,13 @@ export const SourcesPanel = React.memo(({
   session, 
   onSelectResource, 
   onSwitchTab,
-  filterState
+  filterState,
+  onDeleteResource,
+  onRenameResource,
+  onReplaceResource,
+  onUploadPdfClick,
+  onAddVideoClick,
+  onAddNotesClick
 }) => {
   const {
     filterType,
@@ -67,7 +73,7 @@ export const SourcesPanel = React.memo(({
   const handleOpenResource = (res) => {
     onSelectResource(res);
     if (res.type === 'pdf') {
-      onSwitchTab('pdf_chat');
+      onSwitchTab('pdf_viewer');
     } else if (res.type === 'youtube') {
       onSwitchTab('video_viewer');
     } else if (res.type === 'notes') {
@@ -77,23 +83,9 @@ export const SourcesPanel = React.memo(({
 
   const handleDeleteResource = async (res, e) => {
     e.stopPropagation();
-    if (!window.confirm(`Are you sure you want to delete "${res.title}"?`)) return;
-
-    try {
-      const updatedResources = resources.filter(r => r._id !== res._id);
-      const updatedMeta = { ...session.metadata };
-      if (res.type === 'pdf') updatedMeta.pdf = null;
-      if (res.type === 'youtube') updatedMeta.youtube = null;
-      if (res.type === 'notes') updatedMeta.notes = null;
-
-      await updateStudySession(session._id, { 
-        resources: updatedResources,
-        metadata: updatedMeta
-      });
-
-      window.location.reload();
-    } catch (err) {
-      console.error('Failed to delete resource:', err);
+    e.preventDefault();
+    if (onDeleteResource) {
+      await onDeleteResource(res, 'sources', onSwitchTab);
     }
   };
 
@@ -135,6 +127,89 @@ export const SourcesPanel = React.memo(({
         </div>
 
         <div className="sources-controls">
+          {(() => {
+            if (filterType === 'all' || filterType === 'pdf') {
+              return (
+                <button
+                  type="button"
+                  onClick={onUploadPdfClick}
+                  style={{
+                    background: 'var(--accent-blue)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginRight: '6px',
+                    whiteSpace: 'nowrap',
+                    height: '28px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <span>Upload PDF/Docs</span>
+                </button>
+              );
+            } else if (filterType === 'youtube') {
+              return (
+                <button
+                  type="button"
+                  onClick={onAddVideoClick}
+                  style={{
+                    background: 'var(--accent-purple)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginRight: '6px',
+                    whiteSpace: 'nowrap',
+                    height: '28px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <span>Paste YouTube Link</span>
+                </button>
+              );
+            } else if (filterType === 'notes') {
+              return (
+                <button
+                  type="button"
+                  onClick={onAddNotesClick}
+                  style={{
+                    background: 'var(--accent-green)',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    padding: '6px 12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    marginRight: '6px',
+                    whiteSpace: 'nowrap',
+                    height: '28px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <span>Create Notes</span>
+                </button>
+              );
+            }
+            return null;
+          })()}
+
           <div style={{ position: 'relative' }}>
             <input
               type="text"

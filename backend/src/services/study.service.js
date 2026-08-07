@@ -3,6 +3,10 @@ import StudySession from '../models/studySession.model.js';
 import StudyActivity from '../models/studyActivity.model.js';
 import ApiError from '../utils/ApiError.js';
 import resourceService from './resource.service.js';
+import logger from '../config/logger.js';
+import PDFChat from '../models/pdfChat.model.js';
+import AIConversation from '../models/aiConversation.model.js';
+import AIMessage from '../models/aiMessage.model.js';
 
 // Recursive helper to perform deep merges on Mongoose objects/documents
 function deepMerge(target, source) {
@@ -353,6 +357,212 @@ class StudyService {
     });
 
     return { id: sessionId };
+  }
+
+  async getResources(userId, sessionId) {
+    const session = await StudySession.findOne({ _id: sessionId, user: userId }).lean();
+    if (!session) {
+      throw ApiError.notFound('Study session not found or unauthorized');
+    }
+    return session.resources || [];
+  }
+
+  async addResource(userId, sessionId, { type, url, title, data }) {
+    let session = await StudySession.findOne({ _id: sessionId, user: userId });
+    if (!session) {
+      throw ApiError.notFound('Study session not found or unauthorized');
+    }
+    
+    session = await resourceService.linkResourceToSession(session, { type, url, title, data });
+    return await session.save();
+  }
+
+  async renameResource(userId, sessionId, resourceId, newTitle) {
+    if (!newTitle || !newTitle.trim()) {
+      throw ApiError.badRequest('New title is required');
+    }
+
+    const session = await StudySession.findOne({ _id: sessionId, user: userId });
+    if (!session) {
+      throw ApiError.notFound('Study session not found or unauthorized');
+    }
+
+    const resourceIndex = session.resources.findIndex(
+      r => (r._id && r._id.toString() === resourceId) || r.url === resourceId || r.title === resourceId
+    );
+
+    if (resourceIndex === -1) {
+      throw ApiError.notFound('Resource not found in this study session');
+    }
+
+    // Update title
+    session.resources[resourceIndex].title = newTitle.trim();
+    session.resources[resourceIndex].updatedAt = new Date();
+
+    // If active metadata matches, update it too
+    if (session.metadata) {
+      const resource = session.resources[resourceIndex];
+      const type = resource.type;
+      if (type === 'pdf' && session.metadata.pdf) {
+        session.metadata.pdf.filename = newTitle.trim();
+      } else if (type === 'youtube' && session.metadata.youtube) {
+        session.metadata.youtube.title = newTitle.trim();
+      } else if (type === 'notes' && session.metadata.notes) {
+        session.metadata.notes.title = newTitle.trim();
+      }
+    }
+
+    session.markModified('resources');
+    session.markModified('metadata');
+
+    return await session.save();
+  }
+
+  async replaceResource(userId, sessionId, resourceId, { url, title, data }) {
+    if (!url) {
+      throw ApiError.badRequest('Replacement URL/identifier is required');
+    }
+
+    const session = await StudySession.findOne({ _id: sessionId, user: userId });
+    if (!session) {
+      throw ApiError.notFound('Study session not found or unauthorized');
+    }
+
+    const resourceIndex = session.resources.findIndex(
+      r => (r._id && r._id.toString() === resourceId) || r.url === resourceId || r.title === resourceId
+    );
+
+    if (resourceIndex === -1) {
+      throw ApiError.notFound('Resource to replace not found in this study session');
+    }
+
+    const oldResource = session.resources[resourceIndex];
+
+    // Update details in-place
+    session.resources[resourceIndex] = {
+      ...oldResource,
+      url,
+      title: title || oldResource.title,
+      data: data || {},
+      ai: {}, // Clear previous AI contents for new file grounding
+      updatedAt: new Date()
+    };
+
+    // Update active metadata shortcuts if applicable
+    if (session.metadata) {
+      const type = oldResource.type;
+      if (type === 'pdf') {
+        session.metadata.pdf = data || {};
+      } else if (type === 'youtube') {
+        session.metadata.youtube = data || {};
+      } else if (type === 'notes') {
+        session.metadata.notes = data || {};
+      }
+    }
+
+    // Cascade: delete past PDFChat logs, AIConversations and AIMessages for the old resourceId
+    try {
+      await PDFChat.deleteMany({ workspaceId: sessionId, resourceId: resourceId });
+
+      const conversations = await AIConversation.find({ studySession: sessionId, resourceId: resourceId }).lean();
+      const conversationIds = conversations.map(c => c._id);
+      
+      if (conversationIds.length > 0) {
+        await AIMessage.deleteMany({ conversation: { $in: conversationIds } });
+        await AIConversation.deleteMany({ _id: { $in: conversationIds } });
+      }
+    } catch (err) {
+      logger.error(`[Resource Replace Cleanup Error] Failed to cleanup sub-data for replaced resource ${resourceId}: ${err.message}`);
+    }
+
+    session.markModified('resources');
+    session.markModified('metadata');
+
+    return await session.save();
+  }
+
+  async deleteResource(userId, sessionId, resourceId) {
+    const session = await StudySession.findOne({ _id: sessionId, user: userId });
+    if (!session) {
+      throw ApiError.notFound('Study session not found or unauthorized');
+    }
+
+    // Find the resource inside session.resources
+    const resourceIndex = session.resources.findIndex(
+      r => (r._id && r._id.toString() === resourceId) || r.url === resourceId || r.title === resourceId
+    );
+
+    if (resourceIndex === -1) {
+      throw ApiError.notFound('Resource not found in this study session');
+    }
+
+    const resource = session.resources[resourceIndex];
+    
+    // Remove the resource
+    session.resources.splice(resourceIndex, 1);
+
+    // Update metadata if this was the active resource
+    if (session.metadata) {
+      const typeMap = {
+        pdf: 'pdf',
+        youtube: 'youtube',
+        notes: 'notes'
+      };
+      
+      const activeType = typeMap[resource.type] || 'pdf';
+      
+      // If the activeResourceType matches the deleted resource's type, clear the active status
+      if (session.metadata.activeResourceType === activeType || session.metadata.lastTab === activeType) {
+        session.metadata.activeResourceType = '';
+        session.metadata.lastTab = '';
+        
+        // Also clear the active metadata sub-key
+        if (activeType === 'pdf') {
+          session.metadata.pdf = null;
+        } else if (activeType === 'youtube') {
+          session.metadata.youtube = null;
+        } else if (activeType === 'notes') {
+          session.metadata.notes = null;
+        }
+      }
+    }
+
+    // Update counts
+    session.videoCount = session.resources.filter(r => r.type === 'youtube').length;
+    session.youtubeCount = session.videoCount;
+    session.pdfCount = session.resources.filter(r => r.type === 'pdf').length;
+    session.notesCount = session.resources.filter(r => r.type === 'notes').length;
+    session.resourceCount = session.resources.length;
+
+    session.markModified('resources');
+    session.markModified('metadata');
+
+    const savedSession = await session.save();
+
+    // Cleanup associated data asynchronously
+    try {
+      await PDFChat.deleteMany({ workspaceId: sessionId, resourceId: resourceId });
+      
+      const conversations = await AIConversation.find({ studySession: sessionId, resourceId: resourceId }).lean();
+      const conversationIds = conversations.map(c => c._id);
+      
+      if (conversationIds.length > 0) {
+        await AIMessage.deleteMany({ conversation: { $in: conversationIds } });
+        await AIConversation.deleteMany({ _id: { $in: conversationIds } });
+      }
+    } catch (err) {
+      logger.error(`[Resource Cleanup Error] Failed to cleanup sub-data for resource ${resourceId}: ${err.message}`);
+    }
+
+    // Log activity
+    await this.logActivity(userId, {
+      session: sessionId,
+      sessionTitle: session.title,
+      action: 'deleted_resource',
+      details: `Deleted ${resource.type} resource "${resource.title}"`
+    });
+
+    return savedSession;
   }
 
   async getActivities(userId) {

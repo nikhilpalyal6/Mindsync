@@ -51,9 +51,9 @@ body{
   background-color:var(--bg);
   color:var(--text);
   overflow-x: hidden;
-  overflow-y: auto !important;
+  overflow-y: auto;
   box-sizing: border-box;
-  height: auto !important;
+  height: auto;
 }
 
 #root {

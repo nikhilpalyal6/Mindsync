@@ -3,7 +3,7 @@ import { FileText, Upload, Sparkles, CheckCircle } from 'lucide-react';
 import { pdfjs } from 'react-pdf';
 import PDFToolbar from './PDFToolbar';
 import PDFViewer from './PDFViewer';
-import { updateStudySession } from '../../services/api';
+import { updateStudySession, addResource } from '../../services/api';
 import './pdfWorkspace.css';
 
 // Ensure workerSrc is set for text extraction
@@ -12,7 +12,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 // Module-level in-memory cache to preserve valid PDF DataUrls across component unmounts
 const inMemoryPDFCache = new Map();
 
-export const PDFWorkspace = React.memo(({ session }) => {
+export const PDFWorkspace = React.memo(({ session, activeResource }) => {
   const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('');
   const [numPages, setNumPages] = useState(0);
@@ -20,18 +20,23 @@ export const PDFWorkspace = React.memo(({ session }) => {
   const [scale, setScale] = useState(1.0);
   const [fitMode, setFitMode] = useState('page');
   const fileInputRef = useRef(null);
-  const resourceId = session?.metadata?.pdf?.pdfFilename || session?.metadata?.pdf?.filename || fileName || 'pdf_doc';
+  
+  const resourceId = activeResource?.type === 'pdf' 
+    ? (activeResource._id || activeResource.title) 
+    : (session?.metadata?.pdf?.pdfFilename || session?.metadata?.pdf?.filename || fileName || 'pdf_doc');
 
   useEffect(() => {
     window.currentActiveResource = { id: resourceId, type: 'pdf' };
   }, [resourceId]);
 
-  // Restore PDF state from in-memory cache or MongoDB on session mount or session switch
+  // Restore PDF state from activeResource or StudySession on load/session update
   useEffect(() => {
     if (!session?._id) return;
 
-    const pdfMeta = session.metadata?.pdf || {};
-    const savedFileName = pdfMeta.filename || pdfMeta.pdfFilename || '';
+    // Use activeResource if it's a PDF, otherwise fallback to session metadata
+    const isActivePdf = activeResource?.type === 'pdf';
+    const pdfMeta = isActivePdf ? (activeResource.data || {}) : (session.metadata?.pdf || {});
+    const savedFileName = isActivePdf ? (activeResource.title || pdfMeta.filename || pdfMeta.pdfFilename) : (pdfMeta.filename || pdfMeta.pdfFilename || '');
     const savedPage = pdfMeta.pageNumber || 1;
     const savedScale = pdfMeta.scale || 1.0;
     const savedFitMode = pdfMeta.fitMode || 'page';
@@ -39,6 +44,15 @@ export const PDFWorkspace = React.memo(({ session }) => {
     setPageNumber(savedPage);
     setScale(savedScale);
     setFitMode(savedFitMode);
+
+    // If activeResource or metadata has fileData, set it directly!
+    if (pdfMeta?.fileData && typeof pdfMeta.fileData === 'string' && pdfMeta.fileData.startsWith('data:application/pdf')) {
+      setFile(pdfMeta.fileData);
+      setFileName(savedFileName || 'Saved Document.pdf');
+      inMemoryPDFCache.set(session._id, { file: pdfMeta.fileData, fileName: savedFileName });
+      console.log(`[PDF Processing] Restored PDF from data source: ${savedFileName}`);
+      return;
+    }
 
     // 1. Check in-memory cache FIRST (0ms, 100% valid File/DataUrl object)
     const memCached = inMemoryPDFCache.get(session._id);
@@ -63,16 +77,10 @@ export const PDFWorkspace = React.memo(({ session }) => {
       console.warn('[PDF Processing] LocalStorage check failed:', err);
     }
 
-    // 3. Check MongoDB fileData
-    if (pdfMeta.fileData && typeof pdfMeta.fileData === 'string' && pdfMeta.fileData.startsWith('data:application/pdf')) {
-      setFile(pdfMeta.fileData);
-      setFileName(savedFileName || 'Saved Document.pdf');
-      inMemoryPDFCache.set(session._id, { file: pdfMeta.fileData, fileName: savedFileName });
-      console.log(`[PDF Processing] Restored PDF from MongoDB fileData: ${savedFileName}`);
-    } else if (savedFileName) {
+    if (savedFileName) {
       setFileName(savedFileName);
     }
-  }, [session?._id, session?.metadata?.pdf?.lastOpened]);
+  }, [session?._id, activeResource?._id, session?.metadata?.pdf?.lastOpened]);
 
   // Extract readable text from PDF using pdfjs-dist
   const extractPDFText = async (arrayBuffer) => {
@@ -123,7 +131,17 @@ export const PDFWorkspace = React.memo(({ session }) => {
         lastTab: 'pdf'
       };
 
-      await updateStudySession(session._id, { metadata: updatedMeta, pdfCount: Math.max((session.pdfCount || 0), 1) });
+      if (updates.fileData) {
+        await addResource(session._id, {
+          type: 'pdf',
+          url: fileName || 'Document.pdf',
+          title: fileName || 'Document.pdf',
+          data: newPdfMeta
+        });
+      } else {
+        await updateStudySession(session._id, { metadata: updatedMeta, pdfCount: Math.max((session.pdfCount || 0), 1) });
+      }
+      
       if (session.metadata) {
         session.metadata = updatedMeta;
       }
@@ -334,6 +352,8 @@ export const PDFWorkspace = React.memo(({ session }) => {
           onDocumentLoadSuccess={onDocumentLoadSuccess}
           onDocumentLoadError={onDocumentLoadError}
           onPageChange={handlePageChange}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
           onRetry={handleOpenClick}
         />
       ) : (

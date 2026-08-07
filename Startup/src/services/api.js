@@ -444,6 +444,26 @@ export const fetchYouTubeData = async (sessionId, videoUrl) => {
   return await api.post(`/study/${sessionId}/youtube/fetch`, { videoUrl });
 };
 
+export const deleteResource = async (sessionId, resourceId) => {
+  return await api.delete(`/study/${sessionId}/resources/${encodeURIComponent(resourceId)}`);
+};
+
+export const getResources = async (sessionId) => {
+  return await api.get(`/study/${sessionId}/resources`);
+};
+
+export const addResource = async (sessionId, data) => {
+  return await api.post(`/study/${sessionId}/resources`, data);
+};
+
+export const renameResource = async (sessionId, resourceId, title) => {
+  return await api.patch(`/study/${sessionId}/resources/${encodeURIComponent(resourceId)}`, { title });
+};
+
+export const replaceResource = async (sessionId, resourceId, data) => {
+  return await api.put(`/study/${sessionId}/resources/${encodeURIComponent(resourceId)}/replace`, data);
+};
+
 export const generateFlashcards = async (data = {}) => {
   return await api.post('/ai/flashcards/generate', data);
 };

@@ -8,10 +8,15 @@ import {
   createStudySession, 
   updateStudySession, 
   deleteStudySession,
-  getStudyActivities
+  getStudyActivities,
+  addResource
 } from '../services/api'
+import { pdfjs } from 'react-pdf'
 import './studyMode.css'
 import './studyWorkspaceRedesign.css'
+
+// Configure pdfjs worker for text extraction
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 import StudyWorkspaceLayout from '../components/study/StudyWorkspaceLayout'
 import { 
   useWorkspaceState, 
@@ -284,53 +289,108 @@ export default function StudyMode() {
       return
     }
 
-    const fileUrl = URL.createObjectURL(file)
     setUploadError('')
 
-    try {
-      if (activeSession) {
-        const updatedMeta = {
-          ...(activeSession.metadata || {}),
-          pdf: {
-            filename: file.name,
-            pdfFilename: file.name,
-            fileSize: file.size,
-            fileType: file.type,
-            fileData: fileUrl,
-            lastOpened: new Date().toISOString()
-          },
-          activeResourceType: 'pdf',
-          lastTab: 'pdf'
-        };
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      let extractedText = '';
+      let pageCount = 0;
 
-        const res = await updateStudySession(activeSession._id, {
-          metadata: updatedMeta
-        });
-        setActiveSession(res);
-        setSessions(prev => prev.map(s => s._id === res._id ? res : s));
-        setActiveTab('pdf_viewer');
-      } else {
-        const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace'
-        const res = await createWorkspace(sessionTitle, `PDF Document: ${file.name}`)
-        
-        // Add PDF to metadata
-        const updatedMeta = {
-          pdf: {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+        const pdfDoc = await loadingTask.promise;
+        pageCount = pdfDoc.numPages;
+        const pagesToRead = Math.min(pageCount, 50);
+
+        for (let pageNum = 1; pageNum <= pagesToRead; pageNum++) {
+          const page = await pdfDoc.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          if (pageText.trim()) {
+            extractedText += `[Page ${pageNum}]\n${pageText}\n\n`;
+          }
+        }
+        extractedText = extractedText.trim();
+      } catch (err) {
+        console.error('[StudyMode PDF Processing] Text extraction error:', err);
+      }
+
+      try {
+        if (activeSession) {
+          const newPdfMeta = {
             filename: file.name,
             pdfFilename: file.name,
             fileSize: file.size,
             fileType: file.type,
-            fileData: fileUrl,
+            fileData: dataUrl,
+            extractedText,
+            pageCount,
+            pageNumber: 1,
+            scale: 1.0,
+            fitMode: 'page',
             lastOpened: new Date().toISOString()
+          };
+
+          const updatedSession = await addResource(activeSession._id, {
+            type: 'pdf',
+            url: file.name,
+            title: file.name,
+            data: newPdfMeta
+          });
+
+          const fullSession = (updatedSession.success && updatedSession.data) ? updatedSession.data : updatedSession;
+          const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name);
+
+          setActiveSession(fullSession);
+          setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+          if (newlyAddedRes) {
+            handleSelectResource(newlyAddedRes);
           }
-        };
-        const updatedSession = await updateStudySession(res._id, { metadata: updatedMeta });
-        selectSession(updatedSession, () => setActiveTab('pdf_viewer'));
+          setActiveTab('pdf_viewer');
+        } else {
+          const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace';
+          const res = await createWorkspace(sessionTitle, `PDF Document: ${file.name}`);
+          
+          const newPdfMeta = {
+            filename: file.name,
+            pdfFilename: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            fileData: dataUrl,
+            extractedText,
+            pageCount,
+            pageNumber: 1,
+            scale: 1.0,
+            fitMode: 'page',
+            lastOpened: new Date().toISOString()
+          };
+
+          const updatedSession = await addResource(res._id, {
+            type: 'pdf',
+            url: file.name,
+            title: file.name,
+            data: newPdfMeta
+          });
+
+          const fullSession = (updatedSession.success && updatedSession.data) ? updatedSession.data : updatedSession;
+          const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name);
+
+          selectSession(fullSession, () => {
+            if (newlyAddedRes) {
+              handleSelectResource(newlyAddedRes);
+            }
+            setActiveTab('pdf_viewer');
+          });
+        }
+      } catch (err) {
+        console.error('Failed to create resource for PDF:', err);
       }
-    } catch (err) {
-      console.error('Failed to auto-create workspace for PDF:', err)
-    }
-    e.target.value = ''
+    };
+
+    reader.readAsDataURL(file);
+    e.target.value = '';
   }
 
   const handlePasteSubmit = async () => {
@@ -481,30 +541,131 @@ export default function StudyMode() {
   // Fix page layout shift issues
   useEffect(() => {
     document.body.classList.add('study-mode-active');
+    window.scrollTo(0, 0);
+
+    const handleScroll = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+      const mc = document.querySelector('.main-content');
+      if (mc && mc.scrollTop !== 0) {
+        mc.scrollTop = 0;
+      }
+      const ac = document.querySelector('.app-container');
+      if (ac && ac.scrollTop !== 0) {
+        ac.scrollTop = 0;
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       document.body.classList.remove('study-mode-active');
+      window.removeEventListener('scroll', handleScroll);
     };
   }, []);
+
+  // Reset scroll offsets when switching tabs
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    const mc = document.querySelector('.main-content');
+    if (mc) mc.scrollTop = 0;
+    const ac = document.querySelector('.app-container');
+    if (ac) ac.scrollTop = 0;
+  }, [activeTab]);
 
   // If a workspace is active, render the permanent, highly advanced StudyWorkspaceLayout
   if (activeSession) {
     return (
-      <StudyWorkspaceLayout 
-        session={activeSession}
-        onBack={() => setActiveSession(null)}
-        onSessionUpdate={(updatedSession) => {
-          setActiveSession(updatedSession);
-          setSessions(prev => prev.map(s => s._id === updatedSession._id ? updatedSession : s));
-        }}
-        onUploadPdfClick={handleUploadClick}
-        onAddVideoClick={() => setShowPasteModal(true)}
-        onAddNotesClick={handleAddNotes}
-        onFileChange={handleFileChange}
-        tabState={tabState}
-        resourceState={resourceState}
-        viewerState={viewerState}
-        filterState={filterState}
-      />
+      <>
+        <StudyWorkspaceLayout 
+          session={activeSession}
+          onBack={() => setActiveSession(null)}
+          onSessionUpdate={(updatedSession) => {
+            setActiveSession(updatedSession);
+            setSessions(prev => prev.map(s => s._id === updatedSession._id ? updatedSession : s));
+          }}
+          onUploadPdfClick={handleUploadClick}
+          onAddVideoClick={() => setShowPasteModal(true)}
+          onAddNotesClick={handleAddNotes}
+          onFileChange={handleFileChange}
+          tabState={tabState}
+          resourceState={resourceState}
+          viewerState={viewerState}
+          filterState={filterState}
+        />
+
+        {/* Hidden file selector input for workspace upload context */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept=".pdf,application/pdf"
+          style={{ display: 'none' }}
+        />
+
+        {/* Paste URL / Text Modal */}
+        {showPasteModal && (
+          <div className="modal-overlay" onClick={() => setShowPasteModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <div className="modal-header-left">
+                  <div className="modal-icon"><Video size={18} /></div>
+                  <h2 className="modal-title">YouTube, Website, Etc</h2>
+                </div>
+                <button className="modal-close" onClick={() => setShowPasteModal(false)} aria-label="Close">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="modal-body">
+                <div className="paste-url-section">
+                  <p className="modal-instruction">Enter a YouTube Link / Playlist, Website URL, Doc, ArXiv, Etc</p>
+                  <input
+                    type="url"
+                    className="modal-input"
+                    placeholder="https://youtu.be/dQw4w9WgXcQ"
+                    value={pasteUrl}
+                    onChange={(e) => setPasteUrl(e.target.value)}
+                  />
+                </div>
+
+                <div className="modal-divider"><span>or</span></div>
+
+                <div className="paste-text-section">
+                  <div className="paste-text-header">
+                    <div className="modal-icon"><FileText size={18} /></div>
+                    <h3 className="paste-text-title">Paste Text</h3>
+                  </div>
+                  <p className="modal-instruction">Copy and paste text to add as content</p>
+                  <textarea
+                    className="modal-textarea"
+                    placeholder="Paste your notes here"
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    rows="6"
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button className="modal-btn cancel-btn" onClick={() => setShowPasteModal(false)}>
+                  Cancel
+                </button>
+                <button 
+                  className="modal-btn add-btn" 
+                  onClick={handlePasteSubmit} 
+                  disabled={!pasteUrl && !pasteText}
+                >
+                  Add content
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -609,9 +770,16 @@ export default function StudyMode() {
                             style={{ width: '100%', fontSize: '0.85rem', padding: '6px 10px' }}
                           />
                         ) : (
-                          <button
+                          <div
                             className="session-list-item"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => selectSession(session, () => setActiveTab('overview'))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                selectSession(session, () => setActiveTab('overview'));
+                              }
+                            }}
                           >
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
                               📌 {session.title}
@@ -643,7 +811,7 @@ export default function StudyMode() {
                                 🗑️
                               </button>
                             </div>
-                          </button>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -672,46 +840,53 @@ export default function StudyMode() {
                           style={{ width: '100%', fontSize: '0.85rem', padding: '6px 10px' }}
                         />
                       ) : (
-                        <button
-                          className="session-list-item"
-                          onClick={() => selectSession(session, () => setActiveTab('overview'))}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px', minWidth: 0 }}>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px', fontWeight: 600 }}>
-                              {session.title}
-                            </span>
-                            <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>
-                              Opened: {new Date(session.lastOpened || session.createdAt).toLocaleDateString()}
-                            </span>
+                          <div
+                            className="session-list-item"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => selectSession(session, () => setActiveTab('overview'))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                selectSession(session, () => setActiveTab('overview'));
+                              }
+                            }}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px', minWidth: 0 }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px', fontWeight: 600 }}>
+                                {session.title}
+                              </span>
+                              <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)' }}>
+                                Opened: {new Date(session.lastOpened || session.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="session-item-actions">
+                              <button 
+                                className="session-action-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                    setEditingSidebarId(session._id)
+                                    setSidebarTitleText(session.title)
+                                }}
+                                title="Rename Workspace"
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                className="session-action-btn"
+                                onClick={(e) => { e.stopPropagation(); togglePinWorkspace(session); }}
+                                title="Pin Workspace"
+                              >
+                                📌
+                              </button>
+                              <button 
+                                className="session-action-btn delete"
+                                onClick={(e) => { e.stopPropagation(); deleteWorkspace(session._id); }}
+                                title="Delete Workspace"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </div>
-                          <div className="session-item-actions">
-                            <button 
-                              className="session-action-btn"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                  setEditingSidebarId(session._id)
-                                  setSidebarTitleText(session.title)
-                              }}
-                              title="Rename Workspace"
-                            >
-                              ✏️
-                            </button>
-                            <button 
-                              className="session-action-btn"
-                              onClick={(e) => { e.stopPropagation(); togglePinWorkspace(session); }}
-                              title="Pin Workspace"
-                            >
-                              📌
-                            </button>
-                            <button 
-                              className="session-action-btn delete"
-                              onClick={(e) => { e.stopPropagation(); deleteWorkspace(session._id); }}
-                              title="Delete Workspace"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </button>
                       )}
                     </div>
                   ))}

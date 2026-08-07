@@ -23,6 +23,17 @@ router.route('/:sessionId/summary')
 router.route('/:sessionId/youtube/fetch')
   .post(youtubeController.fetchYouTubeData);
 
+router.route('/:sessionId/resources')
+  .get(studyController.getResources)
+  .post(studyController.addResource);
+
+router.route('/:sessionId/resources/:resourceId')
+  .patch(studyController.renameResource)
+  .delete(studyController.deleteResource);
+
+router.route('/:sessionId/resources/:resourceId/replace')
+  .put(studyController.replaceResource);
+
 router.route('/:id')
   .get(studyController.getSessionById)
   .patch(studyController.updateSession)
