@@ -273,6 +273,14 @@ export function useResourceState(activeSession, setActiveSession, setSessions) {
         lastTab: activeType
       };
 
+      if (resource.type === 'pdf' && resource.data) {
+        updatedMeta.pdf = resource.data;
+      } else if (resource.type === 'youtube' && resource.data) {
+        updatedMeta.youtube = resource.data;
+      } else if (resource.type === 'notes' && resource.data) {
+        updatedMeta.notes = resource.data;
+      }
+
       const res = await updateStudySession(activeSession._id, {
         metadata: updatedMeta
       });

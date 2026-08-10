@@ -1,12 +1,15 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 
 class ApiError extends Error {
-  constructor(statusCode, message, errors = [], isOperational = true) {
+  constructor(statusCode, message, errors = [], isOperational = true, code = undefined) {
     super(message);
     this.statusCode = statusCode;
     this.errors = errors;
     this.isOperational = isOperational;
     this.success = false;
+    if (code) {
+      this.code = code;
+    }
 
     Error.captureStackTrace(this, this.constructor);
   }

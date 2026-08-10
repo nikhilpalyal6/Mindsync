@@ -4,6 +4,7 @@ import aiController from '../../controllers/ai.controller.js';
 import flashcardController from '../../controllers/flashcard.controller.js';
 import quizController from '../../controllers/quiz.controller.js';
 import explainController from '../../controllers/explain.controller.js';
+import smartHighlightController from '../../controllers/smartHighlight.controller.js';
 
 const router = Router();
 
@@ -51,5 +52,27 @@ router.route('/explain/:resourceId')
 
 router.route('/explain/:id')
   .patch(explainController.updateExplanationFeedback);
+
+// AI Smart Highlights Routes
+router.route('/smart-highlights/page')
+  .post(smartHighlightController.generatePageSuggestions);
+
+router.route('/smart-highlights/page/regenerate')
+  .post(smartHighlightController.regeneratePageSuggestions);
+
+router.route('/smart-highlights/accept')
+  .post(smartHighlightController.acceptSuggestions);
+
+router.route('/smart-highlights/accept-all')
+  .post(smartHighlightController.acceptSuggestions);
+
+router.route('/smart-highlights/reject')
+  .post(smartHighlightController.rejectSuggestions);
+
+router.route('/smart-highlights/:suggestionId/reject')
+  .post(smartHighlightController.rejectSuggestions);
+
+router.route('/smart-highlights/:resourceId')
+  .get(smartHighlightController.getSuggestions);
 
 export default router;

@@ -38,6 +38,23 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
   const [explanationsList, setExplanationsList] = useState([]);
   const [generatingExplain, setGeneratingExplain] = useState(false);
 
+  const [explanation, setExplanation] = useState(null);
+  const [isExplanationLoading, setIsExplanationLoading] = useState(false);
+  const [explanationError, setExplanationError] = useState(null);
+
+  useEffect(() => {
+    setExplanation(null);
+    setIsExplanationLoading(false);
+    setExplanationError(null);
+    if (questions[currentIndex]) {
+      setSelectedAnswer(questions[currentIndex].selectedAnswer || '');
+      setShowExplanation(questions[currentIndex].attempted || false);
+    } else {
+      setSelectedAnswer('');
+      setShowExplanation(false);
+    }
+  }, [currentIndex]);
+
   const loadExplanations = useCallback(async () => {
     if (!resourceId || !studySessionId) return;
     try {
@@ -305,6 +322,55 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
       });
     } catch (err) {
       console.error('Failed to update question state:', err);
+    }
+  };
+
+  const handleExplainAnswer = async () => {
+    const q = questions[currentIndex];
+    if (!q || !q.attempted) return;
+
+    const concept = q.explanation || q.question;
+    if (!concept || !concept.trim()) {
+      setExplanationError("This question does not contain enough information to generate an explanation.");
+      return;
+    }
+
+    setIsExplanationLoading(true);
+    setExplanationError(null);
+
+    const existing = explanationsList.find(
+      ex => ex.concept.toLowerCase() === concept.toLowerCase()
+    );
+
+    if (existing) {
+      setExplanation(existing);
+      setIsExplanationLoading(false);
+      return;
+    }
+
+    try {
+      const res = await generateExplanation({
+        concept,
+        question: q.question,
+        answer: q.correctAnswer,
+        topic: q.topic || 'General',
+        resourceId,
+        resourceType,
+        studySessionId,
+        difficulty: q.difficulty || 'Medium'
+      });
+
+      if (res && res.concept) {
+        setExplanationsList(prev => [...prev, res]);
+        setExplanation(res);
+      } else {
+        setExplanationError("Unable to explain this answer right now.");
+      }
+    } catch (err) {
+      console.error("Failed to generate quiz explanation:", err);
+      setExplanationError("Unable to explain this answer right now.");
+    } finally {
+      setIsExplanationLoading(false);
     }
   };
 
@@ -1700,55 +1766,10 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
               </span>
 
               <button
-                disabled={generatingExplain}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  const q = questions[currentIndex];
-                  const concept = q?.explanation || q?.question;
-                  if (!concept) return;
-                  
-                  const existing = explanationsList.find(
-                    ex => ex.concept.toLowerCase() === concept.toLowerCase()
-                  );
-                  
-                  if (existing) {
-                    window.dispatchEvent(new CustomEvent('trigger-explain', {
-                      detail: {
-                        concept,
-                        resourceId,
-                        source: 'quiz',
-                        explanationData: existing
-                      }
-                    }));
-                  } else {
-                    setGeneratingExplain(true);
-                    try {
-                      const res = await generateExplanation({
-                        concept,
-                        resourceId,
-                        studySessionId,
-                        difficulty: 'Medium'
-                      });
-                      if (res?.success && res.data) {
-                        setExplanationsList(prev => [...prev, res.data]);
-                        window.dispatchEvent(new CustomEvent('trigger-explain', {
-                          detail: {
-                            concept,
-                            resourceId,
-                            source: 'quiz',
-                            explanationData: res.data
-                          }
-                        }));
-                      }
-                    } catch (err) {
-                      console.error('Failed to generate explanation:', err);
-                    } finally {
-                      setGeneratingExplain(false);
-                    }
-                  }
-                }}
+                disabled={isExplanationLoading}
+                onClick={handleExplainAnswer}
                 style={{
-                  background: generatingExplain 
+                  background: isExplanationLoading 
                     ? 'linear-gradient(135deg, rgba(102, 184, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)' 
                     : 'linear-gradient(135deg, rgba(102, 184, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
                   border: '1px solid rgba(102, 184, 255, 0.35)',
@@ -1757,7 +1778,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                   padding: '8px 18px',
                   fontSize: '0.75rem',
                   fontWeight: 700,
-                  cursor: generatingExplain ? 'not-allowed' : 'pointer',
+                  cursor: isExplanationLoading ? 'not-allowed' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
@@ -1766,14 +1787,14 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                   boxShadow: '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)'
                 }}
                 onMouseOver={(e) => {
-                  if (!generatingExplain) {
+                  if (!isExplanationLoading) {
                     e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 184, 255, 0.35)';
                     e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.6)';
                     e.currentTarget.style.transform = 'translateY(-1px)';
                   }
                 }}
                 onMouseOut={(e) => {
-                  if (!generatingExplain) {
+                  if (!isExplanationLoading) {
                     e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)';
                     e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.35)';
                     e.currentTarget.style.transform = 'none';
@@ -1782,10 +1803,10 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
               >
                 <Sparkles 
                   size={12} 
-                  className={generatingExplain ? "spin-icon" : ""}
+                  className={isExplanationLoading ? "spin-icon" : ""}
                   style={{ color: '#66b8ff' }} 
                 />
-                <span>{generatingExplain ? 'Generating...' : 'Explain Answer'}</span>
+                <span>{isExplanationLoading ? 'Generating...' : 'Explain Answer'}</span>
 
                 {questions[currentIndex] && explanationsList.some(ex => ex.concept.toLowerCase() === (questions[currentIndex].explanation || questions[currentIndex].question || '').toLowerCase()) && (
                   <span style={{
@@ -1804,21 +1825,109 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
               </button>
             </div>
 
-            {/* Explanation details text */}
-            {questions[currentIndex]?.explanation && (
+            {/* Loading state */}
+            {isExplanationLoading && (
               <div style={{
-                padding: '12px',
+                padding: '16px',
                 backgroundColor: 'rgba(255, 255, 255, 0.01)',
                 border: '1px solid rgba(255, 255, 255, 0.05)',
-                borderRadius: '8px'
+                borderRadius: '8px',
+                textAlign: 'center',
+                color: 'rgba(255,255,255,0.6)',
+                fontSize: '0.8rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                <Sparkles size={14} className="spin-icon" style={{ color: '#66b8ff' }} />
+                <span>Generating explanation...</span>
+              </div>
+            )}
+
+            {/* Error state */}
+            {explanationError && !isExplanationLoading && (
+              <div style={{
+                padding: '14px',
+                backgroundColor: 'rgba(248, 113, 113, 0.03)',
+                border: '1px solid rgba(248, 113, 113, 0.15)',
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                alignItems: 'center',
+                textAlign: 'center'
+              }}>
+                <span style={{ fontSize: '0.75rem', color: '#f87171', fontWeight: 600 }}>
+                  {explanationError}
+                </span>
+                <button
+                  onClick={handleExplainAnswer}
+                  style={{
+                    backgroundColor: 'rgba(248, 113, 113, 0.1)',
+                    border: '1px solid rgba(248, 113, 113, 0.25)',
+                    color: '#f87171',
+                    padding: '4px 12px',
+                    borderRadius: '4px',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
+
+            {/* Success state */}
+            {explanation && !isExplanationLoading && (
+              <div style={{
+                padding: '14px',
+                backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Info size={12} style={{ color: '#66b8ff' }} />
                   <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#66b8ff', textTransform: 'uppercase' }}>Explanation Details</span>
                 </div>
-                <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: '1.4' }}>
-                  {questions[currentIndex].explanation}
-                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.75rem', lineHeight: '1.4' }}>
+                  {explanation.simpleExplanation && (
+                    <div>
+                      <p style={{ color: 'rgba(255,255,255,0.85)', margin: 0 }}>
+                        {explanation.simpleExplanation}
+                      </p>
+                    </div>
+                  )}
+
+                  {Array.isArray(explanation.howItWorks) && explanation.howItWorks.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>How it works:</span>
+                      {explanation.howItWorks.map((step, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: '6px', color: 'rgba(255,255,255,0.7)' }}>
+                          <span>•</span>
+                          <span>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {explanation.example && (
+                    <div style={{ borderLeft: '2px solid rgba(255,255,255,0.15)', paddingLeft: '8px', fontStyle: 'italic', color: 'rgba(255,255,255,0.6)' }}>
+                      Example: {explanation.example}
+                    </div>
+                  )}
+
+                  {explanation.remember && (
+                    <div style={{ color: '#66b8ff', fontWeight: 500 }}>
+                      Takeaway: {explanation.remember}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

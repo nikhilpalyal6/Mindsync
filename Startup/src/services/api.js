@@ -48,7 +48,7 @@ const apiRequest = async (endpoint, options = {}) => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       credentials: 'include',
       headers: {
-        'Content-Type': 'application/json',
+        ...(fetchOptions.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...fetchOptions.headers,
       },
       signal: controller.signal,
@@ -456,6 +456,12 @@ export const addResource = async (sessionId, data) => {
   return await api.post(`/study/${sessionId}/resources`, data);
 };
 
+export const uploadPdfResource = async (sessionId, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return await api.post(`/study/${sessionId}/resources/upload-pdf`, formData);
+};
+
 export const renameResource = async (sessionId, resourceId, title) => {
   return await api.patch(`/study/${sessionId}/resources/${encodeURIComponent(resourceId)}`, { title });
 };
@@ -508,6 +514,46 @@ export const sendPDFChatMessage = async (workspaceId, resourceId, message) => {
   return await api.post('/pdf/chat', { workspaceId, resourceId, message });
 };
 
+export const createHighlight = async (data = {}) => {
+  return await api.post('/highlights', data);
+};
+
+export const getHighlights = async (resourceId) => {
+  return await api.get(`/highlights/${encodeURIComponent(resourceId)}`);
+};
+
+export const deleteHighlight = async (highlightId) => {
+  return await api.delete(`/highlights/${encodeURIComponent(highlightId)}`);
+};
+
+export const getSmartHighlights = async (resourceId) => {
+  return await api.get(`/ai/smart-highlights/${encodeURIComponent(resourceId)}`);
+};
+
+export const analyzeSmartHighlightsForPage = async (resourceId, pageNumber, studySessionId) => {
+  return await api.post('/ai/smart-highlights/page', { resourceId, pageNumber, studySessionId });
+};
+
+export const regenerateSmartHighlightsForPage = async (resourceId, pageNumber, studySessionId) => {
+  return await api.post('/ai/smart-highlights/page/regenerate', { resourceId, pageNumber, studySessionId });
+};
+
+export const acceptSmartHighlights = async (resourceId, suggestions) => {
+  return await api.post('/ai/smart-highlights/accept', { resourceId, suggestions });
+};
+
+export const acceptAllSmartHighlights = async (resourceId, suggestions) => {
+  return await api.post('/ai/smart-highlights/accept-all', { resourceId, suggestions });
+};
+
+export const rejectSmartHighlights = async (resourceId, suggestionIds) => {
+  return await api.post('/ai/smart-highlights/reject', { resourceId, suggestionIds });
+};
+
+export const rejectSmartHighlightSingle = async (resourceId, suggestionId) => {
+  return await api.post(`/ai/smart-highlights/${encodeURIComponent(suggestionId)}/reject`, { resourceId });
+};
+
 // General API methods
 export const api = {
   get: (endpoint, options) => apiRequest(endpoint, { method: 'GET', ...options }),
@@ -524,3 +570,79 @@ export const deleteAccount = async (confirmation) => {
     body: JSON.stringify(confirmation),
   })
 }
+
+// --- STUDY PLANNER API ---
+export const createStudyPlan = async (planData) => {
+  return await api.post('/study-plans', planData);
+};
+
+export const getStudyPlans = async (filters = {}) => {
+  const query = new URLSearchParams(filters).toString();
+  const endpoint = query ? `/study-plans?${query}` : '/study-plans';
+  return await api.get(endpoint);
+};
+
+export const getStudyPlan = async (id) => {
+  return await api.get(`/study-plans/${id}`);
+};
+
+export const updateStudyPlan = async (id, planData) => {
+  return await api.patch(`/study-plans/${id}`, planData);
+};
+
+export const deleteStudyPlan = async (id) => {
+  return await api.delete(`/study-plans/${id}`);
+};
+
+export const createStudyTask = async (planId, taskData) => {
+  return await api.post(`/study-plans/${planId}/tasks`, taskData);
+};
+
+export const getStudyPlanTasks = async (planId) => {
+  return await api.get(`/study-plans/${planId}/tasks`);
+};
+
+export const updateStudyTask = async (taskId, taskData) => {
+  return await api.patch(`/study-tasks/${taskId}`, taskData);
+};
+
+export const deleteStudyTask = async (taskId) => {
+  return await api.delete(`/study-tasks/${taskId}`);
+};
+
+export const completeStudyTask = async (taskId) => {
+  return await api.patch(`/study-tasks/${taskId}/complete`);
+};
+
+export const getTodayTasks = async () => {
+  return await api.get('/study-tasks/today');
+};
+
+export const getUpcomingTasks = async () => {
+  return await api.get('/study-tasks/upcoming');
+};
+
+export const generateAIStudyPlan = async (planParams) => {
+  return await api.post('/study-plans/ai/generate', planParams);
+};
+
+export const acceptAIStudyPlan = async (payload) => {
+  return await api.post('/study-plans/ai/accept', payload);
+};
+
+export const getPlanProgress = async (planId, clientDate) => {
+  const query = clientDate ? `?clientDate=${clientDate}` : '';
+  return await api.get(`/study-plans/${planId}/progress${query}`);
+};
+
+export const getAdaptationPreview = async (planId, clientDate) => {
+  return await api.post(`/study-plans/${planId}/adapt/preview`, { clientDate });
+};
+
+export const applyAdaptation = async (planId, payload) => {
+  return await api.post(`/study-plans/${planId}/adapt/apply`, payload);
+};
+
+export const getMindMapByWorkspace = async (workspaceId) => {
+  return await api.get(`/mind-maps/workspace/${workspaceId}`);
+};

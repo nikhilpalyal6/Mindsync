@@ -136,7 +136,7 @@ class StudyService {
     
     // Select only lightweight dashboard fields to optimize payload and network bandwidth
     const result = await StudySession.find(query)
-      .select('_id title description pinned lastOpened pdfCount youtubeCount notesCount flashcardsCount quizCount chatCount progress thumbnail createdAt updatedAt')
+      .select('_id title description pinned lastOpened pdfCount youtubeCount notesCount flashcardsCount quizCount chatCount progress thumbnail createdAt updatedAt resources._id resources.type resources.url resources.title resources.addedAt')
       .sort({ pinned: -1, lastOpened: -1 })
       .lean();
       

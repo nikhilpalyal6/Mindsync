@@ -34,7 +34,7 @@ class PDFExtractorService {
             mimeType: 'application/pdf'
           }
         },
-        { text: "Extract all readable text, formulas, headings, and details from this PDF document. Return ONLY the transcribed text. Do not summarize, do not explain, and do not add any markdown blocks or conversational text." }
+        { text: "Extract all readable text, formulas, headings, and details from this PDF document. For each page, prefix the extracted text with a header line like '[Page X]' where X is the 1-based page number. Return ONLY the transcribed text. Do not summarize, do not explain, and do not add any markdown blocks or conversational text." }
       ];
 
       const result = await model.generateContent(parts);

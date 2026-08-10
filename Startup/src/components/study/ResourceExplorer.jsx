@@ -101,25 +101,58 @@ export const ResourceExplorer = React.memo(({
         const dataUrl = reader.result;
         let extractedText = '';
         let pageCount = 0;
+        let totalPages = 0;
+        let processedPages = 0;
+        let successfulPages = 0;
+        let failedPages = 0;
+        let extractionStatus = 'completed';
+        const pages = [];
 
         try {
           const arrayBuffer = await selectedFile.arrayBuffer();
           const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
           const pdfDoc = await loadingTask.promise;
           pageCount = pdfDoc.numPages;
-          const pagesToRead = Math.min(pageCount, 50);
+          totalPages = pageCount;
 
-          for (let pageNum = 1; pageNum <= pagesToRead; pageNum++) {
-            const page = await pdfDoc.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            if (pageText.trim()) {
-              extractedText += `[Page ${pageNum}]\n${pageText}\n\n`;
+          for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+            try {
+              const page = await pdfDoc.getPage(pageNum);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              
+              pages.push({
+                pageNumber: pageNum,
+                text: pageText,
+                extractionStatus: 'completed',
+                wordCount: pageText.split(/\s+/).filter(Boolean).length
+              });
+
+              if (pageText.trim()) {
+                extractedText += `[Page ${pageNum}]\n${pageText}\n\n`;
+              }
+              successfulPages++;
+            } catch (pageErr) {
+              console.error(`[PDF Replacement Processing] Failed to extract page ${pageNum}:`, pageErr);
+              pages.push({
+                pageNumber: pageNum,
+                text: '',
+                extractionStatus: 'failed',
+                wordCount: 0
+              });
+              failedPages++;
             }
           }
           extractedText = extractedText.trim();
+          processedPages = successfulPages + failedPages;
+          if (processedPages === 0) {
+            extractionStatus = 'failed';
+          } else if (failedPages > 0) {
+            extractionStatus = 'partial';
+          }
         } catch (err) {
           console.error('[PDF Replacement] Text extraction error:', err);
+          extractionStatus = 'failed';
         }
 
         if (onReplaceResource) {
@@ -130,6 +163,12 @@ export const ResourceExplorer = React.memo(({
               filename: selectedFile.name,
               extractedText,
               pageCount,
+              totalPages,
+              processedPages,
+              successfulPages,
+              failedPages,
+              extractionStatus,
+              pages,
               fileSize: selectedFile.size,
               fileData: dataUrl,
               lastOpened: new Date().toISOString()

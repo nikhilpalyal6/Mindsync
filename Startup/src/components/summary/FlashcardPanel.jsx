@@ -12,9 +12,39 @@ import {
   Eye, 
   EyeOff, 
   Check, 
-  Info
+  Info,
+  X
 } from 'lucide-react';
 import { getFlashcards, generateFlashcards, updateFlashcardState, generateExplanation, getExplanations } from '../../services/api';
+
+const getExplainErrorMessage = (err) => {
+  console.error('[Explain Concept Error Detail]:', err);
+  const status = err?.statusCode || err?.status;
+  const msg = err?.message || '';
+
+  if (status === 400) {
+    return `Unable to generate explanation: ${msg || 'Invalid request parameters.'}`;
+  }
+  if (status === 401 || status === 403) {
+    return 'Authentication failed or AI service configuration is incorrect. Please log in again or check API keys.';
+  }
+  if (status === 404) {
+    return 'The explanation endpoint or resource was not found. Please contact support.';
+  }
+  if (status === 429) {
+    return 'Rate limit exceeded. Please wait a moment before trying again.';
+  }
+  if (status === 500) {
+    return `AI service error: ${msg || 'The backend was unable to complete the tutoring request.'}`;
+  }
+  if (err?.name === 'AbortError' || err?.message?.includes('timeout') || err?.message?.includes('timed out')) {
+    return 'The request timed out. Please check your internet connection and try again.';
+  }
+  if (!navigator.onLine) {
+    return 'You are offline. Please check your internet connection.';
+  }
+  return msg || 'Unable to explain this concept right now. Please try again.';
+};
 
 export const FlashcardPanel = React.memo(({ session, resourceId, resourceType }) => {
   const studySessionId = session?._id;
@@ -31,13 +61,15 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
 
   const [explanationsList, setExplanationsList] = useState([]);
   const [generatingExplain, setGeneratingExplain] = useState(false);
+  const [activeExplanation, setActiveExplanation] = useState(null);
+  const [explainError, setExplainError] = useState(null);
 
   const loadExplanations = useCallback(async () => {
     if (!resourceId || !studySessionId) return;
     try {
       const res = await getExplanations(resourceId, studySessionId);
-      if (res?.success && Array.isArray(res.data)) {
-        setExplanationsList(res.data);
+      if (Array.isArray(res)) {
+        setExplanationsList(res);
       }
     } catch (err) {
       console.error('Failed to load explanations:', err);
@@ -87,6 +119,9 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
     setLoading(true);
     setError(null);
     setFlipped(false);
+    setActiveExplanation(null);
+    setExplainError(null);
+    setGeneratingExplain(false);
     setIsShuffled(false);
     setCurrentIndex(0);
     try {
@@ -115,12 +150,18 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
   const handleNext = useCallback(() => {
     if (cards.length === 0) return;
     setFlipped(false);
+    setActiveExplanation(null);
+    setExplainError(null);
+    setGeneratingExplain(false);
     setCurrentIndex((prev) => (prev + 1) % cards.length);
   }, [cards.length]);
 
   const handlePrev = useCallback(() => {
     if (cards.length === 0) return;
     setFlipped(false);
+    setActiveExplanation(null);
+    setExplainError(null);
+    setGeneratingExplain(false);
     setCurrentIndex((prev) => (prev - 1 + cards.length) % cards.length);
   }, [cards.length]);
 
@@ -152,6 +193,9 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
   const handleToggleShuffle = () => {
     if (cards.length === 0) return;
     setFlipped(false);
+    setActiveExplanation(null);
+    setExplainError(null);
+    setGeneratingExplain(false);
     if (!isShuffled) {
       const shuffled = [...cards].sort(() => Math.random() - 0.5);
       setCards(shuffled);
@@ -463,211 +507,452 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
               </button>
             </div>
 
-            {/* 3D perspective wrapper */}
-            <div 
-              className={`flashcard-perspective ${flipped ? 'flipped' : ''}`}
-              onClick={handleCardFlip}
-            >
-              <div className="flashcard-flipper">
-                
-                {/* Front Side */}
-                <div className="flashcard-front">
-                  <div style={{ position: 'absolute', top: '12px', left: '12px' }}>
-                    <span style={{
-                      fontSize: '0.625rem',
-                      fontWeight: 600,
-                      ...getDifficultyColor(activeCard.difficulty),
-                      border: `1px solid ${getDifficultyColor(activeCard.difficulty).border}`,
-                      padding: '2px 6px',
-                      borderRadius: '4px'
-                    }}>
-                      {activeCard.difficulty}
+            {activeExplanation ? (
+              <div className="flashcard-explanation-container" style={{
+                width: '100%',
+                flex: 1,
+                minHeight: '240px',
+                margin: '10px 0',
+                borderRadius: '12px',
+                border: '1px solid rgba(102, 184, 255, 0.2)',
+                background: 'rgba(15, 23, 42, 0.95)',
+                backdropFilter: 'blur(12px)',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+                padding: '20px',
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column',
+                overflowY: 'auto',
+                textAlign: 'left'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={16} style={{ color: '#66b8ff' }} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      AI Concept Explanation
                     </span>
                   </div>
-
-                  <p style={{ 
-                    fontSize: '1rem', 
-                    lineHeight: '1.5', 
-                    fontWeight: 500, 
-                    color: '#ffffff', 
-                    margin: '10px 0 0 0' 
-                  }}>
-                    {activeCard.question}
-                  </p>
-
-                  <div style={{ 
-                    position: 'absolute', 
-                    bottom: '16px', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '6px', 
-                    fontSize: '0.725rem', 
-                    color: 'rgba(255,255,255,0.35)' 
-                  }}>
-                    <Eye size={12} />
-                    <span>Click to Reveal Answer</span>
-                  </div>
+                  <button 
+                    onClick={() => setActiveExplanation(null)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.4)',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      transition: 'color 0.2s'
+                    }}
+                    onMouseOver={e => e.currentTarget.style.color = '#ffffff'}
+                    onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
 
-                {/* Back Side */}
-                <div className="flashcard-back">
-                  <div style={{ position: 'absolute', top: '12px', left: '12px', display: 'flex', gap: '6px' }}>
-                    <span style={{
-                      fontSize: '0.625rem',
-                      fontWeight: 600,
-                      ...getDifficultyColor(activeCard.difficulty),
-                      border: `1px solid ${getDifficultyColor(activeCard.difficulty).border}`,
-                      padding: '2px 6px',
-                      borderRadius: '4px'
-                    }}>
-                      {activeCard.difficulty}
-                    </span>
-                    <span style={{
-                      fontSize: '0.625rem',
-                      fontWeight: 500,
-                      color: 'rgba(255,255,255,0.4)',
-                      background: 'rgba(255,255,255,0.04)',
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      border: '1px solid rgba(255,255,255,0.06)'
-                    }}>
-                      Reviews: {activeCard.reviewCount || 0}
-                    </span>
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, fontSize: '0.8rem', lineHeight: '1.5' }}>
+                  
+                  {/* Title */}
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#66b8ff', margin: '0 0 4px 0' }}>
+                    {activeExplanation.title || `${activeExplanation.concept} Explained`}
+                  </h3>
 
-                  <p style={{ 
-                    fontSize: '0.9rem', 
-                    lineHeight: '1.6', 
-                    color: 'rgba(255, 255, 255, 0.95)', 
-                    margin: '20px 0 0 0',
-                    maxWidth: '100%',
-                    whiteSpace: 'pre-wrap'
-                  }}>
-                    {activeCard.answer}
+                  {/* Simple Explanation */}
+                  {activeExplanation.simpleExplanation && (
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '12px' }}>
+                      <h4 style={{ color: '#34d399', fontWeight: 700, margin: '0 0 6px 0', fontSize: '0.85rem' }}>💡 Simple Explanation</h4>
+                      <p style={{ color: 'rgba(255,255,255,0.85)', margin: 0 }}>{activeExplanation.simpleExplanation}</p>
+                    </div>
+                  )}
+
+                  {/* How It Works */}
+                  {Array.isArray(activeExplanation.howItWorks) && activeExplanation.howItWorks.length > 0 && (
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '12px' }}>
+                      <h4 style={{ color: '#a78bfa', fontWeight: 700, margin: '0 0 8px 0', fontSize: '0.85rem' }}>⚙️ How It Works</h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {activeExplanation.howItWorks.map((step, idx) => (
+                          <div key={idx} style={{ display: 'flex', gap: '8px' }}>
+                            <span style={{ color: '#a78bfa', fontWeight: 800 }}>{idx + 1}.</span>
+                            <span style={{ color: 'rgba(255,255,255,0.8)' }}>{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Example */}
+                  {activeExplanation.example && (
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '12px' }}>
+                      <h4 style={{ color: '#fbbf24', fontWeight: 700, margin: '0 0 6px 0', fontSize: '0.85rem' }}>📝 Example</h4>
+                      <p style={{ color: 'rgba(255,255,255,0.85)', margin: 0, fontStyle: 'italic' }}>"{activeExplanation.example}"</p>
+                    </div>
+                  )}
+
+                  {/* Key Points */}
+                  {Array.isArray(activeExplanation.keyPoints) && activeExplanation.keyPoints.length > 0 && (
+                    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '12px' }}>
+                      <h4 style={{ color: '#66b8ff', fontWeight: 700, margin: '0 0 6px 0', fontSize: '0.85rem' }}>📌 Key Points</h4>
+                      <ul style={{ margin: 0, paddingLeft: '18px', color: 'rgba(255,255,255,0.8)' }}>
+                        {activeExplanation.keyPoints.map((point, idx) => (
+                          <li key={idx} style={{ marginBottom: '4px' }}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Remember */}
+                  {activeExplanation.remember && (
+                    <div style={{ background: 'rgba(102,184,255,0.05)', border: '1px solid rgba(102,184,255,0.15)', borderRadius: '8px', padding: '12px' }}>
+                      <h4 style={{ color: '#66b8ff', fontWeight: 700, margin: '0 0 4px 0', fontSize: '0.85rem' }}>🧠 Remember</h4>
+                      <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontWeight: 500 }}>{activeExplanation.remember}</p>
+                    </div>
+                  )}
+
+                </div>
+
+                <button
+                  onClick={() => setActiveExplanation(null)}
+                  style={{
+                    marginTop: '16px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    color: '#ffffff',
+                    padding: '10px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseOver={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                  onMouseOut={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+                >
+                  Close Explanation
+                </button>
+              </div>
+            ) : explainError ? (
+              <div className="flashcard-explanation-container" style={{
+                width: '100%',
+                flex: 1,
+                minHeight: '240px',
+                margin: '10px 0',
+                borderRadius: '12px',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                background: 'rgba(239, 68, 68, 0.03)',
+                backdropFilter: 'blur(12px)',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.25)',
+                padding: '20px',
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center',
+                gap: '16px'
+              }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#f87171'
+                }}>
+                  <AlertCircle size={20} />
+                </div>
+                
+                <div>
+                  <h4 style={{ fontSize: '0.9rem', color: '#ffffff', margin: '0 0 6px 0', fontWeight: 600 }}>
+                    Explanation Failed
+                  </h4>
+                  <p style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)', margin: 0, maxWidth: '240px', lineHeight: '1.4' }}>
+                    {explainError}
                   </p>
+                </div>
 
+                <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '240px' }}>
                   <button
-                    disabled={generatingExplain}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      const concept = activeCard.explanation || activeCard.front;
-                      if (!concept) return;
-                      
-                      const existing = explanationsList.find(
-                        ex => ex.concept.toLowerCase() === concept.toLowerCase()
-                      );
-                      
-                      if (existing) {
-                        window.dispatchEvent(new CustomEvent('trigger-explain', {
-                          detail: {
-                            concept,
-                            resourceId,
-                            source: 'flashcard',
-                            explanationData: existing
-                          }
-                        }));
-                      } else {
-                        setGeneratingExplain(true);
-                        try {
-                          const res = await generateExplanation({
-                            concept,
-                            resourceId,
-                            studySessionId,
-                            difficulty: 'Medium'
-                          });
-                          if (res?.success && res.data) {
-                            setExplanationsList(prev => [...prev, res.data]);
-                            window.dispatchEvent(new CustomEvent('trigger-explain', {
-                              detail: {
-                                concept,
-                                resourceId,
-                                source: 'flashcard',
-                                explanationData: res.data
-                              }
-                            }));
-                          }
-                        } catch (err) {
-                          console.error('Failed to generate explanation:', err);
-                        } finally {
-                          setGeneratingExplain(false);
+                    onClick={() => setExplainError(null)}
+                    style={{
+                      flex: 1,
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '6px',
+                      color: '#ffffff',
+                      padding: '8px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setExplainError(null);
+                      setGeneratingExplain(true);
+                      try {
+                        const concept = activeCard.answer;
+                        const res = await generateExplanation({
+                          concept,
+                          question: activeCard.question,
+                          answer: activeCard.answer,
+                          topic: activeCard.topic,
+                          resourceId,
+                          resourceType,
+                          studySessionId,
+                          difficulty: activeCard.difficulty || 'Medium'
+                        });
+                        if (res && res.concept) {
+                          setExplanationsList(prev => [...prev, res]);
+                          setActiveExplanation(res);
+                        } else {
+                          setExplainError("The AI generated an empty response. Please try again.");
                         }
+                      } catch (err) {
+                        setExplainError(getExplainErrorMessage(err));
+                      } finally {
+                        setGeneratingExplain(false);
                       }
                     }}
                     style={{
-                      marginTop: '14px',
-                      background: generatingExplain 
-                        ? 'linear-gradient(135deg, rgba(102, 184, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)' 
-                        : 'linear-gradient(135deg, rgba(102, 184, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
-                      border: '1px solid rgba(102, 184, 255, 0.35)',
-                      borderRadius: '100px',
+                      flex: 1,
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                      border: 'none',
+                      borderRadius: '6px',
                       color: '#ffffff',
-                      padding: '8px 18px',
+                      padding: '8px',
                       fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: generatingExplain ? 'not-allowed' : 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      position: 'relative',
-                      zIndex: 20,
-                      backdropFilter: 'blur(12px)',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      boxShadow: '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)'
-                    }}
-                    onMouseOver={(e) => {
-                      if (!generatingExplain) {
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 184, 255, 0.35)';
-                        e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.6)';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                      }
-                    }}
-                    onMouseOut={(e) => {
-                      if (!generatingExplain) {
-                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)';
-                        e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.35)';
-                        e.currentTarget.style.transform = 'none';
-                      }
+                      fontWeight: 600,
+                      cursor: 'pointer'
                     }}
                   >
-                    <Sparkles 
-                      size={12} 
-                      className={generatingExplain ? "spin-icon" : ""}
-                      style={{ color: '#66b8ff' }} 
-                    />
-                    <span>{generatingExplain ? 'Generating...' : 'Explain Concept'}</span>
-                    
-                    {explanationsList.some(ex => ex.concept.toLowerCase() === (activeCard.explanation || activeCard.front || '').toLowerCase()) && (
-                      <span style={{
-                        fontSize: '0.6rem',
-                        backgroundColor: 'rgba(52, 211, 153, 0.2)',
-                        border: '1px solid rgba(52, 211, 153, 0.4)',
-                        color: '#34d399',
-                        padding: '1px 6px',
-                        borderRadius: '100px',
-                        marginLeft: '4px',
-                        fontWeight: 800
-                      }}>
-                        Cached
-                      </span>
-                    )}
+                    Try Again
                   </button>
-
-                  <div style={{ 
-                    position: 'absolute', 
-                    bottom: '16px', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '6px', 
-                    fontSize: '0.725rem', 
-                    color: 'rgba(102, 184, 255, 0.6)' 
-                  }}>
-                    <EyeOff size={12} />
-                    <span>Click to Hide Answer</span>
-                  </div>
                 </div>
-
               </div>
-            </div>
+            ) : (
+              <div 
+                className={`flashcard-perspective ${flipped ? 'flipped' : ''}`}
+                onClick={handleCardFlip}
+              >
+                <div className="flashcard-flipper">
+                  
+                  {/* Front Side */}
+                  <div className="flashcard-front">
+                    <div style={{ position: 'absolute', top: '12px', left: '12px' }}>
+                      <span style={{
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                        ...getDifficultyColor(activeCard.difficulty),
+                        border: `1px solid ${getDifficultyColor(activeCard.difficulty).border}`,
+                        padding: '2px 6px',
+                        borderRadius: '4px'
+                      }}>
+                        {activeCard.difficulty}
+                      </span>
+                    </div>
+
+                    <p style={{ 
+                      fontSize: '1rem', 
+                      lineHeight: '1.5', 
+                      fontWeight: 500, 
+                      color: '#ffffff', 
+                      margin: '10px 0 0 0' 
+                    }}>
+                      {activeCard.question}
+                    </p>
+
+                    <div style={{ 
+                      position: 'absolute', 
+                      bottom: '16px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '6px', 
+                      fontSize: '0.725rem', 
+                      color: 'rgba(255,255,255,0.35)' 
+                    }}>
+                      <Eye size={12} />
+                      <span>Click to Reveal Answer</span>
+                    </div>
+                  </div>
+
+                  {/* Back Side */}
+                  <div className="flashcard-back">
+                    <div style={{ position: 'absolute', top: '12px', left: '12px', display: 'flex', gap: '6px' }}>
+                      <span style={{
+                        fontSize: '0.625rem',
+                        fontWeight: 600,
+                        ...getDifficultyColor(activeCard.difficulty),
+                        border: `1px solid ${getDifficultyColor(activeCard.difficulty).border}`,
+                        padding: '2px 6px',
+                        borderRadius: '4px'
+                      }}>
+                        {activeCard.difficulty}
+                      </span>
+                      <span style={{
+                        fontSize: '0.625rem',
+                        fontWeight: 500,
+                        color: 'rgba(255,255,255,0.4)',
+                        background: 'rgba(255,255,255,0.04)',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid rgba(255,255,255,0.06)'
+                      }}>
+                        Reviews: {activeCard.reviewCount || 0}
+                      </span>
+                    </div>
+
+                    <p style={{ 
+                      fontSize: '0.9rem', 
+                      lineHeight: '1.6', 
+                      color: 'rgba(255, 255, 255, 0.95)', 
+                      margin: '20px 0 0 0',
+                      maxWidth: '100%',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {activeCard.answer}
+                    </p>
+
+                    <button
+                      disabled={generatingExplain}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setExplainError(null);
+                        const concept = activeCard.answer;
+                        if (!concept || !concept.trim()) {
+                          setExplainError("This flashcard does not contain enough information to generate an explanation.");
+                          return;
+                        }
+                        
+                        const existing = explanationsList.find(
+                          ex => ex.concept.toLowerCase() === concept.toLowerCase()
+                        );
+                        
+                        if (existing) {
+                          setActiveExplanation(existing);
+                          window.dispatchEvent(new CustomEvent('trigger-explain', {
+                            detail: {
+                              concept,
+                              resourceId,
+                              source: 'flashcard',
+                              explanationData: existing
+                            }
+                          }));
+                        } else {
+                          setGeneratingExplain(true);
+                          try {
+                            const res = await generateExplanation({
+                              concept,
+                              question: activeCard.question,
+                              answer: activeCard.answer,
+                              topic: activeCard.topic,
+                              resourceId,
+                              resourceType,
+                              studySessionId,
+                              difficulty: activeCard.difficulty || 'Medium'
+                            });
+                            if (res && res.concept) {
+                              setExplanationsList(prev => [...prev, res]);
+                              setActiveExplanation(res);
+                              window.dispatchEvent(new CustomEvent('trigger-explain', {
+                                detail: {
+                                  concept,
+                                  resourceId,
+                                  source: 'flashcard',
+                                  explanationData: res
+                                }
+                              }));
+                            } else {
+                              setExplainError("The AI generated an empty response. Please try again.");
+                            }
+                          } catch (err) {
+                            setExplainError(getExplainErrorMessage(err));
+                          } finally {
+                            setGeneratingExplain(false);
+                          }
+                        }
+                      }}
+                      style={{
+                        marginTop: '14px',
+                        background: generatingExplain 
+                          ? 'linear-gradient(135deg, rgba(102, 184, 255, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%)' 
+                          : 'linear-gradient(135deg, rgba(102, 184, 255, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%)',
+                        border: '1px solid rgba(102, 184, 255, 0.35)',
+                        borderRadius: '100px',
+                        color: '#ffffff',
+                        padding: '8px 18px',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        cursor: generatingExplain ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        position: 'relative',
+                        zIndex: 20,
+                        backdropFilter: 'blur(12px)',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)'
+                      }}
+                      onMouseOver={(e) => {
+                        if (!generatingExplain) {
+                          e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 184, 255, 0.35)';
+                          e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.6)';
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                        }
+                      }}
+                      onMouseOut={(e) => {
+                        if (!generatingExplain) {
+                          e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 184, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.2)';
+                          e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.35)';
+                          e.currentTarget.style.transform = 'none';
+                        }
+                      }}
+                    >
+                      <Sparkles 
+                        size={12} 
+                        className={generatingExplain ? "spin-icon" : ""}
+                        style={{ color: '#66b8ff' }} 
+                      />
+                      <span>{generatingExplain ? 'Generating...' : 'Explain Concept'}</span>
+                      
+                      {explanationsList.some(ex => ex.concept.toLowerCase() === (activeCard.answer || '').toLowerCase()) && (
+                        <span style={{
+                          fontSize: '0.6rem',
+                          backgroundColor: 'rgba(52, 211, 153, 0.2)',
+                          border: '1px solid rgba(52, 211, 153, 0.4)',
+                          color: '#34d399',
+                          padding: '1px 6px',
+                          borderRadius: '100px',
+                          marginLeft: '4px',
+                          fontWeight: 800
+                        }}>
+                          Cached
+                        </span>
+                      )}
+                    </button>
+
+                    <div style={{ 
+                      position: 'absolute', 
+                      bottom: '16px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '6px', 
+                      fontSize: '0.725rem', 
+                      color: 'rgba(102, 184, 255, 0.6)' 
+                    }}>
+                      <EyeOff size={12} />
+                      <span>Click to Hide Answer</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
 
             {/* Controls navigation */}
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '4px' }}>

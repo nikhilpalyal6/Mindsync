@@ -3,6 +3,159 @@ import AIMessage from '../../models/aiMessage.model.js';
 import mongoose from 'mongoose';
 import logger from '../../config/logger.js';
 
+// Helper to detect specific page number requests in a query
+function detectRequestedPages(message, totalPages) {
+  const pages = new Set();
+  
+  // Look for patterns like "page 20", "page 15", "pages 15-18", "p. 20", etc.
+  const regexes = [
+    /\bpages?\s*(\d+)(?:\s*(?:to|and|-)\s*(\d+))?\b/gi,
+    /\bp\.\s*(\d+)(?:\s*(?:to|and|-)\s*(\d+))?\b/gi
+  ];
+  
+  for (const regex of regexes) {
+    let match;
+    while ((match = regex.exec(message)) !== null) {
+      const start = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : start;
+      if (start > 0 && start <= totalPages) {
+        pages.add(start);
+      }
+      if (end > 0 && end <= totalPages) {
+        for (let p = Math.min(start, end); p <= Math.max(start, end); p++) {
+          pages.add(p);
+        }
+      }
+    }
+  }
+
+  // Look for "last page"
+  if (/\blast\s*pages?\b/i.test(message)) {
+    pages.add(totalPages);
+  }
+
+  return Array.from(pages);
+}
+
+// Helper to parse pages from legacy extractedText string
+function parsePagesFromExtractedText(extractedText) {
+  const pages = [];
+  if (!extractedText) return pages;
+
+  const pageRegex = /\[Page\s+(\d+)\]/gi;
+  let match;
+  const pagePositions = [];
+
+  while ((match = pageRegex.exec(extractedText)) !== null) {
+    pagePositions.push({
+      pageNumber: parseInt(match[1], 10),
+      index: match.index,
+      headerLength: match[0].length
+    });
+  }
+
+  if (pagePositions.length === 0) {
+    // Fallback: treat the entire text as page 1
+    return [{
+      pageNumber: 1,
+      text: extractedText,
+      extractionStatus: 'completed',
+      wordCount: extractedText.split(/\s+/).filter(Boolean).length
+    }];
+  }
+
+  for (let i = 0; i < pagePositions.length; i++) {
+    const current = pagePositions[i];
+    const next = pagePositions[i + 1];
+    const startIdx = current.index + current.headerLength;
+    const endIdx = next ? next.index : extractedText.length;
+    const text = extractedText.substring(startIdx, endIdx).trim();
+
+    pages.push({
+      pageNumber: current.pageNumber,
+      text: text,
+      extractionStatus: 'completed',
+      wordCount: text.split(/\s+/).filter(Boolean).length
+    });
+  }
+
+  return pages;
+}
+
+// Helper to score and select the most relevant pages for LLM context
+function selectRelevantPages(pages, message, requestedPageNums, limitChars = 250000) {
+  const selectedPages = [];
+  const selectedPageNums = new Set();
+
+  const addPage = (page) => {
+    if (page && !selectedPageNums.has(page.pageNumber)) {
+      selectedPages.push(page);
+      selectedPageNums.add(page.pageNumber);
+    }
+  };
+
+  // If specific page numbers were requested, we ONLY include them and nothing else!
+  if (requestedPageNums && requestedPageNums.length > 0) {
+    for (const pageNum of requestedPageNums) {
+      const page = pages.find(p => p.pageNumber === pageNum);
+      if (page) addPage(page);
+    }
+    selectedPages.sort((a, b) => a.pageNumber - b.pageNumber);
+    return selectedPages;
+  }
+
+  // Score remaining pages by keyword matches (for general questions)
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'to', 'of', 'in', 'on', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'from', 'up', 'down', 'in', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now', 'tell', 'me', 'please', 'what', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'been', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'my', 'your', 'his', 'her', 'its', 'our', 'their']);
+  
+  const cleanString = (str) => (str || '').toLowerCase().replace(/[^\w]/g, ' ');
+  
+  const keywords = cleanString(message)
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopWords.has(w));
+
+  const scoredPages = pages
+    .map(p => {
+      let score = 0;
+      if (p.text) {
+        const cleanText = cleanString(p.text);
+        const words = cleanText.split(/\s+/).filter(Boolean);
+        for (const word of keywords) {
+          const count = words.filter(w => w === word).length;
+          score += count;
+        }
+      }
+      return { page: p, score };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  let currentLength = 0;
+
+  for (const item of scoredPages) {
+    const textLen = (item.page.text || '').length;
+    if (currentLength + textLen < limitChars) {
+      addPage(item.page);
+      currentLength += textLen;
+    } else {
+      break;
+    }
+  }
+
+  // If we still have room, add pages in sequence
+  for (const page of pages) {
+    const textLen = (page.text || '').length;
+    if (currentLength + textLen < limitChars) {
+      addPage(page);
+      currentLength += textLen;
+    } else {
+      break;
+    }
+  }
+
+  selectedPages.sort((a, b) => a.pageNumber - b.pageNumber);
+  return selectedPages;
+}
+
 class ContextBuilderService {
   /**
    * Phase 3.2.3 Foundation: Context-Aware AI Builder
@@ -27,10 +180,11 @@ class ContextBuilderService {
     let activeResource = null;
 
     // Resolve resource type and resource object directly from the active conversation's resourceId if available
+    let conversation = null;
     if (conversationId) {
       try {
         const AIConversation = mongoose.model('AIConversation');
-        const conversation = await AIConversation.findById(conversationId).lean();
+        conversation = await AIConversation.findById(conversationId).lean();
         if (conversation && conversation.resourceId) {
           // Find resource in study session resources list
           const foundRes = session?.resources?.find(r => 
@@ -97,13 +251,64 @@ class ContextBuilderService {
       activeResourceSection += `\n[CURRENT ACTIVE RESOURCE: PDF DOCUMENT]\n`;
       if (pdfData) {
         activeResourceSection += `- Filename: ${pdfData.filename || pdfData.pdfFilename || 'Document.pdf'}\n`;
-        if (pdfData.pageCount) activeResourceSection += `- Total Pages: ${pdfData.pageCount}\n`;
-        if (pdfData.pageNumber || pdfData.activePage) activeResourceSection += `- Current Page: ${pdfData.pageNumber || pdfData.activePage}\n`;
         
-        const text = pdfData.extractedText || '';
-        if (text.trim()) {
-          activeResourceSection += `- Extracted PDF Content:\n${text.slice(0, 6000)}\n`;
-          logger.info(`[PDF Extracted] Using ${text.length} chars of PDF text for AI context`);
+        let pdfText = pdfData.extractedText || '';
+        let pages = pdfData.pages || [];
+        let pageCount = pdfData.pageCount || pdfData.totalPages || 0;
+
+        // Ensure we have a populated pages array (parse legacy extractedText if necessary)
+        if ((!pages || pages.length === 0) && pdfText) {
+          pages = parsePagesFromExtractedText(pdfText);
+          pageCount = pages.length;
+        }
+
+        if (!pageCount && pages && pages.length > 0) {
+          pageCount = pages.length;
+        }
+
+        if (pageCount) activeResourceSection += `- Total Pages: ${pageCount}\n`;
+        if (pdfData.pageNumber || pdfData.activePage) activeResourceSection += `- Current Page: ${pdfData.pageNumber || pdfData.activePage}\n`;
+
+        if (pages && pages.length > 0) {
+          // Detect if specific pages are mentioned in currentQuery
+          const requestedPageNums = detectRequestedPages(currentQuery || '', pageCount);
+          logger.info(`[Context Builder] Detected requested pages in query: ${JSON.stringify(requestedPageNums)}`);
+
+          // Select the most relevant pages
+          const relevantPages = selectRelevantPages(pages, currentQuery || '', requestedPageNums);
+          logger.info(`[Context Builder] Selected ${relevantPages.length} relevant pages out of ${pages.length} total pages.`);
+
+          // Build context
+          const selectedPagesText = relevantPages.map(p => `[Page ${p.pageNumber}]\n${p.text}`).join('\n\n');
+          activeResourceSection += `- Extracted PDF Content:\n${selectedPagesText}\n`;
+          
+          // DIAGNOSTIC LOGGING
+          console.log(`
+PDF CHAT DEBUG
+------------------------------
+resourceId received: ${conversation && conversation.resourceId ? conversation.resourceId : 'none'}
+sessionId received: ${studySessionId}
+resource found: ${activeResource ? 'YES' : 'NO'}
+resource title: ${activeResource ? activeResource.title : 'none'}
+resource _id: ${activeResource && activeResource._id ? activeResource._id : 'none'}
+resource type: ${activeResource ? activeResource.type : 'none'}
+resource extractionStatus: ${activeResource && activeResource.data ? activeResource.data.extractionStatus : 'none'}
+resource page count: ${pageCount}
+resource extractedText length: ${pdfText.length}
+resource pages array length: ${pages.length}
+requested page: ${requestedPageNums.join(', ') || 'none'}
+page 20 exists: ${pages.some(p => p.pageNumber === 20) ? 'YES' : 'NO'}
+page 20 text length: ${pages.find(p => p.pageNumber === 20)?.text?.length || 0}
+page 20 text preview: ${pages.find(p => p.pageNumber === 20)?.text?.substring(0, 100) || 'none'}
+context source: ${requestedPageNums.length > 0 ? 'explicit pages' : 'keyword selection / sequencing'}
+context length: ${selectedPagesText.length}
+legacy fallback used: ${(!activeResource?.data?.pages || activeResource.data.pages.length === 0) && pdfText ? 'YES' : 'NO'}
+Gemini extraction fallback used: ${!pdfText && pages.length === 0 ? 'YES' : 'NO'}
+------------------------------
+          `);
+        } else if (pdfText.trim()) {
+          activeResourceSection += `- Extracted PDF Content:\n${pdfText.slice(0, 12000)}\n`;
+          logger.info(`[Context Builder PDF Extracted] Fallback using ${pdfText.length} chars of PDF text`);
         } else {
           activeResourceSection += `- Status: I can see that a PDF is open, but its contents haven't been processed yet.\n`;
         }
@@ -174,7 +379,7 @@ class ContextBuilderService {
     let fullSystemInstruction = `${baseSystemPrompt}${workshopSection}${activeResourceSection}${contextInstruction}`;
 
     // 6. Intelligent Trimming
-    const MAX_SYSTEM_CHARS = 10000;
+    const MAX_SYSTEM_CHARS = 260000; // Increased to support full page context retrieval
     if (fullSystemInstruction.length > MAX_SYSTEM_CHARS) {
       fullSystemInstruction = fullSystemInstruction.slice(0, MAX_SYSTEM_CHARS) + '\n[...Active resource context trimmed to fit token limits...]';
     }

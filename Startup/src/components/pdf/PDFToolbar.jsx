@@ -10,7 +10,9 @@ import {
   RotateCcw, 
   Upload, 
   Trash2, 
-  RefreshCw 
+  RefreshCw,
+  BookOpen,
+  Sparkles
 } from 'lucide-react';
 
 export const PDFToolbar = React.memo(({
@@ -26,7 +28,11 @@ export const PDFToolbar = React.memo(({
   onFitWidth,
   onFitPage,
   onOpenClick,
-  onRemoveClick
+  onRemoveClick,
+  showHighlights,
+  onToggleHighlights,
+  showSmartHighlights,
+  onToggleSmartHighlights
 }) => {
   const [inputPage, setInputPage] = useState(pageNumber);
 
@@ -132,6 +138,7 @@ export const PDFToolbar = React.memo(({
 
             <button 
               className={`pdf-toolbar-btn ${fitMode === 'page' ? 'accent' : ''}`} 
+              onChange={onFitPage} 
               onClick={onFitPage} 
               title="Fit Page"
             >
@@ -142,6 +149,15 @@ export const PDFToolbar = React.memo(({
             <button className="pdf-toolbar-btn" onClick={onResetZoom} title="Reset Zoom to 100%">
               <RotateCcw size={14} />
               <span>100%</span>
+            </button>
+
+            <button 
+              className={`pdf-toolbar-btn ${showSmartHighlights ? 'accent' : ''}`} 
+              onClick={onToggleSmartHighlights} 
+              title="Toggle Smart Highlights Suggestions"
+            >
+              <Sparkles size={14} style={{ color: showSmartHighlights ? '#fff' : '#a855f7' }} />
+              <span>Smart Highlights</span>
             </button>
           </div>
         </>

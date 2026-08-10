@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Search, RefreshCw, MoreVertical, Pin, Trash2, Edit3, Copy, Archive, FileText, Video, BookOpen, Layers, HelpCircle, MessageSquare, Plus, Clock, Folder, Sparkles } from 'lucide-react'
+import { Search, RefreshCw, MoreVertical, Pin, Trash2, Edit3, Copy, Archive, FileText, Video, BookOpen, Layers, HelpCircle, MessageSquare, Plus, Clock, Folder, Sparkles, Loader2 } from 'lucide-react'
 import { 
   getStudySessions, 
   getStudySessionById,
@@ -9,7 +9,9 @@ import {
   updateStudySession, 
   deleteStudySession,
   getStudyActivities,
-  addResource
+  addResource,
+  uploadPdfResource,
+  fetchYouTubeData
 } from '../services/api'
 import { pdfjs } from 'react-pdf'
 import './studyMode.css'
@@ -232,6 +234,8 @@ export default function StudyMode() {
   const [newWorkspaceTitle, setNewWorkspaceTitle] = useState('')
   const [newWorkspaceDesc, setNewWorkspaceDesc] = useState('')
   const [createModalError, setCreateModalError] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
 
   const fileInputRef = useRef(null)
   const profileDropdownRef = useRef(null)
@@ -283,143 +287,108 @@ export default function StudyMode() {
     if (!files || files.length === 0) return
 
     const file = files[0]
-    if (file.size > MAX_FILE_SIZE) {
-      setUploadError('Please select a file smaller than 100 MB.')
+    
+    // Validate PDF file (Step 4)
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setUploadError('Only PDF files are supported.')
+      e.target.value = ''
+      return
+    }
+
+    // Validate size limit (Step 4)
+    const MAX_SIZE = 50 * 1024 * 1024 // 50MB limit
+    if (file.size > MAX_SIZE) {
+      setUploadError('PDF exceeds the maximum allowed size (50MB).')
       e.target.value = ''
       return
     }
 
     setUploadError('')
+    setIsUploading(true)
+    setUploadStatus('Uploading PDF...')
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result;
-      let extractedText = '';
-      let pageCount = 0;
+    try {
+      let targetSessionId = activeSession?._id;
 
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
-        const pdfDoc = await loadingTask.promise;
-        pageCount = pdfDoc.numPages;
-        const pagesToRead = Math.min(pageCount, 50);
-
-        for (let pageNum = 1; pageNum <= pagesToRead; pageNum++) {
-          const page = await pdfDoc.getPage(pageNum);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(item => item.str).join(' ');
-          if (pageText.trim()) {
-            extractedText += `[Page ${pageNum}]\n${pageText}\n\n`;
-          }
-        }
-        extractedText = extractedText.trim();
-      } catch (err) {
-        console.error('[StudyMode PDF Processing] Text extraction error:', err);
+      // If activeSession is falsy, create the workspace first (Step 2)
+      if (!targetSessionId) {
+        setUploadStatus('Creating workspace...')
+        const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace'
+        const res = await createWorkspace(sessionTitle, `PDF Document: ${file.name}`)
+        targetSessionId = res._id;
+        
+        setActiveSession(res);
+        setSessions(prev => [res, ...prev]);
       }
 
-      try {
-        if (activeSession) {
-          const newPdfMeta = {
-            filename: file.name,
-            pdfFilename: file.name,
-            fileSize: file.size,
-            fileType: file.type,
-            fileData: dataUrl,
-            extractedText,
-            pageCount,
-            pageNumber: 1,
-            scale: 1.0,
-            fitMode: 'page',
-            lastOpened: new Date().toISOString()
-          };
+      setUploadStatus('Processing PDF & extracting text...')
+      const response = await uploadPdfResource(targetSessionId, file);
+      
+      const fullSession = (response.success && response.data) ? response.data : response;
+      const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name);
 
-          const updatedSession = await addResource(activeSession._id, {
-            type: 'pdf',
-            url: file.name,
-            title: file.name,
-            data: newPdfMeta
-          });
+      setActiveSession(fullSession);
+      setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
 
-          const fullSession = (updatedSession.success && updatedSession.data) ? updatedSession.data : updatedSession;
-          const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name);
-
-          setActiveSession(fullSession);
-          setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
-          if (newlyAddedRes) {
-            handleSelectResource(newlyAddedRes);
-          }
-          setActiveTab('pdf_viewer');
-        } else {
-          const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace';
-          const res = await createWorkspace(sessionTitle, `PDF Document: ${file.name}`);
-          
-          const newPdfMeta = {
-            filename: file.name,
-            pdfFilename: file.name,
-            fileSize: file.size,
-            fileType: file.type,
-            fileData: dataUrl,
-            extractedText,
-            pageCount,
-            pageNumber: 1,
-            scale: 1.0,
-            fitMode: 'page',
-            lastOpened: new Date().toISOString()
-          };
-
-          const updatedSession = await addResource(res._id, {
-            type: 'pdf',
-            url: file.name,
-            title: file.name,
-            data: newPdfMeta
-          });
-
-          const fullSession = (updatedSession.success && updatedSession.data) ? updatedSession.data : updatedSession;
-          const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name);
-
-          selectSession(fullSession, () => {
-            if (newlyAddedRes) {
-              handleSelectResource(newlyAddedRes);
-            }
-            setActiveTab('pdf_viewer');
-          });
-        }
-      } catch (err) {
-        console.error('Failed to create resource for PDF:', err);
+      if (newlyAddedRes) {
+        handleSelectResource(newlyAddedRes);
       }
-    };
-
-    reader.readAsDataURL(file);
-    e.target.value = '';
+      setActiveTab('pdf_viewer');
+    } catch (err) {
+      console.error('[StudyMode PDF Processing] Ingestion error:', err);
+      setUploadError(err.message || 'PDF processing failed.');
+    } finally {
+      setIsUploading(false)
+      setUploadStatus('')
+      e.target.value = ''
+    }
   }
 
-  const handlePasteSubmit = async () => {
+  const handlePasteSubmit = async (e) => {
+    e?.preventDefault()
     if (pasteUrl || pasteText) {
       const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
       if (pasteUrl && youtubeRegex.test(pasteUrl)) {
-        setVideoUrl(pasteUrl)
+        setIsUploading(true)
+        setUploadStatus('Adding YouTube video & fetching transcript...')
         setShowPasteModal(false)
 
-        if (activeSession) {
-          try {
-            const updatedMeta = {
-              ...(activeSession.metadata || {}),
-              youtube: { videoUrl: pasteUrl, lastOpened: new Date().toISOString() },
-              activeResourceType: 'youtube',
-              lastTab: 'youtube'
-            }
-            const res = await updateStudySession(activeSession._id, {
-              metadata: updatedMeta
-            })
-            setActiveSession(res)
-            setSessions(prev => prev.map(s => s._id === res._id ? res : s))
-            setActiveTab('video_viewer')
-          } catch (err) {
-            console.error('Failed to save YouTube metadata to MongoDB:', err)
+        try {
+          let targetSessionId = activeSession?._id;
+
+          // If activeSession is falsy, create the workspace first (Step 12)
+          if (!targetSessionId) {
+            setUploadStatus('Creating workspace...')
+            const sessionTitle = 'YouTube Video Study Workspace'
+            const res = await createWorkspace(sessionTitle, `YouTube link: ${pasteUrl}`)
+            targetSessionId = res._id;
+            
+            setActiveSession(res);
+            setSessions(prev => [res, ...prev]);
           }
+
+          setUploadStatus('Retrieving video metadata & extracting transcript...')
+          const updatedSession = await fetchYouTubeData(targetSessionId, pasteUrl);
+          
+          const fullSession = (updatedSession.success && updatedSession.data) ? updatedSession.data : updatedSession;
+          const newlyAddedRes = fullSession.resources?.find(r => r.url === pasteUrl || r.type === 'youtube');
+
+          setActiveSession(fullSession);
+          setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+
+          if (newlyAddedRes) {
+            handleSelectResource(newlyAddedRes);
+          }
+          setActiveTab('video_viewer');
+        } catch (err) {
+          console.error('[YouTube URL Ingestion] Error:', err);
+          setUploadError(err.message || 'YouTube video processing failed.');
+        } finally {
+          setIsUploading(false)
+          setUploadStatus('')
+          setPasteUrl('')
+          setPasteText('')
         }
-        setPasteUrl('')
-        setPasteText('')
         return
       }
 
@@ -651,15 +620,16 @@ export default function StudyMode() {
               </div>
 
               <div className="modal-footer">
-                <button className="modal-btn cancel-btn" onClick={() => setShowPasteModal(false)}>
+                <button type="button" className="modal-btn cancel-btn" onClick={() => setShowPasteModal(false)}>
                   Cancel
                 </button>
                 <button 
+                  type="button" 
                   className="modal-btn add-btn" 
                   onClick={handlePasteSubmit} 
                   disabled={!pasteUrl && !pasteText}
                 >
-                  Add content
+                  Add
                 </button>
               </div>
             </div>
@@ -1359,6 +1329,27 @@ export default function StudyMode() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {isUploading && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(9, 9, 11, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            gap: '16px',
+            color: '#fff'
+          }}
+        >
+          <Loader2 size={40} className="animate-spin" style={{ color: '#a855f7' }} />
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>{uploadStatus || 'Processing...'}</h3>
+          <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Please do not close this page.</p>
         </div>
       )}
     </div>

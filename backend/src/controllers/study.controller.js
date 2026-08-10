@@ -2,6 +2,11 @@ import studyService from '../services/study.service.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
+import mindMapService from '../services/mindMap.service.js';
+import MindMap from '../models/mindMap.model.js';
+import logger from '../config/logger.js';
+import fs from 'fs';
+import ApiError from '../utils/ApiError.js';
 
 class StudyController {
   getSessions = asyncHandler(async (req, res) => {
@@ -12,6 +17,34 @@ class StudyController {
     console.log('[DEBUG CONTROLLER] Calling studyService.getSessions...');
     const sessions = await studyService.getSessions(userId, { search });
     console.log('[DEBUG CONTROLLER] studyService.getSessions returned. Count:', sessions?.length);
+
+    // One-time automatic backfill for workspace learning maps (Step 28)
+    if (sessions && Array.isArray(sessions)) {
+      (async () => {
+        try {
+          for (const sess of sessions) {
+            const hasValidContent = (sess.resources || []).some(r => {
+              const text = r.data?.extractedText || r.data?.transcript || r.data?.content || r.data?.noteContent || r.data?.notesContent || '';
+              return text && text.trim().length > 0;
+            });
+            if (hasValidContent) {
+              const existing = await MindMap.findOne({ user: userId, workspaceId: sess._id.toString() });
+              if (!existing) {
+                logger.info(`[Workspace MindMap Backfill] Auto-generating missing mind map for workspace: ${sess.title}`);
+                mindMapService.generateWorkspaceMindMapBackground(
+                  userId.toString(),
+                  sess._id.toString(),
+                  sess.title,
+                  sess.resources || []
+                ).catch(err => logger.error(`[Workspace MindMap Backfill] Error: ${err.message}`));
+              }
+            }
+          }
+        } catch (e) {
+          logger.error(`[Workspace MindMap Backfill] Failed: ${e.message}`);
+        }
+      })();
+    }
 
     res.status(HTTP_STATUS.OK).json(
       ApiResponse.success(sessions, 'Study sessions retrieved successfully')
@@ -24,6 +57,32 @@ class StudyController {
 
     console.log('[DEBUG CONTROLLER] Entering getSessionById. User ID:', userId, 'Session ID:', id);
     const session = await studyService.getSessionById(userId, id);
+
+    // One-time automatic backfill for workspace learning maps (Step 28)
+    if (session && session.resources && Array.isArray(session.resources)) {
+      (async () => {
+        try {
+          const hasValidContent = (session.resources || []).some(r => {
+            const text = r.data?.extractedText || r.data?.transcript || r.data?.content || r.data?.noteContent || r.data?.notesContent || '';
+            return text && text.trim().length > 0;
+          });
+          if (hasValidContent) {
+            const existing = await MindMap.findOne({ user: userId, workspaceId: session._id.toString() });
+            if (!existing) {
+              logger.info(`[Workspace MindMap Backfill] Auto-generating missing mind map for workspace: ${session.title}`);
+              mindMapService.generateWorkspaceMindMapBackground(
+                userId.toString(),
+                session._id.toString(),
+                session.title,
+                session.resources || []
+              ).catch(err => logger.error(`[Workspace MindMap Backfill] Error: ${err.message}`));
+            }
+          }
+        } catch (e) {
+          logger.error(`[Workspace MindMap Backfill] Failed: ${e.message}`);
+        }
+      })();
+    }
 
     res.status(HTTP_STATUS.OK).json(
       ApiResponse.success(session, 'Study session retrieved successfully')
@@ -130,6 +189,118 @@ class StudyController {
     res.status(HTTP_STATUS.OK).json(
       ApiResponse.success(activities, 'Study activities retrieved successfully')
     );
+  });
+
+  uploadPdfResource = asyncHandler(async (req, res) => {
+    const { sessionId } = req.params;
+    const userId = req.user._id;
+
+    if (!req.file) {
+      throw new ApiError(HTTP_STATUS.BAD_REQUEST, 'Please upload a PDF file.');
+    }
+
+    // 1. Verify workspace ownership
+    const StudySession = (await import('../models/studySession.model.js')).default;
+    const session = await StudySession.findOne({ _id: sessionId, user: userId });
+    if (!session) {
+      // Clean up multer temporary file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      throw new ApiError(HTTP_STATUS.FORBIDDEN, 'You do not have access to this study workspace.');
+    }
+
+    try {
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const base64Data = fileBuffer.toString('base64');
+      const dataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
+
+      // Call PDF Extractor service
+      const pdfExtractorService = (await import('../services/pdf/pdfExtractor.service.js')).default;
+      const extractedText = await pdfExtractorService.extractTextFromBase64(dataUrl);
+
+      // Parse pages from extractedText
+      const pages = [];
+      const pageRegex = /\[Page\s+(\d+)\]/gi;
+      let match;
+      const pagePositions = [];
+
+      while ((match = pageRegex.exec(extractedText)) !== null) {
+        pagePositions.push({
+          pageNumber: parseInt(match[1], 10),
+          index: match.index,
+          headerLength: match[0].length
+        });
+      }
+
+      if (pagePositions.length === 0) {
+        pages.push({
+          pageNumber: 1,
+          text: extractedText,
+          extractionStatus: 'completed',
+          wordCount: extractedText.split(/\s+/).filter(Boolean).length
+        });
+      } else {
+        for (let i = 0; i < pagePositions.length; i++) {
+          const current = pagePositions[i];
+          const next = pagePositions[i + 1];
+          const startIdx = current.index + current.headerLength;
+          const endIdx = next ? next.index : extractedText.length;
+          const text = extractedText.substring(startIdx, endIdx).trim();
+
+          pages.push({
+            pageNumber: current.pageNumber,
+            text: text,
+            extractionStatus: 'completed',
+            wordCount: text.split(/\s+/).filter(Boolean).length
+          });
+        }
+      }
+
+      const totalPages = pages.length;
+
+      const newPdfMeta = {
+        filename: req.file.originalname,
+        pdfFilename: req.file.originalname,
+        fileSize: req.file.size,
+        fileType: req.file.mimetype,
+        fileData: dataUrl,
+        extractedText,
+        pageCount: totalPages,
+        totalPages,
+        processedPages: totalPages,
+        successfulPages: totalPages,
+        failedPages: 0,
+        extractionStatus: 'completed',
+        pages,
+        pageNumber: 1,
+        scale: 1.0,
+        fitMode: 'page',
+        lastOpened: new Date().toISOString()
+      };
+
+      const updatedSession = await studyService.addResource(userId, sessionId, {
+        type: 'pdf',
+        url: req.file.originalname,
+        title: req.file.originalname,
+        data: newPdfMeta
+      });
+
+      // Clean up multer temporary file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      res.status(HTTP_STATUS.CREATED).json(
+        ApiResponse.success(updatedSession, 'PDF uploaded and processed successfully.')
+      );
+    } catch (err) {
+      // Clean up multer temporary file
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      throw err;
+    }
   });
 }
 

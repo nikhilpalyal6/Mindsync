@@ -57,8 +57,8 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
     if (!resId || !studySessionId) return;
     try {
       const res = await getExplanations(resId, studySessionId);
-      if (res?.success && Array.isArray(res.data)) {
-        setHistory(res.data);
+      if (Array.isArray(res)) {
+        setHistory(res);
       }
     } catch (err) {
       console.error('Error fetching explanations history:', err);
@@ -101,10 +101,10 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
         mode
       });
 
-      if (res?.success && res.data) {
-        setCurrentExplanation(res.data);
-        if (res.data.estimatedReadingTime) {
-          trackAnalytic('readingTime', res.data.estimatedReadingTime);
+      if (res && (res._id || res.id || res.concept)) {
+        setCurrentExplanation(res);
+        if (res.estimatedReadingTime) {
+          trackAnalytic('readingTime', res.estimatedReadingTime);
         }
         
         // Refresh history

@@ -6,6 +6,206 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import pdfExtractorService from '../pdf/pdfExtractor.service.js';
 
+const resolveCorrectAnswer = (correctAnswer, options, type) => {
+  if (type === 'Fill in the Blank' || type === 'Short Answer') {
+    return String(correctAnswer).trim();
+  }
+
+  if (!Array.isArray(options) || options.length === 0) {
+    return null;
+  }
+
+  const cleanAnswer = String(correctAnswer).trim();
+  const cleanAnswerLower = cleanAnswer.toLowerCase();
+
+  for (const opt of options) {
+    if (opt.trim().toLowerCase() === cleanAnswerLower) {
+      return opt;
+    }
+  }
+
+  const parsedIndex = parseInt(cleanAnswer, 10);
+  if (!isNaN(parsedIndex) && parsedIndex >= 0 && parsedIndex < options.length) {
+    return options[parsedIndex];
+  }
+
+  const letterMatch = cleanAnswerLower.match(/^(?:option\s+)?([a-z])$/i);
+  if (letterMatch) {
+    const letter = letterMatch[1].toUpperCase();
+    const charCodeIndex = letter.charCodeAt(0) - 65;
+    if (charCodeIndex >= 0 && charCodeIndex < options.length) {
+      return options[charCodeIndex];
+    }
+  }
+
+  return null;
+};
+
+const repairAndValidateQuestion = (q) => {
+  if (!q || !q.question || typeof q.question !== 'string' || !q.question.trim()) {
+    return null;
+  }
+  
+  const type = q.type && typeof q.type === 'string' ? q.type : 'Multiple Choice';
+  const difficulty = q.difficulty && typeof q.difficulty === 'string' ? q.difficulty : 'Medium';
+  const topic = q.topic && typeof q.topic === 'string' ? q.topic : 'General';
+  const explanation = q.explanation && typeof q.explanation === 'string' ? q.explanation.trim() : 'No explanation provided.';
+  const relatedConcepts = Array.isArray(q.relatedConcepts) ? q.relatedConcepts.filter(c => typeof c === 'string') : [];
+  const learningObjectives = Array.isArray(q.learningObjectives) ? q.learningObjectives.filter(o => typeof o === 'string') : [];
+  let options = Array.isArray(q.options) ? q.options.map(opt => String(opt).trim()) : [];
+  
+  if (type === 'True / False') {
+    options = ['True', 'False'];
+  } else if (type === 'Fill in the Blank' || type === 'Short Answer') {
+    options = [];
+  } else {
+    options = [...new Set(options.filter(o => o.trim() !== ''))];
+    
+    if (options.length < 4) {
+      const fillers = ['None of the above', 'All of the above', 'Not enough information', 'None of the options'];
+      for (const filler of fillers) {
+        if (options.length === 4) break;
+        if (!options.map(o => o.toLowerCase()).includes(filler.toLowerCase())) {
+          options.push(filler);
+        }
+      }
+    }
+    
+    if (options.length !== 4) {
+      return null;
+    }
+  }
+  
+  if (!q.correctAnswer) {
+    return null;
+  }
+  
+  const resolvedAnswer = resolveCorrectAnswer(q.correctAnswer, options, type);
+  if (resolvedAnswer === null) {
+    return null;
+  }
+  
+  return {
+    id: q.id && typeof q.id === 'string' ? q.id : crypto.randomUUID(),
+    question: q.question.trim(),
+    type,
+    options,
+    correctAnswer: resolvedAnswer,
+    explanation,
+    difficulty,
+    topic: topic.trim(),
+    points: Number(q.points) || (difficulty === 'Easy' ? 5 : difficulty === 'Hard' ? 15 : 10),
+    relatedConcepts,
+    learningObjectives,
+    bookmarked: false,
+    attempted: false,
+    selectedAnswer: null,
+    isCorrect: null,
+    reviewCount: 0,
+    lastReviewed: null,
+    nextReview: null,
+    createdAt: new Date().toISOString()
+  };
+};
+
+const extractJSON = (text) => {
+  if (!text) return '';
+  
+  const mdMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+  let extracted = mdMatch ? mdMatch[1] : text;
+  
+  const firstBracket = extracted.indexOf('[');
+  const firstBrace = extracted.indexOf('{');
+  
+  let startToken = -1;
+  let endToken = -1;
+  let braceType = '';
+  
+  if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
+    startToken = firstBracket;
+    braceType = 'bracket';
+  } else if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    startToken = firstBrace;
+    braceType = 'brace';
+  }
+  
+  if (startToken !== -1) {
+    const openChar = braceType === 'bracket' ? '[' : '{';
+    const closeChar = braceType === 'bracket' ? ']' : '}';
+    
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    
+    for (let i = startToken; i < extracted.length; i++) {
+      const char = extracted[i];
+      
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === openChar) depth++;
+        if (char === closeChar) {
+          depth--;
+          if (depth === 0) {
+            endToken = i;
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  if (startToken !== -1 && endToken !== -1) {
+    return extracted.substring(startToken, endToken + 1);
+  }
+  
+  if (startToken !== -1) {
+    return extracted.substring(startToken);
+  }
+  
+  return extracted.trim();
+};
+
+const parseJSONSafely = (text) => {
+  const cleaned = text.trim();
+  if (!cleaned) {
+    return { success: false, error: 'Empty JSON text', isTruncated: false };
+  }
+  
+  try {
+    const parsed = JSON.parse(cleaned);
+    return { success: true, parsed };
+  } catch (err) {
+    try {
+      let cleanText = cleaned;
+      cleanText = cleanText.replace(/,\s*([\]}])/g, '$1');
+      cleanText = cleanText.replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1');
+      cleanText = cleanText.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+      
+      const parsed = JSON.parse(cleanText);
+      return { success: true, parsed };
+    } catch (innerErr) {
+      const isTruncated = innerErr.message.includes('end of JSON input') || 
+                          innerErr.message.includes('Unexpected end') ||
+                          (!cleaned.endsWith(']') && !cleaned.endsWith('}'));
+      return { success: false, error: innerErr.message, isTruncated };
+    }
+  }
+};
+
 class QuizService {
   /**
    * Extract content from the resource in the study session.
@@ -256,28 +456,30 @@ class QuizService {
       5. ${goalInstruction}
       6. Generate questions to cover the important concepts in the provided text.
       7. Questions must be clear, concise, and academically rigorous.
-      8. Correct answers must be precise. For True/False, use "True" or "False". For Fill in the Blank, provide the specific word or phrase.
-      9. For each question, provide a detailed "explanation" resolving the concepts. The explanation must be educational, step-by-step, easy to understand, and suitable for beginners.
-      10. Assign appropriate points to each question based on difficulty (e.g. Easy: 5, Medium: 10, Hard: 15).
-      11. Identify key underlying concepts for the question (e.g. ["Recursion", "Call Stack", "DFS"]) and set them in the "relatedConcepts" array field. These will power future Deep Search, Mind Maps and AI tutor features.
-      12. Identify specific learning objectives (e.g. ["Identify base cases", "Trace recursive calls"]) and set them in the "learningObjectives" array field. These will power future study planners and analytics dashboards.
-      13. Output your response STRICTLY as a raw JSON array of objects. Do not include markdown code block formatting (like \`\`\`json), no preamble, and no explanation.
-
-      JSON Format:
-      [
-         {
+      8. For each question, provide a detailed "explanation" resolving the concepts. The explanation must be educational, step-by-step, easy to understand, and suitable for beginners.
+      9. Assign appropriate points to each question based on difficulty (e.g. Easy: 5, Medium: 10, Hard: 15).
+      10. Identify key underlying concepts for the question (e.g. ["Recursion", "Call Stack", "DFS"]) and set them in the "relatedConcepts" array field.
+      11. Identify specific learning objectives (e.g. ["Identify base cases", "Trace recursive calls"]) and set them in the "learningObjectives" array field.
+      12. Output your response STRICTLY as a raw JSON object containing a "questions" array.
+      13. Do NOT include markdown code block formatting (like \`\`\`json), no preamble, no explanations outside JSON, and no comments.
+      
+      JSON Schema format:
+      {
+        "questions": [
+          {
             "question": "Question text...",
             "type": "Multiple Choice | True / False | Fill in the Blank | Short Answer",
             "options": ["Option A", "Option B", "Option C", "Option D"],
-            "correctAnswer": "Exact correct answer text",
+            "correctAnswer": "Exact correct answer option text",
             "difficulty": "Easy | Medium | Hard",
             "topic": "Concept Sub-topic",
             "points": 10,
             "explanation": "Step-by-step educational explanation suitable for beginners",
             "relatedConcepts": ["Concept A", "Concept B"],
             "learningObjectives": ["Objective A", "Objective B"]
-         }
-      ]`;
+          }
+        ]
+      }`;
 
     const userMessage = `Please generate an educational quiz covering the key concepts in the following content:\n\nTitle: ${title}\n\nContent:\n${content.slice(0, 15000)}`;
 
@@ -286,191 +488,108 @@ class QuizService {
     // 8. Invoke AI Provider
     let rawResponse = '';
     const aiModel = aiProviderService.getModel();
-    logger.info(`[Quiz Engine] Invoking AI Provider with model: ${aiModel}`);
+    logger.info('[Quiz] Generation started');
 
-    try {
-      rawResponse = await aiProviderService.generateAIResponse({
-        messages,
-        systemInstruction
-      });
-    } catch (err) {
-      logger.error(`[Quiz Engine] AI Provider failed: ${err.message}`);
-      if (err.statusCode) {
-        throw err;
-      }
-      
-      const errorMsg = err.message || '';
-      const isQuotaExceeded = errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('limit') || errorMsg.toLowerCase().includes('exceeded');
-      if (isQuotaExceeded) {
-        throw ApiError.tooManyRequests('Daily AI quota reached. Please retry later or switch to another configured AI provider.');
-      }
-      
-      const isRateLimit = errorMsg.toLowerCase().includes('rate limit');
-      if (isRateLimit) {
-        throw ApiError.tooManyRequests('Groq API rate limit reached. Please wait a moment and try again.');
-      }
-      
-      throw ApiError.internal(`Failed to generate quiz via AI Service: ${err.message}`);
-    }
+    let formattedQuestions = [];
+    let attempts = 0;
+    const maxAttempts = 2; // Initial + 1 retry
 
-    // 9. Production-Grade Parse and clean raw JSON response
-    if (!rawResponse || !rawResponse.trim()) {
-      throw ApiError.badRequest('The AI service returned an empty response. Please try again.');
-    }
+    while (attempts < maxAttempts && formattedQuestions.length < countVal) {
+      attempts++;
+      let runMessages = [...messages];
+      let runSystemInstruction = systemInstruction;
 
-    logger.info(`[Quiz Engine] Received raw response. Length: ${rawResponse.length}. Cleaning and parsing...`);
-
-    let extractedText = '';
-    
-    // Step 1: Locate bracket or brace JSON block to ignore surrounding text
-    const firstBracket = rawResponse.indexOf('[');
-    const firstBrace = rawResponse.indexOf('{');
-    
-    let startToken = -1;
-    let endToken = -1;
-    let searchCharStart = '';
-    let searchCharEnd = '';
-    
-    if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
-      searchCharStart = '[';
-      searchCharEnd = ']';
-    } else if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-      searchCharStart = '{';
-      searchCharEnd = '}';
-    }
-    
-    if (searchCharStart !== '') {
-      startToken = rawResponse.indexOf(searchCharStart);
-      endToken = rawResponse.lastIndexOf(searchCharEnd);
-    }
-    
-    if (startToken !== -1 && endToken !== -1 && endToken > startToken) {
-      extractedText = rawResponse.substring(startToken, endToken + 1);
-    } else {
-      extractedText = rawResponse.trim();
-    }
-
-    // Step 2: Clear markdown wrapper artifacts
-    if (extractedText.startsWith('```json')) {
-      extractedText = extractedText.substring(7);
-    } else if (extractedText.startsWith('```')) {
-      extractedText = extractedText.substring(3);
-    }
-    if (extractedText.endsWith('```')) {
-      extractedText = extractedText.substring(0, extractedText.length - 3);
-    }
-    extractedText = extractedText.trim();
-
-    logger.info(`[Quiz Engine] Cleaned AI response extracted length: ${extractedText.length}`);
-
-    let parsedQuestions = [];
-    let parsingSuccess = false;
-
-    // Step 3: Run parsing & cleanup iterations
-    try {
-      parsedQuestions = JSON.parse(extractedText);
-      parsingSuccess = true;
-    } catch (parseErr) {
-      logger.warn(`[Quiz Engine] First JSON parse attempt failed: ${parseErr.message}. Initiating intelligent cleanup...`);
-      
-      try {
-        let cleaned = extractedText;
-        
-        // Remove trailing commas in objects and arrays
-        cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
-
-        // Remove comments (single-line // and multi-line /* */)
-        cleaned = cleaned.replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1');
-
-        // Clean unescaped control chars if any
-        cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
-
-        parsedQuestions = JSON.parse(cleaned);
-        parsingSuccess = true;
-        logger.info('[Quiz Engine] Intelligent cleanup successful. Parsed JSON block.');
-      } catch (cleanupErr) {
-        // Save detailed failure log for diagnostic traceability
-        logger.error({
-          message: '[Quiz Engine] JSON Parse failed after all cleanup attempts',
-          rawResponse,
-          cleanedResponse: extractedText,
-          parseError: cleanupErr.message,
-          timestamp: new Date().toISOString(),
-          modelName: aiModel
+      if (attempts > 1) {
+        logger.info('[Quiz] Retry started');
+        runMessages.push({ role: 'assistant', content: rawResponse });
+        runMessages.push({
+          role: 'user',
+          content: `The previous response was invalid, truncated, or had too few questions. ` +
+            `You must return exactly ${countVal} questions matching the schema. ` +
+            `Return ONLY valid JSON. Do not include markdown code block formatting (like \`\`\`json), no preamble, and no explanation. ` +
+            `Ensure every question has options corresponding to its type (Multiple Choice must have exactly 4 non-empty options), and correctAnswer exactly matching one of the options.`
         });
-        
-        throw ApiError.badRequest('AI response could not be parsed into valid JSON questions. Please try again.');
       }
-    }
 
-    // Step 4: Handle single Object response wrapper anomaly
-    if (parsingSuccess && !Array.isArray(parsedQuestions) && typeof parsedQuestions === 'object' && parsedQuestions !== null) {
-      logger.info('[Quiz Engine] AI returned wrapped object. Extracting nested questions list...');
-      const nestedArray = Object.values(parsedQuestions).find(val => Array.isArray(val));
-      if (nestedArray) {
-        parsedQuestions = nestedArray;
-      } else {
-        parsedQuestions = [parsedQuestions];
-      }
-    }
-
-    if (!Array.isArray(parsedQuestions)) {
-      throw ApiError.badRequest('AI did not return a valid array of questions.');
-    }
-
-    // Step 5: Question Field Validations & Defaults
-    const generatedAt = new Date().toISOString();
-    const formattedQuestions = [];
-    
-    for (const q of parsedQuestions) {
-      // Validate core required fields
-      if (!q.question || typeof q.question !== 'string' || !q.question.trim()) {
-        logger.warn('[Quiz Engine] Question rejected: missing or invalid "question" text');
-        continue;
-      }
-      if (!q.correctAnswer || typeof q.correctAnswer !== 'string' || !q.correctAnswer.trim()) {
-        logger.warn('[Quiz Engine] Question rejected: missing or invalid "correctAnswer"');
+      try {
+        rawResponse = await aiProviderService.generateAIResponse({
+          messages: runMessages,
+          systemInstruction: runSystemInstruction
+        });
+      } catch (err) {
+        logger.error(`[Quiz Engine] AI Provider failed: ${err.message}`);
+        if (attempts >= maxAttempts) {
+          if (err.statusCode) throw err;
+          throw ApiError.internal(`Failed to generate quiz via AI Service: ${err.message}`);
+        }
         continue;
       }
 
-      // Format types & defaults
-      const type = q.type && typeof q.type === 'string' ? q.type : 'Multiple Choice';
-      const difficulty = q.difficulty && typeof q.difficulty === 'string' ? q.difficulty : 'Medium';
-      const topic = q.topic && typeof q.topic === 'string' ? q.topic : 'General';
-      const explanation = q.explanation && typeof q.explanation === 'string' ? q.explanation : 'No explanation provided.';
-      const relatedConcepts = Array.isArray(q.relatedConcepts) ? q.relatedConcepts.filter(c => typeof c === 'string') : [];
-      const learningObjectives = Array.isArray(q.learningObjectives) ? q.learningObjectives.filter(o => typeof o === 'string') : [];
-      const options = Array.isArray(q.options) ? q.options : (type === 'True / False' ? ['True', 'False'] : []);
-      const points = Number(q.points) || (difficulty === 'Easy' ? 5 : difficulty === 'Hard' ? 15 : 10);
+      if (!rawResponse || !rawResponse.trim()) {
+        logger.warn(`[Quiz Engine] Empty AI response received on attempt ${attempts}`);
+        if (attempts >= maxAttempts) {
+          logger.error('[Quiz] Generation failed');
+        }
+        continue;
+      }
 
-      formattedQuestions.push({
-        id: q.id && typeof q.id === 'string' ? q.id : crypto.randomUUID(),
-        question: q.question.trim(),
-        type,
-        options,
-        correctAnswer: q.correctAnswer.trim(),
-        explanation: explanation.trim(),
-        difficulty,
-        topic: topic.trim(),
-        points,
-        relatedConcepts,
-        learningObjectives,
-        bookmarked: false,
-        attempted: false,
-        selectedAnswer: null,
-        isCorrect: null,
-        reviewCount: 0,
-        lastReviewed: null,
-        nextReview: null,
-        createdAt: generatedAt
-      });
+      logger.info('[Quiz] AI response received');
+      
+      const jsonText = extractJSON(rawResponse);
+      const parseResult = parseJSONSafely(jsonText);
+
+      if (!parseResult.success) {
+        logger.warn('[Quiz] JSON parsing failed');
+        if (attempts >= maxAttempts) {
+          logger.error('[Quiz] Generation failed');
+        }
+        continue;
+      }
+
+      logger.info('[Quiz] JSON parsed');
+
+      let questionsList = [];
+      if (Array.isArray(parseResult.parsed)) {
+        questionsList = parseResult.parsed;
+      } else if (parseResult.parsed && typeof parseResult.parsed === 'object') {
+        if (Array.isArray(parseResult.parsed.questions)) {
+          questionsList = parseResult.parsed.questions;
+        } else {
+          const nestedArray = Object.values(parseResult.parsed).find(val => Array.isArray(val));
+          if (nestedArray) {
+            questionsList = nestedArray;
+          } else {
+            questionsList = [parseResult.parsed];
+          }
+        }
+      }
+
+      formattedQuestions = [];
+      for (const q of questionsList) {
+        const validated = repairAndValidateQuestion(q);
+        if (validated) {
+          formattedQuestions.push(validated);
+        }
+      }
+
+      logger.info(`[Quiz] Questions validated: ${formattedQuestions.length}/${questionsList.length}`);
+
+      if (formattedQuestions.length === 0) {
+        logger.warn('[Quiz] Validation failed');
+        if (attempts >= maxAttempts) {
+          logger.error('[Quiz] Generation failed');
+        }
+      }
     }
-
-    logger.info(`[Quiz Engine] Validation complete. Success count: ${formattedQuestions.length} / ${parsedQuestions.length}`);
 
     if (formattedQuestions.length === 0) {
-      throw ApiError.badRequest('The AI service failed to generate any valid quiz questions. Please try again.');
+      const err = ApiError.badRequest('Unable to generate quiz questions.');
+      err.code = 'QUIZ_GENERATION_FAILED';
+      throw err;
     }
+
+    logger.info('[Quiz] Response normalized');
+    const generatedAt = new Date().toISOString();
     const version = '1.0';
 
     // 11. Persist into session.resources under resource.ai.quiz
@@ -581,7 +700,7 @@ class QuizService {
       );
     }
 
-    logger.info(`[Quiz Engine] Saved ${formattedQuestions.length} questions to database for resource ${resourceId} under key ${cacheKey}`);
+    logger.info('[Quiz] Quiz generation completed');
 
     return {
       success: true,

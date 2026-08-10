@@ -4,15 +4,21 @@ import ApiError from '../utils/ApiError.js';
 import logger from '../config/logger.js';
 import mongoose from 'mongoose';
 import pdfExtractorService from './pdf/pdfExtractor.service.js';
+import Highlight from '../models/highlight.model.js';
 
 class ExplainService {
   /**
    * Explain a concept: AI Reuse First flow -> AI router query -> Cache save
    */
-  async explainConcept({ userId, concept, resourceId, resourceType, studySessionId, difficulty = 'Medium', mode }) {
-    if (!concept || !resourceId || !studySessionId) {
+  async explainConcept({ userId, concept, question, answer, resourceId, resourceType, studySessionId, difficulty = 'Medium', mode }) {
+    const targetConcept = (concept || answer || question || '').trim();
+    if (!targetConcept || !resourceId || !studySessionId) {
       throw ApiError.badRequest('Missing concept, resourceId, or studySessionId');
     }
+
+    logger.info(`[Explain] Request received`);
+    logger.info(`[Explain] Resource ID: ${resourceId}`);
+    logger.info(`[Explain] Concept received: "${targetConcept}"`);
 
     // Determine target difficulty level based on mode
     let targetDifficulty = difficulty;
@@ -96,12 +102,12 @@ class ExplainService {
 
     // --- CHECK 1: Stored Explanations (Smart Cache) ---
     const existingExplanation = resource.ai.explanations.find(
-      e => e.concept.toLowerCase() === concept.toLowerCase() && 
+      e => e.concept.toLowerCase() === targetConcept.toLowerCase() && 
            e.difficulty.toLowerCase() === targetDifficulty.toLowerCase()
     );
 
     if (existingExplanation) {
-      logger.info(`[Explain Service] Smart Cache Hit: Found existing explanation for concept "${concept}" (${targetDifficulty})`);
+      logger.info(`[Explain Service] Smart Cache Hit: Found existing explanation for concept "${targetConcept}" (${targetDifficulty})`);
       return { ...existingExplanation, cached: true };
     }
 
@@ -111,8 +117,8 @@ class ExplainService {
     // A. Search Quiz Questions
     if (resource.ai.quiz?.questions) {
       const matchedQuizQuestions = resource.ai.quiz.questions.filter(q => 
-        (q.question && q.question.toLowerCase().includes(concept.toLowerCase())) ||
-        (q.explanation && q.explanation.toLowerCase().includes(concept.toLowerCase()))
+        (q.question && q.question.toLowerCase().includes(targetConcept.toLowerCase())) ||
+        (q.explanation && q.explanation.toLowerCase().includes(targetConcept.toLowerCase()))
       );
       if (matchedQuizQuestions.length > 0) {
         backgroundContext += `[Quiz Questions context]: ${matchedQuizQuestions.map(q => `Q: ${q.question} | Explanation: ${q.explanation}`).join('\n')}\n`;
@@ -130,31 +136,31 @@ class ExplainService {
         summaryText = JSON.stringify(resource.ai.summary);
       }
       
-      if (summaryText && summaryText.toLowerCase().includes(concept.toLowerCase())) {
+      if (summaryText && summaryText.toLowerCase().includes(targetConcept.toLowerCase())) {
         backgroundContext += `[Summary context]: ${summaryText.substring(0, 1500)}...\n`;
       }
     }
 
     // C. Search Flashcards
-    if (resource.ai.flashcards) {
-      const matchedCards = resource.ai.flashcards.filter(c =>
-        (c.front && c.front.toLowerCase().includes(concept.toLowerCase())) ||
-        (c.back && c.back.toLowerCase().includes(concept.toLowerCase()))
+    if (resource.ai.flashcards && Array.isArray(resource.ai.flashcards.cards)) {
+      const matchedCards = resource.ai.flashcards.cards.filter(c =>
+        (c.question && c.question.toLowerCase().includes(targetConcept.toLowerCase())) ||
+        (c.answer && c.answer.toLowerCase().includes(targetConcept.toLowerCase()))
       );
       if (matchedCards.length > 0) {
-        backgroundContext += `[Flashcard context]: ${matchedCards.map(c => `Front: ${c.front} | Back: ${c.back}`).join('\n')}\n`;
+        backgroundContext += `[Flashcard context]: ${matchedCards.map(c => `Question: ${c.question} | Answer: ${c.answer}`).join('\n')}\n`;
       }
     }
 
     // D. Search Resource Metadata
     if (resource.data?.relatedConcepts) {
-      const match = resource.data.relatedConcepts.find(c => c.toLowerCase() === concept.toLowerCase());
+      const match = resource.data.relatedConcepts.find(c => c.toLowerCase() === targetConcept.toLowerCase());
       if (match) {
-        backgroundContext += `[Related concept matches]: ${concept} is explicitly flagged in list of resource concepts.\n`;
+        backgroundContext += `[Related concept matches]: ${targetConcept} is explicitly flagged in list of resource concepts.\n`;
       }
     }
     if (resource.data?.learningObjectives) {
-      const match = resource.data.learningObjectives.find(o => o.toLowerCase().includes(concept.toLowerCase()));
+      const match = resource.data.learningObjectives.find(o => o.toLowerCase().includes(targetConcept.toLowerCase()));
       if (match) {
         backgroundContext += `[Learning objective context]: ${match}\n`;
       }
@@ -164,7 +170,20 @@ class ExplainService {
     if (resource.type === 'pdf') {
       const pdfText = resource.data?.extractedText || session.metadata?.pdf?.extractedText || '';
       if (pdfText) {
-        backgroundContext += `[Extracted PDF text content]:\n${pdfText.slice(0, 4000)}\n`;
+        const isSavedHighlight = await Highlight.exists({ userId, resourceId, text: targetConcept });
+        if (isSavedHighlight) {
+          const idx = pdfText.toLowerCase().indexOf(targetConcept.toLowerCase());
+          if (idx !== -1) {
+            const start = Math.max(0, idx - 300);
+            const end = Math.min(pdfText.length, idx + targetConcept.length + 300);
+            const context = pdfText.substring(start, end).trim();
+            backgroundContext += `[Highlighted Concept Context]:\n... ${context} ...\n`;
+          } else {
+            backgroundContext += `[Highlighted Concept]:\n${targetConcept}\n`;
+          }
+        } else {
+          backgroundContext += `[Extracted PDF text content]:\n${pdfText.slice(0, 4000)}\n`;
+        }
       }
     } else if (resource.type === 'notes') {
       const notesText = resource.data?.content || session.metadata?.notes?.content || '';
@@ -179,73 +198,105 @@ class ExplainService {
     }
 
     // 3. Invoke AI Router to generate structured explanation
-    logger.info(`[Explain Service] Cache Miss. Querying AI Router for concept explanation: "${concept}" (${targetDifficulty})`);
+    logger.info(`[Explain Service] Cache Miss. Querying AI Router for concept explanation: "${targetConcept}" (${targetDifficulty})`);
     
     const systemInstruction = 
-      `You are MindSync AI, an expert, encouraging, and clear AI teacher. ` +
-      `Your role is to explain concepts clearly, simplify complex ideas, teach step-by-step, ` +
-      `provide practical examples, and foster an active learning environment.\n` +
+      `You are MindSync's AI learning tutor.\n` +
+      `Your job is to teach the concept from the provided flashcard.\n` +
+      `Do not merely repeat or paraphrase the answer.\n` +
+      `Explain the concept in a way that helps a student understand, remember, and apply it.\n` +
+      `Start with a simple explanation.\n` +
+      `Then explain how it works when applicable.\n` +
+      `Give one clear example.\n` +
+      `Highlight the most important points.\n` +
+      `Include a short memory aid or takeaway when useful.\n` +
+      `Stay strictly focused on the provided concept.\n` +
+      `Preserve the terminology and meaning of the source material.\n` +
+      `Do not invent facts or unrelated information.\n` +
+      `If the provided concept is already simple, keep the explanation concise.\n` +
+      `If the concept is technically difficult, explain it progressively from basic intuition to technical detail.\n\n` +
       `You must explain the requested concept inside the context of the student's resource: "${resource.title || 'Study Material'}".\n\n` +
       `When explaining, return strictly a structured JSON object with the following schema:\n` +
       `{\n` +
       `  "title": "Short descriptive title",\n` +
       `  "difficulty": "Easy" | "Medium" | "Hard",\n` +
       `  "simpleExplanation": "Clear beginner explanation. Avoid jargon.",\n` +
-      `  "stepByStep": ["Step 1...", "Step 2..."],\n` +
-      `  "realWorldExample": "An intuitive real-world example",\n` +
-      `  "visualAnalogy": "A visual analogy showing the concept structure",\n` +
-      `  "commonMistakes": "Common misconceptions or pitfalls",\n` +
-      `  "relatedConcepts": ["Concept A", "Concept B"],\n` +
-      `  "learningObjectives": ["Objective A", "Objective B"],\n` +
-      `  "estimatedReadingTime": "e.g., 2 minutes"\n` +
+      `  "howItWorks": ["Step 1...", "Step 2..."],\n` +
+      `  "example": "An intuitive real-world or technical example",\n` +
+      `  "keyPoints": ["Important point 1", "Important point 2"],\n` +
+      `  "remember": "A short memory trick or one-line takeaway when appropriate"\n` +
       `}\n\n` +
       `Do not include markdown tags (\`\`\`json) outside the JSON output. Just output the raw JSON object.`;
 
-    let promptContent = `Provide a concept explanation for: "${concept}". Target difficulty: ${targetDifficulty}.\n`;
+    let promptContent = '';
+    if (question && answer) {
+      promptContent = `Provide a concept explanation for this flashcard:\nQuestion: "${question}"\nAnswer/Concept: "${answer}"\n`;
+    } else {
+      promptContent = `Provide a concept explanation for: "${targetConcept}".\n`;
+    }
+    promptContent += `Target difficulty: ${targetDifficulty}.\n`;
+
     if (backgroundContext) {
       promptContent += `\nGround the explanation in the student's existing study resource details:\n${backgroundContext}`;
     }
 
+    logger.info(`[Explain] AI request started`);
     const aiResponse = await aiProviderService.generateAIResponse({
       messages: [{ role: 'user', content: promptContent }],
       systemInstruction,
       jsonMode: true
     });
+    logger.info(`[Explain] AI response received`);
 
     // Parse the response
     let parsedExplanation;
+    const responseText = (aiResponse.text || aiResponse.toString() || '').trim();
     try {
-      const responseText = aiResponse.text || aiResponse.toString();
-      parsedExplanation = JSON.parse(responseText.trim());
+      if (typeof responseText === 'object') {
+        parsedExplanation = responseText;
+      } else {
+        parsedExplanation = JSON.parse(responseText);
+      }
     } catch (parseErr) {
       logger.warn(`[Explain Service] JSON parse failed. Extracting JSON string...`);
-      const responseText = aiResponse.text || aiResponse.toString();
       const match = responseText.match(/\{[\s\S]*\}/);
       if (match) {
-        parsedExplanation = JSON.parse(match[0].trim());
+        try {
+          parsedExplanation = JSON.parse(match[0].trim());
+        } catch (innerErr) {
+          logger.error(`[Explain Service] Extracting JSON object failed. Raw response: ${responseText}`);
+          throw ApiError.internal(`AI response parsing failed: Invalid JSON structure generated by AI model.`);
+        }
       } else {
-        throw new Error('AI provider failed to return structured explanation JSON.');
+        logger.error(`[Explain Service] No JSON object found in response. Raw response: ${responseText}`);
+        throw ApiError.internal(`AI response parsing failed: No JSON object found in AI response.`);
       }
     }
 
     // 4. Construct complete Explanation Object
     const newExplanation = {
       id: new mongoose.Types.ObjectId().toString(),
-      concept,
+      concept: targetConcept,
       difficulty: parsedExplanation.difficulty || targetDifficulty,
-      title: parsedExplanation.title || `${concept} Explained`,
+      title: parsedExplanation.title || `${targetConcept} Explained`,
       simpleExplanation: parsedExplanation.simpleExplanation || '',
-      stepByStep: parsedExplanation.stepByStep || [],
-      realWorldExample: parsedExplanation.realWorldExample || '',
+      stepByStep: parsedExplanation.howItWorks || parsedExplanation.stepByStep || [],
+      howItWorks: parsedExplanation.howItWorks || parsedExplanation.stepByStep || [],
+      realWorldExample: parsedExplanation.example || parsedExplanation.realWorldExample || '',
+      example: parsedExplanation.example || parsedExplanation.realWorldExample || '',
+      keyPoints: parsedExplanation.keyPoints || parsedExplanation.learningObjectives || [],
+      learningObjectives: parsedExplanation.keyPoints || parsedExplanation.learningObjectives || [],
+      remember: parsedExplanation.remember || '',
       visualAnalogy: parsedExplanation.visualAnalogy || '',
       commonMistakes: parsedExplanation.commonMistakes || '',
       relatedConcepts: parsedExplanation.relatedConcepts || [],
-      learningObjectives: parsedExplanation.learningObjectives || [],
       estimatedReadingTime: parsedExplanation.estimatedReadingTime || '2 minutes',
       generatedAt: new Date().toISOString(),
       version: '1.0',
       aiModel: aiProviderService.getModel()
     };
+
+    logger.info(`[Explain] Response normalized`);
 
     // 5. Store explanation inside study session resources atomically
     resource.ai.explanations.push(newExplanation);
@@ -260,7 +311,7 @@ class ExplainService {
       { new: true }
     );
 
-    logger.info(`[Explain Service] Saved explanation for concept "${concept}" to resource.`);
+    logger.info(`[Explain] Explanation saved`);
     return { ...newExplanation, cached: false };
   }
 

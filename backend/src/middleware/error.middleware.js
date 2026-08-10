@@ -114,6 +114,10 @@ export const errorHandler = (err, req, res, _next) => {
     message: error.message,
   };
 
+  if (error.code) {
+    response.code = error.code;
+  }
+
   if (error.errors?.length > 0) {
     response.errors = error.errors;
   }

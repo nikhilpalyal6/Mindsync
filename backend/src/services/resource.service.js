@@ -1,6 +1,7 @@
 import StudySession from '../models/studySession.model.js';
 import logger from '../config/logger.js';
 import mongoose from 'mongoose';
+import mindMapService from './mindMap.service.js';
 
 class ResourceService {
   /**
@@ -58,11 +59,39 @@ class ResourceService {
         r => r.type === type && r.url === url
       );
 
+      const existingData = existingResourceIndex > -1 ? (session.resources[existingResourceIndex].data || {}) : {};
+      
+      // Perform deep merge to avoid losing rich fields during lightweight updates
+      const mergedData = {
+        ...existingData,
+        ...(data || {})
+      };
+
+      // Explicitly preserve heavy payload keys if they exist in the DB but are missing in the update
+      if (existingData.fileData && !mergedData.fileData) {
+        mergedData.fileData = existingData.fileData;
+      }
+      if (existingData.extractedText && !mergedData.extractedText) {
+        mergedData.extractedText = existingData.extractedText;
+      }
+      if (existingData.pages && !mergedData.pages) {
+        mergedData.pages = existingData.pages;
+      }
+      if (existingData.transcriptItems && !mergedData.transcriptItems) {
+        mergedData.transcriptItems = existingData.transcriptItems;
+      }
+      if (existingData.originalTranscriptItems && !mergedData.originalTranscriptItems) {
+        mergedData.originalTranscriptItems = existingData.originalTranscriptItems;
+      }
+      if (existingData.chapters && !mergedData.chapters) {
+        mergedData.chapters = existingData.chapters;
+      }
+
       const resourcePayload = {
         type,
         url,
         title: title || 'Untitled Resource',
-        data: data || {},
+        data: mergedData,
         updatedAt: new Date()
       };
 
@@ -93,11 +122,11 @@ class ResourceService {
       session.metadata.lastOpened = new Date().toISOString();
 
       if (type === 'youtube') {
-        session.metadata.youtube = data;
+        session.metadata.youtube = mergedData;
       } else if (type === 'pdf') {
-        session.metadata.pdf = data;
+        session.metadata.pdf = mergedData;
       } else if (type === 'notes') {
-        session.metadata.notes = data;
+        session.metadata.notes = mergedData;
       }
 
       session.markModified('resources');
@@ -112,6 +141,17 @@ class ResourceService {
 
       logger.info(`[Resource Service] Updated statistics: resourceCount=${session.resourceCount}, videoCount=${session.videoCount}, pdfCount=${session.pdfCount}, notesCount=${session.notesCount}`);
       
+      // Trigger background Workspace Mind Map generation asynchronously (Step 13 & 16)
+      if (session && session.user && session._id) {
+        const resourcesForMap = session.resources || [];
+        mindMapService.generateWorkspaceMindMapBackground(
+          session.user.toString(),
+          session._id.toString(),
+          session.title || 'Workspace Learning Map',
+          resourcesForMap
+        ).catch(err => logger.error(`[Workspace MindMap Hook] Automatic background generation failed: ${err.message}`));
+      }
+
       return session;
     } catch (err) {
       logger.error(`[Resource Service] linkResourceToSession error: ${err.stack}`);

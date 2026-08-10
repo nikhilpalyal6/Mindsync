@@ -183,7 +183,27 @@ export const StudyWorkspaceLayout = React.memo(({
 
           {/* 11. Mind Map */}
           <div style={{ display: activeTab === 'mindmap' ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden' }}>
-            <MindMapPanel session={session} />
+            <MindMapPanel 
+              session={session} 
+              onNavigateToSource={(resource, pageNumber, timestamp) => {
+                handleSelectResource(resource);
+                if (resource.type === 'pdf') {
+                  switchTab('pdf_viewer');
+                  if (pageNumber) {
+                    window.__targetPdfPage = pageNumber;
+                    window.dispatchEvent(new CustomEvent('jump-to-pdf-page', { detail: { page: pageNumber } }));
+                  }
+                } else if (resource.type === 'youtube') {
+                  switchTab('video_viewer');
+                  if (timestamp) {
+                    window.__targetVideoTimestamp = timestamp;
+                    window.dispatchEvent(new CustomEvent('jump-to-video-timestamp', { detail: { timestamp } }));
+                  }
+                } else if (resource.type === 'notes') {
+                  switchTab('notes_viewer');
+                }
+              }}
+            />
           </div>
         </div>
       </div>

@@ -53,6 +53,23 @@ export const upload = multer({
   },
 });
 
+const pdfFileFilter = (_req, file, cb) => {
+  if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+    cb(null, true);
+  } else {
+    cb(new ApiError(400, 'Only PDF files are supported.'), false);
+  }
+};
+
+export const uploadPdf = multer({
+  storage,
+  fileFilter: pdfFileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit
+    files: 1
+  }
+}).single('file');
+
 export const uploadSingle = (fieldName) => upload.single(fieldName);
 export const uploadMultiple = (fieldName, maxCount = 5) => upload.array(fieldName, maxCount);
 

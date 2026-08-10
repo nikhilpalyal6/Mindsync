@@ -164,6 +164,56 @@ export const VideoViewerPanel = React.memo(({
     }
   }, []);
 
+  useEffect(() => {
+    const handleJumpTimestamp = (e) => {
+      const timestampStr = e.detail?.timestamp;
+      if (!timestampStr) return;
+      
+      let seconds = 0;
+      if (timestampStr.includes(':')) {
+        const parts = timestampStr.split(':').map(Number);
+        if (parts.length === 2) {
+          seconds = parts[0] * 60 + parts[1];
+        } else if (parts.length === 3) {
+          seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        }
+      } else {
+        seconds = parseFloat(timestampStr);
+      }
+      
+      if (!isNaN(seconds)) {
+        handleSeek(seconds);
+      }
+    };
+    window.addEventListener('jump-to-video-timestamp', handleJumpTimestamp);
+    return () => {
+      window.removeEventListener('jump-to-video-timestamp', handleJumpTimestamp);
+    };
+  }, [handleSeek]);
+
+  useEffect(() => {
+    if (window.__targetVideoTimestamp) {
+      const target = window.__targetVideoTimestamp;
+      window.__targetVideoTimestamp = null;
+      setTimeout(() => {
+        let seconds = 0;
+        if (target.includes(':')) {
+          const parts = target.split(':').map(Number);
+          if (parts.length === 2) {
+            seconds = parts[0] * 60 + parts[1];
+          } else if (parts.length === 3) {
+            seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+          }
+        } else {
+          seconds = parseFloat(target);
+        }
+        if (!isNaN(seconds)) {
+          handleSeek(seconds);
+        }
+      }, 800);
+    }
+  }, [videoUrl, handleSeek]);
+
   if (!videoUrl) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '16px', color: 'var(--text-muted)' }}>

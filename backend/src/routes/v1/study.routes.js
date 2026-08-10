@@ -3,6 +3,7 @@ import { protect } from '../../middleware/auth.middleware.js';
 import studyController from '../../controllers/study.controller.js';
 import summaryController from '../../controllers/summary.controller.js';
 import youtubeController from '../../controllers/youtube.controller.js';
+import { uploadPdf } from '../../config/multer.js';
 
 const router = Router();
 
@@ -26,6 +27,9 @@ router.route('/:sessionId/youtube/fetch')
 router.route('/:sessionId/resources')
   .get(studyController.getResources)
   .post(studyController.addResource);
+
+router.route('/:sessionId/resources/upload-pdf')
+  .post(uploadPdf, studyController.uploadPdfResource);
 
 router.route('/:sessionId/resources/:resourceId')
   .patch(studyController.renameResource)

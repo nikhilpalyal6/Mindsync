@@ -33,6 +33,7 @@ import Contact from './pages/Contact'
 import StudyMode from './pages/StudyMode'
 import Community from './pages/Community'
 import StudyViewer from './pages/StudyViewer'
+import StudyPlanner from './components/study/StudyPlanner'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Toast from './components/Toast'
@@ -69,6 +70,7 @@ function AppContent() {
         <Route path="/verify-email/:token" element={<GuestRoute><VerifyEmail /></GuestRoute>} />
         <Route path="/study" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
         <Route path="/study/viewer" element={<ProtectedRoute><StudyViewer /></ProtectedRoute>} />
+        <Route path="/study-planner" element={<ProtectedRoute><StudyPlanner /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/pricing" element={<Pricing />} />

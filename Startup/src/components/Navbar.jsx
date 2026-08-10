@@ -78,6 +78,14 @@ export default function Navbar() {
           </li>
           <li>
             <Link 
+              className={location.pathname === '/study-planner' ? 'active' : ''} 
+              to="/study-planner"
+            >
+              Study Planner
+            </Link>
+          </li>
+          <li>
+            <Link 
               className={location.pathname === '/pricing' ? 'active' : ''} 
               to="/pricing"
             >
@@ -237,6 +245,15 @@ export default function Navbar() {
               to="/study"
             >
               Study Mode
+            </Link>
+          </li>
+          <li>
+            <Link 
+              onClick={() => setIsMenuOpen(false)} 
+              className={location.pathname === '/study-planner' ? 'active' : ''} 
+              to="/study-planner"
+            >
+              Study Planner
             </Link>
           </li>
           <li>
