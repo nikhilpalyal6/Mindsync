@@ -14,7 +14,7 @@ import { updateStudySession } from '../../services/api';
 
 export const SourcesPanel = React.memo(({ 
   session, 
-  onSelectResource, 
+  onOpenResource, 
   onSwitchTab,
   filterState,
   onDeleteResource,
@@ -70,16 +70,7 @@ export const SourcesPanel = React.memo(({
     return list;
   }, [resources, sourceSearchQuery, filterType, sortField, sortOrder]);
 
-  const handleOpenResource = (res) => {
-    onSelectResource(res);
-    if (res.type === 'pdf') {
-      onSwitchTab('pdf_viewer');
-    } else if (res.type === 'youtube') {
-      onSwitchTab('video_viewer');
-    } else if (res.type === 'notes') {
-      onSwitchTab('notes_viewer');
-    }
-  };
+  const handleOpenResource = onOpenResource;
 
   const handleDeleteResource = async (res, e) => {
     e.stopPropagation();

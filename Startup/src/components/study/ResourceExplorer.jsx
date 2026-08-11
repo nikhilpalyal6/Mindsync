@@ -22,7 +22,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.vers
 export const ResourceExplorer = React.memo(({ 
   session, 
   activeResource, 
-  onSelectResource,
+  onOpenResource,
   activeTab,
   onSwitchTab,
   isCollapsed,
@@ -189,20 +189,12 @@ export const ResourceExplorer = React.memo(({
   // Helper to open a viewer
   const handleItemClick = (resource) => {
     if (renamingId) return; // Prevent navigation while renaming
-    onSelectResource(resource);
-    if (resource.type === 'pdf') {
-      onSwitchTab('pdf_viewer');
-    } else if (resource.type === 'youtube') {
-      onSwitchTab('video_viewer');
-    } else if (resource.type === 'notes') {
-      onSwitchTab('notes_viewer');
-    }
+    onOpenResource(resource);
   };
 
   // Helper to open an AI tab for a specific resource
   const handleAiItemClick = (resource, tab) => {
-    onSelectResource(resource);
-    onSwitchTab(tab);
+    onOpenResource(resource, tab);
   };
 
   if (isCollapsed) {

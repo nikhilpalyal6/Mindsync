@@ -603,7 +603,7 @@ export default function VideoLearning({
               <AISidebar session={session} activeResource={activeResource} />
             )}
             {activeToolTab === 'summary' && (
-              <SummaryPanel session={session} resourceType="youtube" />
+              <SummaryPanel session={session} resourceId={videoUrl || session?.metadata?.youtube?.videoUrl || ''} resourceType="youtube" />
             )}
             {activeToolTab === 'flashcards' && (
               <FlashcardPanel session={session} resourceId={videoUrl || session?.metadata?.youtube?.videoUrl || ''} resourceType="youtube" />

@@ -19,7 +19,7 @@ import {
 export const WorkspaceHome = React.memo(({ 
   session, 
   onTabChange, 
-  onSelectResource, 
+  onOpenResource, 
   onUploadPdfClick,
   onAddVideoClick,
   onAddNotesClick,
@@ -56,16 +56,7 @@ export const WorkspaceHome = React.memo(({
     });
   }, [session?.lastOpened, session?.updatedAt]);
 
-  const handleOpenResource = (res) => {
-    onSelectResource(res);
-    if (res.type === 'pdf') {
-      onTabChange('pdf_viewer');
-    } else if (res.type === 'youtube') {
-      onTabChange('video_viewer');
-    } else if (res.type === 'notes') {
-      onTabChange('notes_viewer');
-    }
-  };
+  const handleOpenResource = onOpenResource;
 
   const getIcon = (type) => {
     if (type === 'pdf') return <FileText size={14} style={{ color: 'var(--accent-blue)' }} />;

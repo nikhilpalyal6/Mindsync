@@ -78,7 +78,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
 
   useEffect(() => {
     loadExplanations();
-  }, [loadExplanations]);
+  }, [resourceId, studySessionId]);
 
   // Prevent Spacebar page scrolling
   const containerRef = useRef(null);
@@ -111,7 +111,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
 
   useEffect(() => {
     loadFlashcards();
-  }, [loadFlashcards]);
+  }, [resourceId, studySessionId]);
 
   // Generate Flashcards
   const handleGenerate = async (forceRegenerate = false) => {
@@ -446,8 +446,9 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
             </div>
             <button
               onClick={() => handleGenerate(false)}
+              disabled={loading}
               className="pdf-toolbar-btn accent"
-              style={{ padding: '8px 18px', fontSize: '0.825rem' }}
+              style={{ padding: '8px 18px', fontSize: '0.825rem', cursor: loading ? 'not-allowed' : 'pointer' }}
             >
               <RefreshCw size={13} style={{ marginRight: '6px' }} />
               Retry Generation
@@ -1111,8 +1112,9 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
 
             <button
               onClick={() => handleGenerate(false)}
+              disabled={loading}
               className="pdf-toolbar-btn accent"
-              style={{ padding: '8px 18px', fontSize: '0.825rem' }}
+              style={{ padding: '8px 18px', fontSize: '0.825rem', cursor: loading ? 'not-allowed' : 'pointer' }}
             >
               <Sparkles size={13} style={{ marginRight: '6px' }} />
               <span>Generate Flashcards</span>

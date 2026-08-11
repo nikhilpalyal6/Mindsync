@@ -73,9 +73,10 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
     if (resourceType) {
       setSourceState(resourceType);
     }
-  }, [resourceId, resourceType, loadHistory]);
+  }, [resourceId, resourceType, studySessionId]);
 
   const handleExplain = useCallback(async (conceptName, difficultyLevel = 'Medium', mode = null, customResId = null, customSource = null) => {
+    if (loading) return;
     if (!conceptName || !conceptName.trim()) return;
     
     const targetResId = customResId || resourceIdState;
@@ -120,7 +121,7 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
     } finally {
       setLoading(false);
     }
-  }, [resourceIdState, sourceState, studySessionId, loadHistory, trackAnalytic]);
+  }, [loading, resourceIdState, sourceState, studySessionId, loadHistory, trackAnalytic]);
 
   // Global listener for Explain triggers
   useEffect(() => {
@@ -351,6 +352,7 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleExplain(conceptInput);
             }}
+            disabled={loading}
             aria-label="Explain Concept Input"
             style={{
               width: '100%',
@@ -360,7 +362,8 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
               padding: '8px 12px 8px 32px',
               fontSize: '0.8rem',
               color: '#ffffff',
-              outline: 'none'
+              outline: 'none',
+              cursor: loading ? 'not-allowed' : 'text'
             }}
           />
         </div>
@@ -372,14 +375,15 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
               <button
                 key={h.id || i}
                 onClick={() => handleExplain(h.concept, h.difficulty)}
+                disabled={loading}
                 style={{
                   backgroundColor: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.06)',
                   borderRadius: '100px',
                   padding: '3px 8px',
                   fontSize: '0.675rem',
-                  color: 'rgba(255, 255, 255, 0.65)',
-                  cursor: 'pointer',
+                  color: loading ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.65)',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   whiteSpace: 'nowrap'
                 }}
               >

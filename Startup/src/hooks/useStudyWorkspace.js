@@ -255,9 +255,10 @@ export function useResourceState(activeSession, setActiveSession, setSessions) {
     return (activeSession?.resources || []).filter(r => r.type === 'notes');
   }, [activeSession?.resources]);
 
-  const handleSelectResource = useCallback(async (resource) => {
+  const handleSelectResource = useCallback(async (resource, sessionOverride = null) => {
     setActiveResource(resource);
-    if (!activeSession || !resource) return;
+    const targetSession = sessionOverride || activeSession;
+    if (!targetSession || !resource) return;
 
     try {
       const typeMap = {
@@ -268,7 +269,6 @@ export function useResourceState(activeSession, setActiveSession, setSessions) {
       const activeType = typeMap[resource.type] || 'pdf';
       
       const updatedMeta = {
-        ...(activeSession.metadata || {}),
         activeResourceType: activeType,
         lastTab: activeType
       };
@@ -281,7 +281,7 @@ export function useResourceState(activeSession, setActiveSession, setSessions) {
         updatedMeta.notes = resource.data;
       }
 
-      const res = await updateStudySession(activeSession._id, {
+      const res = await updateStudySession(targetSession._id, {
         metadata: updatedMeta
       });
       

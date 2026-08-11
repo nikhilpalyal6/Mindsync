@@ -215,75 +215,28 @@ class StudyController {
       const base64Data = fileBuffer.toString('base64');
       const dataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
 
-      // Call PDF Extractor service
-      const pdfExtractorService = (await import('../services/pdf/pdfExtractor.service.js')).default;
-      const extractedText = await pdfExtractorService.extractTextFromBase64(dataUrl);
-
-      // Parse pages from extractedText
-      const pages = [];
-      const pageRegex = /\[Page\s+(\d+)\]/gi;
-      let match;
-      const pagePositions = [];
-
-      while ((match = pageRegex.exec(extractedText)) !== null) {
-        pagePositions.push({
-          pageNumber: parseInt(match[1], 10),
-          index: match.index,
-          headerLength: match[0].length
-        });
-      }
-
-      if (pagePositions.length === 0) {
-        pages.push({
-          pageNumber: 1,
-          text: extractedText,
-          extractionStatus: 'completed',
-          wordCount: extractedText.split(/\s+/).filter(Boolean).length
-        });
-      } else {
-        for (let i = 0; i < pagePositions.length; i++) {
-          const current = pagePositions[i];
-          const next = pagePositions[i + 1];
-          const startIdx = current.index + current.headerLength;
-          const endIdx = next ? next.index : extractedText.length;
-          const text = extractedText.substring(startIdx, endIdx).trim();
-
-          pages.push({
-            pageNumber: current.pageNumber,
-            text: text,
-            extractionStatus: 'completed',
-            wordCount: text.split(/\s+/).filter(Boolean).length
-          });
-        }
-      }
-
-      const totalPages = pages.length;
-
-      const newPdfMeta = {
+      const initialPdfMeta = {
         filename: req.file.originalname,
         pdfFilename: req.file.originalname,
         fileSize: req.file.size,
         fileType: req.file.mimetype,
         fileData: dataUrl,
-        extractedText,
-        pageCount: totalPages,
-        totalPages,
-        processedPages: totalPages,
-        successfulPages: totalPages,
-        failedPages: 0,
-        extractionStatus: 'completed',
-        pages,
         pageNumber: 1,
         scale: 1.0,
         fitMode: 'page',
-        lastOpened: new Date().toISOString()
+        lastOpened: new Date().toISOString(),
+        processingStatus: 'processing',
+        extractedText: '',
+        pageCount: 0,
+        totalPages: 0,
+        pages: []
       };
 
       const updatedSession = await studyService.addResource(userId, sessionId, {
         type: 'pdf',
         url: req.file.originalname,
         title: req.file.originalname,
-        data: newPdfMeta
+        data: initialPdfMeta
       });
 
       // Clean up multer temporary file
@@ -291,11 +244,118 @@ class StudyController {
         fs.unlinkSync(req.file.path);
       }
 
+      // Respond immediately to the client
       res.status(HTTP_STATUS.CREATED).json(
-        ApiResponse.success(updatedSession, 'PDF uploaded and processed successfully.')
+        ApiResponse.success(updatedSession, 'PDF uploaded and resource created successfully.')
       );
+
+      // Run AI Text Extraction in the background asynchronously
+      (async () => {
+        try {
+          logger.info(`[Background PDF Ingestion] Starting text extraction for session: ${sessionId}, file: ${req.file.originalname}`);
+          const pdfExtractorService = (await import('../services/pdf/pdfExtractor.service.js')).default;
+          const extractedText = await pdfExtractorService.extractTextFromBase64(dataUrl);
+
+          const pages = [];
+          const pageRegex = /\[Page\s+(\d+)\]/gi;
+          let match;
+          const pagePositions = [];
+
+          while ((match = pageRegex.exec(extractedText)) !== null) {
+            pagePositions.push({
+              pageNumber: parseInt(match[1], 10),
+              index: match.index,
+              headerLength: match[0].length
+            });
+          }
+
+          if (pagePositions.length === 0) {
+            pages.push({
+              pageNumber: 1,
+              text: extractedText,
+              extractionStatus: 'completed',
+              wordCount: extractedText.split(/\s+/).filter(Boolean).length
+            });
+          } else {
+            for (let i = 0; i < pagePositions.length; i++) {
+              const current = pagePositions[i];
+              const next = pagePositions[i + 1];
+              const startIdx = current.index + current.headerLength;
+              const endIdx = next ? next.index : extractedText.length;
+              const text = extractedText.substring(startIdx, endIdx).trim();
+
+              pages.push({
+                pageNumber: current.pageNumber,
+                text: text,
+                extractionStatus: 'completed',
+                wordCount: text.split(/\s+/).filter(Boolean).length
+              });
+            }
+          }
+
+          const totalPages = pages.length;
+
+          const StudySession = (await import('../models/studySession.model.js')).default;
+          const bgSession = await StudySession.findById(sessionId);
+          if (bgSession) {
+            const resIdx = bgSession.resources.findIndex(
+              r => r.type === 'pdf' && (r.title === req.file.originalname || r.url === req.file.originalname)
+            );
+            if (resIdx > -1) {
+              bgSession.resources[resIdx].data = {
+                ...bgSession.resources[resIdx].data,
+                extractedText,
+                pageCount: totalPages,
+                totalPages,
+                processedPages: totalPages,
+                successfulPages: totalPages,
+                failedPages: 0,
+                extractionStatus: 'completed',
+                pages,
+                processingStatus: 'completed'
+              };
+              bgSession.markModified('resources');
+
+              // Also sync session.metadata.pdf if it's the active PDF
+              if (bgSession.metadata?.pdf && (bgSession.metadata.pdf.filename === req.file.originalname || bgSession.metadata.pdf._id === bgSession.resources[resIdx]._id)) {
+                bgSession.metadata.pdf = {
+                  ...bgSession.metadata.pdf,
+                  extractedText,
+                  pageCount: totalPages,
+                  totalPages,
+                  pages,
+                  processingStatus: 'completed'
+                };
+                bgSession.markModified('metadata');
+              }
+
+              await bgSession.save();
+              logger.info(`[Background PDF Ingestion] Completed successfully for file: ${req.file.originalname}`);
+            }
+          }
+        } catch (bgErr) {
+          logger.error(`[Background PDF Ingestion Error] File: ${req.file.originalname}`, bgErr);
+          try {
+            const StudySession = (await import('../models/studySession.model.js')).default;
+            const bgSession = await StudySession.findById(sessionId);
+            if (bgSession) {
+              const resIdx = bgSession.resources.findIndex(
+                r => r.type === 'pdf' && (r.title === req.file.originalname || r.url === req.file.originalname)
+              );
+              if (resIdx > -1) {
+                bgSession.resources[resIdx].data.processingStatus = 'failed';
+                bgSession.resources[resIdx].data.error = bgErr.message;
+                bgSession.markModified('resources');
+                await bgSession.save();
+              }
+            }
+          } catch (dbErr) {
+            logger.error(`[Background PDF Ingestion Fail-Save Error]`, dbErr);
+          }
+        }
+      })();
+
     } catch (err) {
-      // Clean up multer temporary file
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }

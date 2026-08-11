@@ -24,65 +24,110 @@ export const fetchYouTubeData = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Study Session not found or unauthorized.' });
     }
 
-    const currentYoutubeMeta = session.metadata?.youtube;
-
     // Check Cache: Avoid duplicate transcript/metadata fetching if video URL matches and has valid transcript
-    if (currentYoutubeMeta && currentYoutubeMeta.videoUrl === videoUrl && currentYoutubeMeta.transcript && currentYoutubeMeta.transcript.trim()) {
-      logger.info(`[Transcript Loaded from Cache] Reusing stored transcript and metadata for session ${sessionId}`);
-      
-      if (currentYoutubeMeta.processingStatus !== 'completed') {
-        currentYoutubeMeta.processingStatus = 'completed';
-        session.markModified('metadata');
-        await session.save();
-      }
-
-      logger.info(`[Response sent] Cached completed`);
+    const existingRes = session.resources?.find(r => r.type === 'youtube' && r.url === videoUrl);
+    if (existingRes && existingRes.data?.processingStatus === 'completed' && existingRes.data?.transcript) {
+      logger.info(`[YouTube Loaded from Cache] Reusing stored transcript and metadata for session ${sessionId}`);
       return res.status(200).json({
         success: true,
-        data: {
-          ...currentYoutubeMeta,
-          processingStatus: 'completed'
-        },
+        data: existingRes.data,
         cached: true
       });
     }
 
-    logger.info('[Calling youtubeService.processVideo]');
-    const youtubeData = await youtubeService.processVideo(videoUrl, currentYoutubeMeta);
-    logger.info('[Finished youtubeService.processVideo]');
+    const videoId = youtubeService.extractVideoId(videoUrl);
+    if (!videoId) {
+      return res.status(400).json({ success: false, message: 'Invalid YouTube video URL format.' });
+    }
 
-    const finalYoutubeData = {
-      ...youtubeData,
-      processingStatus: 'completed'
+    // 1. Fetch metadata synchronously (extremely fast!)
+    logger.info('[Calling youtubeService.fetchMetadata]');
+    const metadata = await youtubeService.fetchMetadata(videoId, videoUrl);
+
+    const initialYoutubeData = {
+      videoId,
+      videoUrl,
+      title: metadata.title || 'YouTube Educational Video',
+      authorName: metadata.authorName || 'YouTube Creator',
+      authorUrl: metadata.authorUrl || '',
+      thumbnailUrl: metadata.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      duration: 'Unknown',
+      publishedDate: new Date().toISOString(),
+      processingStatus: 'processing',
+      chapters: [],
+      transcriptItems: [],
+      transcript: ''
     };
 
-    logger.info(`[Mongo save started] Session: ${sessionId}`);
-
-    // Link YouTube resource using resourceService (appends, never overwrites)
+    // 2. Link YouTube resource synchronously
     await resourceService.linkResourceToSession(session, {
       type: 'youtube',
       url: videoUrl,
-      title: finalYoutubeData.title || 'YouTube Video',
-      data: finalYoutubeData
+      title: initialYoutubeData.title,
+      data: initialYoutubeData
     });
 
-    const updateResult = await session.save();
-    
-    if (updateResult) {
-      logger.info(`[Mongo save finished] Session: ${sessionId}`);
-    } else {
-      throw new Error('MongoDB save operation not acknowledged.');
-    }
+    await session.save();
 
-    const freshSession = await StudySession.findById(sessionId);
-    const freshYoutubeData = freshSession?.metadata?.youtube || finalYoutubeData;
-
-    logger.info(`[Response sent] Fresh completed`);
-    return res.status(200).json({
+    // 3. Respond immediately to the client
+    logger.info(`[Response sent immediately] Initial metadata linked for session: ${sessionId}`);
+    res.status(200).json({
       success: true,
-      data: freshYoutubeData,
+      data: initialYoutubeData,
       cached: false
     });
+
+    // 4. Run Transcript extraction & Translation in the background asynchronously
+    (async () => {
+      try {
+        logger.info(`[Background YouTube Ingestion] Starting processVideo for video: ${videoId}`);
+        const youtubeData = await youtubeService.processVideo(videoUrl, initialYoutubeData);
+
+        const finalYoutubeData = {
+          ...youtubeData,
+          processingStatus: 'completed'
+        };
+
+        const bgSession = await StudySession.findById(sessionId);
+        if (bgSession) {
+          const resIdx = bgSession.resources.findIndex(
+            r => r.type === 'youtube' && r.url === videoUrl
+          );
+          if (resIdx > -1) {
+            bgSession.resources[resIdx].data = finalYoutubeData;
+            bgSession.markModified('resources');
+
+            // Also update session.metadata.youtube if active
+            if (bgSession.metadata?.youtube && (bgSession.metadata.youtube.videoId === videoId || bgSession.metadata.youtube.videoUrl === videoUrl)) {
+              bgSession.metadata.youtube = finalYoutubeData;
+              bgSession.markModified('metadata');
+            }
+
+            await bgSession.save();
+            logger.info(`[Background YouTube Ingestion] Completed successfully for video: ${videoId}`);
+          }
+        }
+      } catch (bgErr) {
+        logger.error(`[Background YouTube Ingestion Error] Video: ${videoId}`, bgErr);
+        try {
+          const bgSession = await StudySession.findById(sessionId);
+          if (bgSession) {
+            const resIdx = bgSession.resources.findIndex(
+              r => r.type === 'youtube' && r.url === videoUrl
+            );
+            if (resIdx > -1) {
+              bgSession.resources[resIdx].data.processingStatus = 'failed';
+              bgSession.resources[resIdx].data.error = bgErr.message;
+              bgSession.markModified('resources');
+              await bgSession.save();
+            }
+          }
+        } catch (dbErr) {
+          logger.error(`[Background YouTube Ingestion Fail-Save Error]`, dbErr);
+        }
+      }
+    })();
+
   } catch (err) {
     logger.error(`[EXCEPTION IN fetchYouTubeData] Stack: ${err.stack}`);
     

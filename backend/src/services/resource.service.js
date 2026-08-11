@@ -10,7 +10,25 @@ class ResourceService {
   async findOrCreateActiveSession(userId, defaultTitle = 'My Study Session') {
     try {
       logger.info(`[Resource Service] Finding active session for user: ${userId}`);
-      let session = await StudySession.findOne({ user: userId }).sort({ lastOpened: -1 });
+      
+      const UserPreferences = (await import('../models/userPreferences.model.js')).default;
+      const prefs = await UserPreferences.findOne({ userId });
+      const tz = prefs?.timezone || 'UTC';
+
+      const now = new Date();
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric'
+      });
+      const todayStr = formatter.format(now);
+
+      const sessions = await StudySession.find({ user: userId }).sort({ lastOpened: -1 });
+      let session = sessions.find(s => {
+        const sessionDateStr = formatter.format(s.createdAt);
+        return sessionDateStr === todayStr;
+      });
       
       if (!session) {
         session = new StudySession({
@@ -19,9 +37,9 @@ class ResourceService {
           description: 'Auto-created active study session'
         });
         await session.save();
-        logger.info(`[Resource Service] Created new active session for user ${userId}`);
+        logger.info(`[Resource Service] Created new active session for user ${userId} for today's date`);
       } else {
-        logger.info(`[Resource Service] Found existing active session: ${session._id}`);
+        logger.info(`[Resource Service] Found existing active session for today: ${session._id}`);
       }
       return session;
     } catch (err) {

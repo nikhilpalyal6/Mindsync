@@ -264,6 +264,12 @@ class AIRouterService {
               throw unifiedError;
             }
 
+            // If quota is exceeded, do not retry this provider. Fallback immediately.
+            if (unifiedError.type === 'QUOTA_EXCEEDED') {
+              logger.warn(`[AI Router] Quota exceeded for ${providerName.toUpperCase()}. Skipping retries.`);
+              break;
+            }
+
             // Retry if attempts remain
             if (attempt < totalAttempts) {
               logger.info(`[AI Router] Retrying provider ${providerName.toUpperCase()} (Retry: ${attempt}/${maxRetryLimit})...`);

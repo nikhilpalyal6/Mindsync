@@ -69,7 +69,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
 
   useEffect(() => {
     loadExplanations();
-  }, [loadExplanations]);
+  }, [resourceId, studySessionId]);
   
   // Dashboard & Configuration States
   const [quizType, setQuizType] = useState('Mixed');
@@ -170,7 +170,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
 
   useEffect(() => {
     loadQuiz();
-  }, [loadQuiz]);
+  }, [resourceId, studySessionId]);
 
   // Track loading to avoid saving initial preferences values on mount
   const hasLoadedPreferences = useRef(false);

@@ -4,6 +4,7 @@ import { normalizeResponse } from '../utils/providerNormalizer.js';
 import {
   AIRequestValidationError,
   AIRateLimitError,
+  AIQuotaExceededError,
   AIServerError,
   AITimeoutError,
   AINetworkError,
@@ -100,6 +101,9 @@ class GroqService {
         throw new AIRequestValidationError(errorMsg, this.providerName, err);
       }
       if (statusCode === 429 || errorMsg.toLowerCase().includes('rate limit') || errorMsg.toLowerCase().includes('quota')) {
+        if (errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('daily limit') || (errorMsg.toLowerCase().includes('limit exceeded') && errorMsg.toLowerCase().includes('day'))) {
+          throw new AIQuotaExceededError(errorMsg, this.providerName, err);
+        }
         throw new AIRateLimitError(errorMsg, this.providerName, err);
       }
       if (err.name === 'AbortError' || errorMsg.toLowerCase().includes('timeout')) {

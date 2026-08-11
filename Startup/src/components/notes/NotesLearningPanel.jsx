@@ -182,7 +182,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
         {activeFeature === 'ask-notes' ? (
           <AISidebar session={session} />
         ) : activeFeature === 'summary' ? (
-          <SummaryPanel session={session} resourceType="notes" />
+          <SummaryPanel session={session} resourceId={resourceId} resourceType="notes" />
         ) : activeFeature === 'flashcards' ? (
           <FlashcardPanel session={session} resourceId={resourceId} resourceType="notes" />
         ) : activeFeature === 'quiz' ? (

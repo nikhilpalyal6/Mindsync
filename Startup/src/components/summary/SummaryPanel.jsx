@@ -36,7 +36,7 @@ export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) =
 
   useEffect(() => {
     loadSavedSummary();
-  }, [loadSavedSummary]);
+  }, [session?._id, resourceId, resourceType, summaryType]);
 
   // Trigger AI Summary Generation
   const handleGenerateSummary = async (forceRefresh = false) => {
@@ -305,8 +305,9 @@ export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) =
 
             <button
               onClick={() => handleGenerateSummary(false)}
+              disabled={loading}
               className="pdf-toolbar-btn accent"
-              style={{ padding: '8px 18px', fontSize: '0.825rem' }}
+              style={{ padding: '8px 18px', fontSize: '0.825rem', cursor: loading ? 'not-allowed' : 'pointer' }}
             >
               <Sparkles size={14} />
               <span>Generate Summary</span>

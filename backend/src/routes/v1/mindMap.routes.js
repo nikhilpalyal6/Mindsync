@@ -10,4 +10,7 @@ router.use(protect);
 router.route('/workspace/:workspaceId')
   .get(mindMapController.getMindMapByWorkspace);
 
+router.route('/workspace/:workspaceId/generate')
+  .post(mindMapController.generateMindMap);
+
 export default router;

@@ -6,7 +6,7 @@ export const WorkspaceSidebar = React.memo(({
   session, 
   onBack,
   activeResource,
-  onSelectResource,
+  onOpenResource,
   activeTab,
   onSwitchTab,
   isCollapsed,
@@ -50,7 +50,7 @@ export const WorkspaceSidebar = React.memo(({
       <ResourceExplorer 
         session={session}
         activeResource={activeResource}
-        onSelectResource={onSelectResource}
+        onOpenResource={onOpenResource}
         activeTab={activeTab}
         onSwitchTab={onSwitchTab}
         isCollapsed={isCollapsed}

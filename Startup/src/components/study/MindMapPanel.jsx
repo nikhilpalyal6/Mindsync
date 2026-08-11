@@ -19,9 +19,10 @@ import {
   Loader2,
   AlertTriangle,
   Play,
-  FileText
+  FileText,
+  RefreshCw
 } from 'lucide-react';
-import { getMindMapByWorkspace } from '../../services/api';
+import { getMindMapByWorkspace, generateMindMap } from '../../services/api';
 import '@xyflow/react/dist/style.css';
 
 // COLOR ASSIGNMENTS PER NODE TYPE
@@ -484,17 +485,31 @@ export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
         startPolling(wId);
       } else if (status === 'FAILED') {
         setStatusState('failed');
-        setError(mapDoc?.error || 'Your workspace learning map is temporarily unavailable. It will be prepared automatically.');
+        setError(mapDoc?.error || 'Your workspace learning map is temporarily unavailable.');
       } else {
-        // NOT_FOUND -> Poll background status
-        startPolling(wId);
+        // NOT_FOUND
+        setStatusState('not_generated');
       }
     } catch (err) {
       console.error('[MindMap Check] Failed lookup:', err);
       setStatusState('failed');
-      setError('Your workspace learning map is temporarily unavailable. It will be prepared automatically.');
+      setError('Your workspace learning map is temporarily unavailable.');
     }
   }, [resources, startPolling]);
+
+  const handleGenerateMindMap = useCallback(async () => {
+    if (!workspaceId) return;
+    setStatusState('generating');
+    setError(null);
+    try {
+      await generateMindMap(workspaceId);
+      startPolling(workspaceId);
+    } catch (err) {
+      console.error('[MindMap Generate] Failed:', err);
+      setStatusState('failed');
+      setError(err.message || 'Failed to trigger mind map generation. Please try again.');
+    }
+  }, [workspaceId, startPolling]);
 
   // Load when workspace changes
   useEffect(() => {
@@ -502,7 +517,7 @@ export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
       checkExistingMindMap(workspaceId);
     }
     return () => clearTimers();
-  }, [workspaceId, checkExistingMindMap]);
+  }, [workspaceId]);
 
   const activeTheme = useMemo(() => {
     if (!selectedNode) return null;
@@ -593,10 +608,59 @@ export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
         {statusState === 'failed' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#09090b', padding: '24px', boxSizing: 'border-box', zIndex: 10 }}>
             <AlertTriangle size={36} style={{ color: '#ef4444', marginBottom: '14px' }} />
-            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>Map Temporarily Unavailable</h3>
-            <p style={{ margin: 0, fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5 }}>
-              {error || 'Your workspace learning map is temporarily unavailable. It will be prepared automatically.'}
+            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>Map Generation Failed</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5 }}>
+              {error || 'Your workspace learning map is temporarily unavailable.'}
             </p>
+            <button
+              onClick={handleGenerateMindMap}
+              style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#f87171',
+                padding: '8px 18px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <RefreshCw size={13} />
+              <span>Retry Generation</span>
+            </button>
+          </div>
+        )}
+
+        {/* Not Generated State Shell */}
+        {statusState === 'not_generated' && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#09090b', padding: '24px', boxSizing: 'border-box', zIndex: 10 }}>
+            <Sparkles size={36} style={{ color: '#a855f7', marginBottom: '14px' }} />
+            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>Learning Map Not Generated</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5 }}>
+              Generate a consolidated workspace learning map to visually connect all resources in this workspace.
+            </p>
+            <button
+              onClick={handleGenerateMindMap}
+              style={{
+                backgroundColor: '#a855f7',
+                color: '#fff',
+                border: 'none',
+                padding: '8px 18px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Sparkles size={13} />
+              <span>Generate Learning Map</span>
+            </button>
           </div>
         )}
 

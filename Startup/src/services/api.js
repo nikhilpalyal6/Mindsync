@@ -27,7 +27,44 @@ const onRefreshFailed = (err) => {
   refreshSubscribers = [];
 };
 
+const inFlightRequests = new Map();
+
 const apiRequest = async (endpoint, options = {}) => {
+  const method = options.method || 'GET';
+  const isDedupe = (method === 'GET') && (
+    endpoint === '/study/activity' ||
+    endpoint.startsWith('/mind-maps/workspace/') ||
+    endpoint.includes('/summary') ||
+    endpoint.startsWith('/ai/quiz/') ||
+    endpoint.startsWith('/ai/flashcards/') ||
+    endpoint.startsWith('/ai/explain/')
+  );
+
+  if (isDedupe) {
+    if (inFlightRequests.has(endpoint)) {
+      console.log(`[API DEDUPE] Reusing in-flight request for: ${endpoint}`);
+      return inFlightRequests.get(endpoint);
+    }
+  }
+
+  const promise = (async () => {
+    try {
+      return await apiRequestInternal(endpoint, options);
+    } finally {
+      if (isDedupe) {
+        inFlightRequests.delete(endpoint);
+      }
+    }
+  })();
+
+  if (isDedupe) {
+    inFlightRequests.set(endpoint, promise);
+  }
+
+  return promise;
+};
+
+const apiRequestInternal = async (endpoint, options = {}) => {
   console.log(`[API REQUEST] Outgoing to: ${endpoint}`);
   const { timeout = 60000, ...fetchOptions } = options
 
@@ -39,6 +76,18 @@ const apiRequest = async (endpoint, options = {}) => {
 
   try {
     const controller = new AbortController()
+
+    // Chain component signal if provided
+    if (options.signal) {
+      if (options.signal.aborted) {
+        controller.abort();
+      } else {
+        options.signal.addEventListener('abort', () => {
+          controller.abort();
+        });
+      }
+    }
+
     const timeoutId = setTimeout(() => {
       console.warn(`[API REQUEST] Request to ${endpoint} timed out after ${timeout}ms`);
       controller.abort();
@@ -86,7 +135,7 @@ const apiRequest = async (endpoint, options = {}) => {
           const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
             method: 'POST',
             credentials: 'include',
-          });
+            });
           
           if (refreshResponse.ok) {
             isRefreshing = false;
@@ -106,8 +155,12 @@ const apiRequest = async (endpoint, options = {}) => {
       }
 
       const retryAfter = response.headers.get('Retry-After')
+      let message = data.message || 'Request failed';
+      if (response.status === 429 && (endpoint.includes('/ai/') || endpoint.includes('/mind-maps/') || endpoint.includes('/summary') || endpoint.includes('/youtube/fetch'))) {
+        message = 'AI service temporarily unavailable. Your resource is still available.';
+      }
       throw new ApiError(
-        data.message || 'Request failed',
+        message,
         response.status,
         data.errors || [],
         retryAfter ? parseInt(retryAfter, 10) : null
@@ -459,7 +512,10 @@ export const addResource = async (sessionId, data) => {
 export const uploadPdfResource = async (sessionId, file) => {
   const formData = new FormData();
   formData.append('file', file);
-  return await api.post(`/study/${sessionId}/resources/upload-pdf`, formData);
+  return await apiRequest(`/study/${sessionId}/resources/upload-pdf`, {
+    method: 'POST',
+    body: formData
+  });
 };
 
 export const renameResource = async (sessionId, resourceId, title) => {
@@ -646,3 +702,8 @@ export const applyAdaptation = async (planId, payload) => {
 export const getMindMapByWorkspace = async (workspaceId) => {
   return await api.get(`/mind-maps/workspace/${workspaceId}`);
 };
+
+export const generateMindMap = async (workspaceId) => {
+  return await api.post(`/mind-maps/workspace/${workspaceId}/generate`);
+};
+

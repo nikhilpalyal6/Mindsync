@@ -182,7 +182,7 @@ export const PDFLearningPanel = React.memo(({ session }) => {
         {activeFeature === 'ask-pdf' ? (
           <AISidebar session={session} />
         ) : activeFeature === 'summary' ? (
-          <SummaryPanel session={session} resourceType="pdf" />
+          <SummaryPanel session={session} resourceId={resourceId} resourceType="pdf" />
         ) : activeFeature === 'flashcards' ? (
           <FlashcardPanel session={session} resourceId={resourceId} resourceType="pdf" />
         ) : activeFeature === 'quiz' ? (

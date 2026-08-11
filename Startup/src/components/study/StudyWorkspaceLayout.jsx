@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import WorkspaceSidebar from './WorkspaceSidebar';
 import WorkspaceHeader from './WorkspaceHeader';
 import WorkspaceTabs from './WorkspaceTabs';
@@ -42,6 +42,59 @@ export const StudyWorkspaceLayout = React.memo(({
     switchTab(tabId);
   };
 
+  // Centralized resource opening/routing handler
+  const openResource = useCallback((resource, tabOverride = null) => {
+    if (!resource) return;
+    handleSelectResource(resource);
+
+    if (tabOverride) {
+      switchTab(tabOverride);
+      return;
+    }
+
+    const tabMap = {
+      pdf: 'pdf_viewer',
+      youtube: 'video_viewer',
+      notes: 'notes_viewer',
+      flashcards: 'flashcards',
+      quiz: 'quiz',
+      mindmap: 'mindmap'
+    };
+
+    const targetTab = tabMap[resource.type] || 'pdf_viewer';
+    switchTab(targetTab);
+  }, [handleSelectResource, switchTab]);
+
+  // Derive active PDF resource from session resources
+  const activePdfRes = useMemo(() => {
+    if (activeResource?.type === 'pdf') {
+      return session?.resources?.find(r => r._id === activeResource._id) || activeResource;
+    }
+    const metaPdf = session?.metadata?.pdf;
+    if (metaPdf) {
+      return session?.resources?.find(r => 
+        r.type === 'pdf' && 
+        (r._id === metaPdf._id || r.title === metaPdf.filename || r.title === metaPdf.pdfFilename || r.url === metaPdf.filename || r.url === metaPdf.pdfFilename)
+      );
+    }
+    return null;
+  }, [activeResource, session?.resources, session?.metadata?.pdf]);
+
+  // Derive active YouTube resource from session resources
+  const activeVideoRes = useMemo(() => {
+    if (activeResource?.type === 'youtube') {
+      return session?.resources?.find(r => r._id === activeResource._id) || activeResource;
+    }
+    const metaYoutube = session?.metadata?.youtube;
+    if (metaYoutube) {
+      return session?.resources?.find(r => 
+        r.type === 'youtube' && 
+        (r._id === metaYoutube.videoId || r.url === metaYoutube.videoUrl || r.url === metaYoutube.url)
+      );
+    }
+    return null;
+  }, [activeResource, session?.resources, session?.metadata?.youtube]);
+
   // Derive active resource context
   const resourceType = activeResource?.type || (session?.metadata?.activeResourceType || session?.metadata?.lastTab || 'pdf').toLowerCase();
   let resourceId = '';
@@ -70,7 +123,7 @@ export const StudyWorkspaceLayout = React.memo(({
         session={session}
         onBack={onBack}
         activeResource={activeResource}
-        onSelectResource={handleSelectResource}
+        onOpenResource={openResource}
         activeTab={activeTab}
         onSwitchTab={switchTab}
         isCollapsed={isSidebarCollapsed}
@@ -113,7 +166,7 @@ export const StudyWorkspaceLayout = React.memo(({
               session={session}
               onTabChange={switchTab}
               activeResource={activeResource}
-              onSelectResource={handleSelectResource}
+              onOpenResource={openResource}
               onUploadPdfClick={onUploadPdfClick}
               onAddVideoClick={onAddVideoClick}
               onAddNotesClick={onAddNotesClick}
@@ -125,7 +178,7 @@ export const StudyWorkspaceLayout = React.memo(({
           <div style={{ display: activeTab === 'sources' ? 'block' : 'none', height: '100%', width: '100%', overflowY: 'auto' }}>
             <SourcesPanel 
               session={session}
-              onSelectResource={handleSelectResource}
+              onOpenResource={openResource}
               onSwitchTab={switchTab}
               filterState={filterState}
               onDeleteResource={handleDeleteResource}
@@ -144,12 +197,12 @@ export const StudyWorkspaceLayout = React.memo(({
 
           {/* 4. PDF Viewer */}
           <div style={{ display: activeTab === 'pdf_viewer' ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden' }}>
-            <PDFViewerPanel session={session} activeResource={activeResource} />
+            <PDFViewerPanel session={session} activeResource={activePdfRes} />
           </div>
 
           {/* 5. Video Viewer */}
           <div style={{ display: activeTab === 'video_viewer' ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden' }}>
-            <VideoViewerPanel session={session} activeResource={activeResource} />
+            <VideoViewerPanel session={session} activeResource={activeVideoRes} />
           </div>
 
           {/* 6. Summary */}

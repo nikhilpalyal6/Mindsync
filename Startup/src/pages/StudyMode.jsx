@@ -169,6 +169,9 @@ const WorkspaceCard = React.memo(({
 });
 WorkspaceCard.displayName = 'WorkspaceCard';
 
+// Module-level variable to prevent double auto-creation in StrictMode
+let autoCreationPromise = null;
+
 export default function StudyMode() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
@@ -240,6 +243,7 @@ export default function StudyMode() {
   const fileInputRef = useRef(null)
   const profileDropdownRef = useRef(null)
   const sidebarRef = useRef(null)
+  const hasInitializedRef = useRef(false)
 
   const handleOpenCreateModal = (defaultTitle = '') => {
     setNewWorkspaceTitle(defaultTitle)
@@ -288,15 +292,15 @@ export default function StudyMode() {
 
     const file = files[0]
     
-    // Validate PDF file (Step 4)
+    // Validate PDF file
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       setUploadError('Only PDF files are supported.')
       e.target.value = ''
       return
     }
 
-    // Validate size limit (Step 4)
-    const MAX_SIZE = 50 * 1024 * 1024 // 50MB limit
+    // Validate size limit (50MB limit)
+    const MAX_SIZE = 50 * 1024 * 1024
     if (file.size > MAX_SIZE) {
       setUploadError('PDF exceeds the maximum allowed size (50MB).')
       e.target.value = ''
@@ -310,33 +314,44 @@ export default function StudyMode() {
     try {
       let targetSessionId = activeSession?._id;
 
-      // If activeSession is falsy, create the workspace first (Step 2)
+      // If activeSession is falsy, create the workspace first
       if (!targetSessionId) {
         setUploadStatus('Creating workspace...')
         const sessionTitle = file.name.replace(/\.pdf$/i, '') + ' Workspace'
         const res = await createWorkspace(sessionTitle, `PDF Document: ${file.name}`)
         targetSessionId = res._id;
-        
-        setActiveSession(res);
-        setSessions(prev => [res, ...prev]);
       }
 
-      setUploadStatus('Processing PDF & extracting text...')
+      setUploadStatus('Processing PDF & uploading...')
       const response = await uploadPdfResource(targetSessionId, file);
       
       const fullSession = (response.success && response.data) ? response.data : response;
-      const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name);
+      const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name || r.type === 'pdf');
 
-      setActiveSession(fullSession);
-      setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+      // Update sessions list
+      setSessions(prev => {
+        const exists = prev.some(s => s._id === fullSession._id);
+        if (exists) {
+          return prev.map(s => s._id === fullSession._id ? fullSession : s);
+        } else {
+          return [fullSession, ...prev];
+        }
+      });
 
+      // Save to localStorage so reloading page remembers the session
+      localStorage.setItem('mindsync_last_study_session_id', fullSession._id);
+
+      // Select resource and update session
       if (newlyAddedRes) {
-        handleSelectResource(newlyAddedRes);
+        await handleSelectResource(newlyAddedRes, fullSession);
+      } else {
+        setActiveSession(fullSession);
       }
+      
       setActiveTab('pdf_viewer');
     } catch (err) {
-      console.error('[StudyMode PDF Processing] Ingestion error:', err);
-      setUploadError(err.message || 'PDF processing failed.');
+      console.error('[StudyMode PDF Ingestion] Error:', err);
+      setUploadError(err.message || 'PDF upload failed.');
     } finally {
       setIsUploading(false)
       setUploadStatus('')
@@ -350,35 +365,47 @@ export default function StudyMode() {
       const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
       if (pasteUrl && youtubeRegex.test(pasteUrl)) {
         setIsUploading(true)
-        setUploadStatus('Adding YouTube video & fetching transcript...')
+        setUploadStatus('Adding YouTube video...')
         setShowPasteModal(false)
 
         try {
           let targetSessionId = activeSession?._id;
 
-          // If activeSession is falsy, create the workspace first (Step 12)
+          // If activeSession is falsy, create the workspace first
           if (!targetSessionId) {
             setUploadStatus('Creating workspace...')
             const sessionTitle = 'YouTube Video Study Workspace'
             const res = await createWorkspace(sessionTitle, `YouTube link: ${pasteUrl}`)
             targetSessionId = res._id;
-            
-            setActiveSession(res);
-            setSessions(prev => [res, ...prev]);
           }
 
-          setUploadStatus('Retrieving video metadata & extracting transcript...')
-          const updatedSession = await fetchYouTubeData(targetSessionId, pasteUrl);
+          setUploadStatus('Linking YouTube video metadata...')
+          await fetchYouTubeData(targetSessionId, pasteUrl);
           
-          const fullSession = (updatedSession.success && updatedSession.data) ? updatedSession.data : updatedSession;
+          // Fetch the updated full session
+          const fullSession = await getStudySessionById(targetSessionId);
           const newlyAddedRes = fullSession.resources?.find(r => r.url === pasteUrl || r.type === 'youtube');
 
-          setActiveSession(fullSession);
-          setSessions(prev => prev.map(s => s._id === fullSession._id ? fullSession : s));
+          // Update sessions list
+          setSessions(prev => {
+            const exists = prev.some(s => s._id === fullSession._id);
+            if (exists) {
+              return prev.map(s => s._id === fullSession._id ? fullSession : s);
+            } else {
+              return [fullSession, ...prev];
+            }
+          });
 
+          // Save to localStorage so reloading page remembers the session
+          localStorage.setItem('mindsync_last_study_session_id', fullSession._id);
+
+          // Select resource and update session
           if (newlyAddedRes) {
-            handleSelectResource(newlyAddedRes);
+            await handleSelectResource(newlyAddedRes, fullSession);
+          } else {
+            setActiveSession(fullSession);
           }
+          
           setActiveTab('video_viewer');
         } catch (err) {
           console.error('[YouTube URL Ingestion] Error:', err);
@@ -541,6 +568,52 @@ export default function StudyMode() {
     const ac = document.querySelector('.app-container');
     if (ac) ac.scrollTop = 0;
   }, [activeTab]);
+
+  // Automatically load or initialize today's active study session/workspace on mount
+  useEffect(() => {
+    if (loading) return;
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    // Determine today's local date range (local timezone of the user's browser)
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todayEnd = todayStart + 86400000;
+
+    const todaySession = sessions.find(s => {
+      const createdTime = new Date(s.createdAt).getTime();
+      return createdTime >= todayStart && createdTime < todayEnd;
+    });
+
+    if (todaySession) {
+      console.log(`[Workspace Auto-Init] Found today's session: ${todaySession._id}`);
+      selectSession(todaySession, () => setActiveTab('overview'));
+    } else {
+      console.log("[Workspace Auto-Init] Today's session not found, initializing...");
+      const initSession = async () => {
+        if (autoCreationPromise) {
+          try {
+            const res = await autoCreationPromise;
+            selectSession(res, () => setActiveTab('overview'));
+          } catch (err) {
+            console.error('[Workspace Auto-Init] Auto-creation failed in other instance:', err);
+          }
+          return;
+        }
+
+        try {
+          autoCreationPromise = createWorkspace("My Study Session", "Auto-created active study session");
+          const res = await autoCreationPromise;
+          console.log('[Workspace Auto-Init] Today\'s session created successfully:', res._id);
+          selectSession(res, () => setActiveTab('overview'));
+        } catch (err) {
+          console.error('[Workspace Auto-Init] Failed to create today\'s session:', err);
+          autoCreationPromise = null; // Allow retry on failure
+        }
+      };
+      initSession();
+    }
+  }, [loading, sessions, selectSession, createWorkspace, setActiveTab]);
 
   // If a workspace is active, render the permanent, highly advanced StudyWorkspaceLayout
   if (activeSession) {

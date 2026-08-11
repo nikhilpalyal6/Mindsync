@@ -164,9 +164,11 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
   const fileInputRef = useRef(null);
   const lastLoadedResourceRef = useRef(null);
   
-  const resourceId = activeResource?.type === 'pdf' 
-    ? (activeResource._id || activeResource.title) 
-    : (session?.metadata?.pdf?.pdfFilename || session?.metadata?.pdf?.filename || fileName || 'pdf_doc');
+  const resourceId = activeResource?._id || activeResource?.title || 'pdf_doc';
+
+  const cacheKey = resourceId && resourceId !== 'default' && resourceId !== 'pdf_doc' 
+    ? resourceId 
+    : session?._id;
 
   const [highlights, setHighlights] = useState([]);
   const [loadingHighlights, setLoadingHighlights] = useState(false);
@@ -181,6 +183,11 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
   const [processingSuggestions, setProcessingSuggestions] = useState(new Set());
   const [showLowSuggestions, setShowLowSuggestions] = useState(false);
   const pdfViewerRef = useRef(null);
+  const containerRef = useRef(null);
+  
+  // Highlight system references
+  const textContentCacheRef = useRef(new Map());
+  const viewportCacheRef = useRef(new Map());
 
   const fetchHighlightsList = useCallback(async () => {
     if (!resourceId) return;
@@ -188,12 +195,10 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
     setHighlightError(null);
     try {
       const res = await getHighlights(resourceId);
-      if (Array.isArray(res)) {
-        setHighlights(res);
-      }
+      setHighlights(res || []);
     } catch (err) {
-      console.error('Failed to load highlights:', err);
-      setHighlightError('Failed to load highlights.');
+      console.error('Failed to fetch highlights:', err);
+      setHighlightError(err.message || 'Failed to load highlights.');
     } finally {
       setLoadingHighlights(false);
     }
@@ -234,24 +239,15 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
   useEffect(() => {
     if (!session?._id) return;
 
-    // Use activeResource if it's a PDF, otherwise fallback to session metadata
     const isActivePdf = activeResource?.type === 'pdf';
-
-    // Use session metadata if it belongs to the active PDF, otherwise fallback to activeResource.data
-    const isSessionPdfActive = session.metadata?.pdf && (
-      session.metadata.pdf.filename === activeResource?.title ||
-      session.metadata.pdf.pdfFilename === activeResource?.title ||
-      session.metadata.pdf._id === activeResource?._id
-    );
-
-    const currentResourceId = isActivePdf ? (activeResource._id || activeResource.title) : (session.metadata?.pdf?.pdfFilename || session.metadata?.pdf?.filename || 'default');
+    const pdfMeta = activeResource?.data || {};
+    const savedFileName = activeResource?.title || pdfMeta.filename || pdfMeta.pdfFilename || '';
+    const currentResourceId = activeResource?._id || savedFileName || 'default';
 
     // Only restore state if we actually loaded a NEW PDF resource!
     if (lastLoadedResourceRef.current !== currentResourceId) {
       lastLoadedResourceRef.current = currentResourceId;
 
-      const pdfMeta = isActivePdf ? (activeResource.data || {}) : (session.metadata?.pdf || {});
-      const savedFileName = isActivePdf ? (activeResource.title || pdfMeta.filename || pdfMeta.pdfFilename) : (pdfMeta.filename || pdfMeta.pdfFilename || '');
       const savedPage = window.__targetPdfPage || pdfMeta.pageNumber || 1;
       window.__targetPdfPage = null;
       const savedScale = pdfMeta.scale || 1.0;
@@ -265,13 +261,15 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
       if (pdfMeta?.fileData && typeof pdfMeta.fileData === 'string' && pdfMeta.fileData.startsWith('data:application/pdf')) {
         setFile(pdfMeta.fileData);
         setFileName(savedFileName || 'Saved Document.pdf');
-        inMemoryPDFCache.set(session._id, { file: pdfMeta.fileData, fileName: savedFileName });
+        if (cacheKey) {
+          inMemoryPDFCache.set(cacheKey, { file: pdfMeta.fileData, fileName: savedFileName });
+        }
         console.log(`[PDF Processing] Restored PDF from data source: ${savedFileName}`);
         return;
       }
 
       // 1. Check in-memory cache FIRST (0ms, 100% valid File/DataUrl object)
-      const memCached = inMemoryPDFCache.get(session._id);
+      const memCached = cacheKey ? inMemoryPDFCache.get(cacheKey) : null;
       if (memCached && memCached.file) {
         setFile(memCached.file);
         setFileName(memCached.fileName || savedFileName || 'Saved Document.pdf');
@@ -281,11 +279,13 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
 
       // 2. Check LocalStorage cache
       try {
-        const storedDataUrl = localStorage.getItem(`mindsync_pdf_${session._id}`);
+        const storedDataUrl = cacheKey ? localStorage.getItem(`mindsync_pdf_${cacheKey}`) : null;
         if (storedDataUrl && storedDataUrl.startsWith('data:application/pdf')) {
           setFile(storedDataUrl);
           setFileName(savedFileName || 'Saved Document.pdf');
-          inMemoryPDFCache.set(session._id, { file: storedDataUrl, fileName: savedFileName });
+          if (cacheKey) {
+            inMemoryPDFCache.set(cacheKey, { file: storedDataUrl, fileName: savedFileName });
+          }
           console.log(`[PDF Processing] Restored PDF from local cache: ${savedFileName}`);
           return;
         }
@@ -443,8 +443,8 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
         setFitMode('page');
 
         // Store in module-level in-memory cache
-        if (session?._id) {
-          inMemoryPDFCache.set(session._id, {
+        if (cacheKey) {
+          inMemoryPDFCache.set(cacheKey, {
             file: dataUrl,
             fileName: selectedFile.name
           });
@@ -452,7 +452,9 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
 
         // Cache to LocalStorage for quick load across refreshes
         try {
-          localStorage.setItem(`mindsync_pdf_${session?._id}`, dataUrl);
+          if (cacheKey) {
+            localStorage.setItem(`mindsync_pdf_${cacheKey}`, dataUrl);
+          }
         } catch (err) {
           console.warn('[PDF Processing] LocalStorage quota exceeded, storing in MongoDB:', err);
         }
@@ -519,9 +521,13 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
     }
 
     if (session?._id) {
-      inMemoryPDFCache.delete(session._id);
+      if (cacheKey) {
+        inMemoryPDFCache.delete(cacheKey);
+      }
       try {
-        localStorage.removeItem(`mindsync_pdf_${session._id}`);
+        if (cacheKey) {
+          localStorage.removeItem(`mindsync_pdf_${cacheKey}`);
+        }
         const updatedMeta = { ...(session.metadata || {}), pdf: null };
         await updateStudySession(session._id, { metadata: updatedMeta });
       } catch (err) {
