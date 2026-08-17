@@ -9,7 +9,17 @@ const rateLimitHandler = (_req, _res, next) => {
 
 export const globalRateLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.max,
+  max: (req) => {
+    // Polling status and health checks get higher limits to prevent throttling
+    if (req.path.includes('/status') || req.path.includes('/health')) {
+      return 1000;
+    }
+    // Authenticated API requests get higher rate limits
+    if (req.headers.authorization || req.cookies?.accessToken || req.cookies?.token) {
+      return 500;
+    }
+    return config.rateLimit.max || 100;
+  },
   standardHeaders: true,
   legacyHeaders: false,
   handler: rateLimitHandler,

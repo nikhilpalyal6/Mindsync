@@ -17,6 +17,7 @@ import { globalRateLimiter } from './middleware/rateLimiter.middleware.js';
 import { notFoundHandler } from './middleware/notFound.middleware.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { auditLogMiddleware } from './middleware/auditLog.middleware.js';
+import { requestTimeout } from './middleware/timeout.middleware.js';
 
 const app = express();
 
@@ -69,7 +70,7 @@ app.get('/', (_req, res) => {
 });
 
 app.use(auditLogMiddleware);
-app.use('/api', apiRoutes);
+app.use('/api', requestTimeout(15000), apiRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -19,7 +19,7 @@ class StudyController {
     console.log('[DEBUG CONTROLLER] studyService.getSessions returned. Count:', sessions?.length);
 
     // One-time automatic backfill for workspace learning maps (Step 28)
-    if (sessions && Array.isArray(sessions)) {
+    if (process.env.AUTOMATIC_MIND_MAP_GENERATION === 'true' && sessions && Array.isArray(sessions)) {
       (async () => {
         try {
           for (const sess of sessions) {
@@ -59,7 +59,7 @@ class StudyController {
     const session = await studyService.getSessionById(userId, id);
 
     // One-time automatic backfill for workspace learning maps (Step 28)
-    if (session && session.resources && Array.isArray(session.resources)) {
+    if (process.env.AUTOMATIC_MIND_MAP_GENERATION === 'true' && session && session.resources && Array.isArray(session.resources)) {
       (async () => {
         try {
           const hasValidContent = (session.resources || []).some(r => {
@@ -211,6 +211,7 @@ class StudyController {
     }
 
     try {
+      const storagePath = req.file.path.replace(/\\/g, '/');
       const fileBuffer = fs.readFileSync(req.file.path);
       const base64Data = fileBuffer.toString('base64');
       const dataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
@@ -220,13 +221,12 @@ class StudyController {
         pdfFilename: req.file.originalname,
         fileSize: req.file.size,
         fileType: req.file.mimetype,
-        fileData: dataUrl,
+        storagePath: storagePath,
         pageNumber: 1,
         scale: 1.0,
         fitMode: 'page',
         lastOpened: new Date().toISOString(),
         processingStatus: 'processing',
-        extractedText: '',
         pageCount: 0,
         totalPages: 0,
         pages: []
@@ -238,11 +238,6 @@ class StudyController {
         title: req.file.originalname,
         data: initialPdfMeta
       });
-
-      // Clean up multer temporary file
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
 
       // Respond immediately to the client
       res.status(HTTP_STATUS.CREATED).json(
@@ -302,35 +297,61 @@ class StudyController {
               r => r.type === 'pdf' && (r.title === req.file.originalname || r.url === req.file.originalname)
             );
             if (resIdx > -1) {
-              bgSession.resources[resIdx].data = {
-                ...bgSession.resources[resIdx].data,
-                extractedText,
-                pageCount: totalPages,
-                totalPages,
-                processedPages: totalPages,
-                successfulPages: totalPages,
-                failedPages: 0,
-                extractionStatus: 'completed',
-                pages,
-                processingStatus: 'completed'
-              };
-              bgSession.markModified('resources');
+              const resId = bgSession.resources[resIdx]._id;
 
-              // Also sync session.metadata.pdf if it's the active PDF
-              if (bgSession.metadata?.pdf && (bgSession.metadata.pdf.filename === req.file.originalname || bgSession.metadata.pdf._id === bgSession.resources[resIdx]._id)) {
-                bgSession.metadata.pdf = {
+              const updateFields = {
+                'resources.$.data.pageCount': totalPages,
+                'resources.$.data.totalPages': totalPages,
+                'resources.$.data.processedPages': totalPages,
+                'resources.$.data.successfulPages': totalPages,
+                'resources.$.data.failedPages': 0,
+                'resources.$.data.extractionStatus': 'completed',
+                'resources.$.data.processingStatus': 'completed'
+              };
+
+              // If it's the active PDF in metadata, sync it
+              if (bgSession.metadata?.pdf && (bgSession.metadata.pdf.filename === req.file.originalname || bgSession.metadata.pdf._id?.toString() === resId.toString())) {
+                updateFields['metadata.pdf'] = {
                   ...bgSession.metadata.pdf,
-                  extractedText,
                   pageCount: totalPages,
                   totalPages,
-                  pages,
                   processingStatus: 'completed'
                 };
-                bgSession.markModified('metadata');
               }
 
-              await bgSession.save();
+              await StudySession.updateOne(
+                { _id: sessionId, 'resources._id': resId },
+                { $set: updateFields }
+              );
+
+              // Save to Knowledge base (KnowledgeDocument & KnowledgeChunks)
+              const resourceService = (await import('../services/resource.service.js')).default;
+              await resourceService._savePdfContentToKnowledge(
+                userId.toString(),
+                sessionId.toString(),
+                resId.toString(),
+                req.file.originalname,
+                req.file.originalname,
+                extractedText,
+                pages
+              );
+
               logger.info(`[Background PDF Ingestion] Completed successfully for file: ${req.file.originalname}`);
+
+              // Trigger safe fire-and-forget Knowledge Ingestion sidecar
+              try {
+                const processingService = (await import('../knowledge/services/processing.service.js')).default;
+                processingService.queueProcessing(
+                  userId.toString(),
+                  sessionId.toString(),
+                  resId.toString(),
+                  extractedText,
+                  'PDF',
+                  req.file.originalname
+                ).catch(keErr => logger.error(`[Background Knowledge Trigger Error] PDF Ingestion failed: ${keErr.message}`));
+              } catch (keErr) {
+                logger.error(`[Background Knowledge Trigger Load Error] PDF Ingestion failed: ${keErr.message}`);
+              }
             }
           }
         } catch (bgErr) {
@@ -338,19 +359,45 @@ class StudyController {
           try {
             const StudySession = (await import('../models/studySession.model.js')).default;
             const bgSession = await StudySession.findById(sessionId);
+            let resId = null;
             if (bgSession) {
               const resIdx = bgSession.resources.findIndex(
                 r => r.type === 'pdf' && (r.title === req.file.originalname || r.url === req.file.originalname)
               );
               if (resIdx > -1) {
-                bgSession.resources[resIdx].data.processingStatus = 'failed';
-                bgSession.resources[resIdx].data.error = bgErr.message;
-                bgSession.markModified('resources');
-                await bgSession.save();
+                resId = bgSession.resources[resIdx]._id;
               }
             }
-          } catch (dbErr) {
-            logger.error(`[Background PDF Ingestion Fail-Save Error]`, dbErr);
+
+            await StudySession.updateOne(
+              { _id: sessionId, 'resources.url': req.file.originalname },
+              {
+                $set: {
+                  'resources.$.data.processingStatus': 'failed',
+                  'resources.$.data.error': bgErr.message
+                }
+              }
+            );
+
+            if (resId) {
+              const KnowledgeJob = (await import('../models/knowledgeJob.model.js')).default;
+              await KnowledgeJob.findOneAndUpdate(
+                { userId, workspaceId: sessionId, resourceId: resId },
+                {
+                  $set: {
+                    status: 'FAILED',
+                    progress: 0,
+                    errorCode: bgErr.code || 'AI_EXTRACTION_UNAVAILABLE',
+                    errorMessage: bgErr.message,
+                    attempts: 1,
+                    completedAt: new Date()
+                  }
+                },
+                { upsert: true }
+              );
+            }
+          } catch (saveErr) {
+            logger.error('[Background PDF Ingestion Error Save] Failed to save error status:', saveErr);
           }
         }
       })();
@@ -361,6 +408,53 @@ class StudyController {
       }
       throw err;
     }
+  });
+
+  getPdfFile = asyncHandler(async (req, res) => {
+    const { sessionId, resourceId } = req.params;
+    const userId = req.user._id;
+
+    const StudySession = (await import('../models/studySession.model.js')).default;
+    const session = await StudySession.findOne({ _id: sessionId, user: userId }).lean();
+    if (!session) {
+      throw new ApiError(HTTP_STATUS.FORBIDDEN, 'You do not have access to this study workspace.');
+    }
+
+    console.log(`[PDF] Requested:\nworkspace=${sessionId}\nresource=${resourceId}`);
+
+    const resource = session.resources?.find(
+      r => r._id?.toString() === resourceId || r.url === resourceId
+    );
+    if (!resource || resource.type !== 'pdf') {
+      throw new ApiError(HTTP_STATUS.NOT_FOUND, 'PDF resource not found in workspace.');
+    }
+
+    const storagePath = resource.data?.storagePath;
+    if (!storagePath) {
+      throw new ApiError(HTTP_STATUS.NOT_FOUND, 'PDF storage path not set.');
+    }
+
+    console.log(`[PDF] Resolved:\nresource=${resource._id?.toString()}\nstoragePath=${storagePath}\nfilename=${resource.title || resource.url}`);
+
+    const path = await import('path');
+    const fs = await import('fs');
+    const fileURLToPath = (await import('url')).fileURLToPath;
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const backendDir = path.resolve(__dirname, '../../');
+    const absPath = path.resolve(backendDir, storagePath);
+
+    if (!fs.existsSync(absPath)) {
+      throw new ApiError(HTTP_STATUS.NOT_FOUND, 'PDF file not found on disk.');
+    }
+
+    const fileBuffer = fs.readFileSync(absPath);
+    const base64Data = fileBuffer.toString('base64');
+    const dataUrl = `data:${resource.data.fileType || 'application/pdf'};base64,${base64Data}`;
+
+    res.status(HTTP_STATUS.OK).json(
+      ApiResponse.success({ fileData: dataUrl }, 'PDF file loaded successfully.')
+    );
   });
 }
 

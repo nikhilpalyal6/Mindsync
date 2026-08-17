@@ -14,17 +14,27 @@ const keyframes = `
   }
 `;
 
-// Helper to parse inline Markdown (bold, italic, inline code, inline math)
-const parseInline = (text) => {
+import { parseCitations, renderSourcesCited } from './citationsHelper';
+
+// Helper to parse inline Markdown (bold, italic, inline code, inline math, and citations)
+const parseInline = (text, citationsMap, onCitationClick) => {
   if (!text) return '';
   // Split on **bold**, *italic*, `code`, or $math$
   const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`|\$.*?\$)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-      return <strong key={i} style={{ color: '#ffffff', fontWeight: 650 }}>{part.slice(2, -2)}</strong>;
+      return (
+        <strong key={i} style={{ color: '#ffffff', fontWeight: 650 }}>
+          {parseCitations(part.slice(2, -2), citationsMap, onCitationClick)}
+        </strong>
+      );
     }
     if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
-      return <em key={i} style={{ color: 'rgba(255, 255, 255, 0.85)', fontStyle: 'italic' }}>{part.slice(1, -1)}</em>;
+      return (
+        <em key={i} style={{ color: 'rgba(255, 255, 255, 0.85)', fontStyle: 'italic' }}>
+          {parseCitations(part.slice(1, -1), citationsMap, onCitationClick)}
+        </em>
+      );
     }
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
       return (
@@ -54,12 +64,12 @@ const parseInline = (text) => {
         </span>
       );
     }
-    return part;
+    return parseCitations(part, citationsMap, onCitationClick);
   });
 };
 
 // Zero-Dependency Markdown Renderer with enhanced code, tables, headings, and lists
-const renderMarkdown = (text = '') => {
+const renderMarkdown = (text = '', citationsMap, onCitationClick) => {
   if (!text) return null;
 
   const lines = text.split('\n');
@@ -130,7 +140,7 @@ const renderMarkdown = (text = '') => {
                           fontWeight: isHeader ? 600 : 400,
                           color: isHeader ? '#ffffff' : 'rgba(255, 255, 255, 0.85)'
                         }}>
-                          {parseInline(col.trim())}
+                          {parseInline(col.trim(), citationsMap, onCitationClick)}
                         </td>
                       ))}
                     </tr>
@@ -147,15 +157,15 @@ const renderMarkdown = (text = '') => {
 
     // Headings
     if (line.startsWith('### ')) {
-      elements.push(<h4 key={idx} style={{ fontSize: '0.95rem', fontWeight: 600, color: '#ffffff', margin: '14px 0 6px 0' }}>{parseInline(line.replace('### ', ''))}</h4>);
+      elements.push(<h4 key={idx} style={{ fontSize: '0.95rem', fontWeight: 600, color: '#ffffff', margin: '14px 0 6px 0' }}>{parseInline(line.replace('### ', ''), citationsMap, onCitationClick)}</h4>);
       return;
     }
     if (line.startsWith('## ')) {
-      elements.push(<h3 key={idx} style={{ fontSize: '1.05rem', fontWeight: 600, color: '#ffffff', margin: '16px 0 6px 0' }}>{parseInline(line.replace('## ', ''))}</h3>);
+      elements.push(<h3 key={idx} style={{ fontSize: '1.05rem', fontWeight: 600, color: '#ffffff', margin: '16px 0 6px 0' }}>{parseInline(line.replace('## ', ''), citationsMap, onCitationClick)}</h3>);
       return;
     }
     if (line.startsWith('# ')) {
-      elements.push(<h2 key={idx} style={{ fontSize: '1.15rem', fontWeight: 600, color: '#ffffff', margin: '18px 0 8px 0' }}>{parseInline(line.replace('# ', ''))}</h2>);
+      elements.push(<h2 key={idx} style={{ fontSize: '1.15rem', fontWeight: 600, color: '#ffffff', margin: '18px 0 8px 0' }}>{parseInline(line.replace('# ', ''), citationsMap, onCitationClick)}</h2>);
       return;
     }
 
@@ -172,7 +182,7 @@ const renderMarkdown = (text = '') => {
           fontStyle: 'italic',
           fontSize: '0.85rem'
         }}>
-          {parseInline(line.replace('> ', ''))}
+          {parseInline(line.replace('> ', ''), citationsMap, onCitationClick)}
         </blockquote>
       );
       return;
@@ -182,7 +192,7 @@ const renderMarkdown = (text = '') => {
     if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
       elements.push(
         <li key={idx} style={{ marginLeft: '16px', margin: '3px 0', lineHeight: '1.6', color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.875rem' }}>
-          {parseInline(line.trim().substring(2))}
+          {parseInline(line.trim().substring(2), citationsMap, onCitationClick)}
         </li>
       );
       return;
@@ -194,7 +204,7 @@ const renderMarkdown = (text = '') => {
       elements.push(
         <div key={idx} style={{ display: 'flex', gap: '6px', marginLeft: '8px', margin: '3px 0', lineHeight: '1.6', color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.875rem' }}>
           <span style={{ fontWeight: 600, color: '#66b8ff', minWidth: '16px' }}>{matchOrdered[1]}.</span>
-          <span>{parseInline(matchOrdered[2])}</span>
+          <span>{parseInline(matchOrdered[2], citationsMap, onCitationClick)}</span>
         </div>
       );
       return;
@@ -204,7 +214,7 @@ const renderMarkdown = (text = '') => {
     if (line.trim().length > 0) {
       elements.push(
         <p key={idx} style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.85)' }}>
-          {parseInline(line)}
+          {parseInline(line, citationsMap, onCitationClick)}
         </p>
       );
     }
@@ -213,7 +223,7 @@ const renderMarkdown = (text = '') => {
   return <>{elements}</>;
 };
 
-export const MessageBubble = React.memo(({ message }) => {
+export const MessageBubble = React.memo(({ message, onCitationClick }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -226,6 +236,14 @@ export const MessageBubble = React.memo(({ message }) => {
 
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
+
+  const citations = Array.isArray(message.citations) ? message.citations : [];
+  const citationsMap = new Map();
+  citations.forEach(c => {
+    if (c && typeof c.index === 'number' && c.index > 0) {
+      citationsMap.set(c.index, c);
+    }
+  });
 
   if (isSystem) {
     return (
@@ -304,8 +322,11 @@ export const MessageBubble = React.memo(({ message }) => {
 
           {/* Formatted Content */}
           <div style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-            {renderMarkdown(message.content)}
+            {renderMarkdown(message.content, citationsMap, onCitationClick)}
           </div>
+
+          {/* Sources Cited Section */}
+          {renderSourcesCited(message.citations, isUser, onCitationClick)}
 
           {/* Action Bar */}
           <div style={{

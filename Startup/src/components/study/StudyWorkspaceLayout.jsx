@@ -89,7 +89,7 @@ export const StudyWorkspaceLayout = React.memo(({
     if (metaYoutube) {
       return session?.resources?.find(r => 
         r.type === 'youtube' && 
-        (r._id === metaYoutube.videoId || r.url === metaYoutube.videoUrl || r.url === metaYoutube.url)
+        (r._id === metaYoutube._id || r._id === metaYoutube.videoId || r.url === metaYoutube.videoUrl || r.url === metaYoutube.url)
       );
     }
     return null;
@@ -99,22 +99,48 @@ export const StudyWorkspaceLayout = React.memo(({
   const resourceType = activeResource?.type || (session?.metadata?.activeResourceType || session?.metadata?.lastTab || 'pdf').toLowerCase();
   let resourceId = '';
   if (activeResource) {
-    if (activeResource.type === 'pdf') {
-      resourceId = activeResource.title || '';
-    } else if (activeResource.type === 'youtube') {
-      resourceId = activeResource.url || activeResource.title || '';
-    } else if (activeResource.type === 'notes') {
-      resourceId = activeResource._id || 'default_notes_id';
-    }
+    resourceId = activeResource._id || '';
   } else {
     if (resourceType === 'pdf' && session?.metadata?.pdf) {
-      resourceId = session.metadata.pdf.pdfFilename || session.metadata.pdf.filename || '';
+      resourceId = session.metadata.pdf._id || '';
     } else if (resourceType === 'youtube' && session?.metadata?.youtube) {
-      resourceId = session.metadata.youtube.videoUrl || '';
-    } else if (resourceType === 'notes') {
-      resourceId = session?.metadata?.notes?.noteId || 'default_notes_id';
+      resourceId = session.metadata.youtube._id || '';
+    } else if (resourceType === 'notes' && session?.metadata?.notes) {
+      resourceId = session.metadata.notes._id || session.metadata.notes.noteId || 'default_notes_id';
     }
   }
+
+  const handleCitationClick = useCallback((citation) => {
+    if (!citation || !citation.resourceId) return;
+
+    const resource = session?.resources?.find(r => r._id === citation.resourceId);
+    if (!resource) {
+      console.warn(`[Citation Navigation] Resource not found in study session: ${citation.resourceId}`);
+      return;
+    }
+
+    handleSelectResource(resource);
+
+    if (resource.type === 'pdf') {
+      switchTab('pdf_viewer');
+      if (citation.pageStart !== undefined && citation.pageStart !== null) {
+        window.__targetPdfPage = citation.pageStart;
+        window.dispatchEvent(new CustomEvent('jump-to-pdf-page', {
+          detail: { page: citation.pageStart }
+        }));
+      }
+    } else if (resource.type === 'youtube') {
+      switchTab('video_viewer');
+      if (citation.timestampStart !== undefined && citation.timestampStart !== null) {
+        window.__targetVideoTimestamp = String(citation.timestampStart);
+        window.dispatchEvent(new CustomEvent('jump-to-video-timestamp', {
+          detail: { timestamp: String(citation.timestampStart) }
+        }));
+      }
+    } else if (resource.type === 'notes') {
+      switchTab('notes_viewer');
+    }
+  }, [session?.resources, handleSelectResource, switchTab]);
 
   return (
     <div className="sw-layout">
@@ -192,7 +218,7 @@ export const StudyWorkspaceLayout = React.memo(({
 
           {/* 3. AI Chat */}
           <div style={{ display: (activeTab === 'pdf_chat' || activeTab === 'video_chat') ? 'block' : 'none', height: '100%', width: '100%', overflow: 'hidden', padding: '24px', boxSizing: 'border-box' }}>
-            <ChatLayout session={session} activeResource={activeResource} />
+            <ChatLayout session={session} activeResource={activeResource} onCitationClick={handleCitationClick} />
           </div>
 
           {/* 4. PDF Viewer */}

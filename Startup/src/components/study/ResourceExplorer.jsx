@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   FileText, 
   Video, 
@@ -15,9 +15,182 @@ import {
 } from 'lucide-react';
 import { pdfjs } from 'react-pdf';
 import { showToast } from '../../components/Toast';
+import { getResourceKnowledgeStatus, reindexResourceKnowledge } from '../../services/api';
 
 // Configure pdfjs worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+function KnowledgeStatusBadge({ resourceId, workspaceId }) {
+  const [statusInfo, setStatusInfo] = useState({ status: 'UNKNOWN', progress: 0 });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // 1. Guard against empty, placeholder, or default IDs immediately to prevent unnecessary queries
+    if (!resourceId || resourceId === 'pdf_doc' || resourceId === 'default' || !workspaceId) {
+      setStatusInfo({ status: 'NOT_INDEXED', progress: 0 });
+      return;
+    }
+
+    // Reset status to UNKNOWN immediately on resourceId or workspaceId change to prevent stale display
+    setStatusInfo({ status: 'UNKNOWN', progress: 0 });
+
+    let isMounted = true;
+    let timeoutId = null;
+    const abortController = new AbortController();
+
+    // Track consecutive unchanged states for polling backoff
+    let lastStatus = null;
+    let consecutiveUnchanged = 0;
+
+    const fetchStatus = async () => {
+      if (!isMounted) return;
+
+      try {
+        const res = await getResourceKnowledgeStatus(resourceId, workspaceId, {
+          signal: abortController.signal
+        });
+        
+        if (!isMounted) return;
+
+        const data = res.success && res.data ? res.data : res;
+        const newStatusInfo = data || { status: 'NOT_INDEXED', progress: 0 };
+        const newStatus = newStatusInfo.status;
+
+        setStatusInfo(newStatusInfo);
+
+        const terminalStates = ['READY', 'FAILED', 'ERROR'];
+        if (!terminalStates.includes(newStatus)) {
+          if (newStatus === lastStatus) {
+            consecutiveUnchanged++;
+          } else {
+            lastStatus = newStatus;
+            consecutiveUnchanged = 0;
+          }
+
+          // Backoff polling interval: 2.5s -> 5s -> 10s
+          let interval = 2500;
+          if (consecutiveUnchanged >= 10) {
+            interval = 10000;
+          } else if (consecutiveUnchanged >= 3) {
+            interval = 5000;
+          }
+          
+          // Schedule next poll ONLY after this one completes (single-flight)
+          timeoutId = setTimeout(fetchStatus, interval);
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          // Ignore aborted requests silently without changing state or polling again
+          return;
+        }
+        console.error('Failed to fetch resource knowledge status:', err);
+        // Retry polling on generic connection failures after 5 seconds
+        if (isMounted) {
+          setStatusInfo({ status: 'ERROR', progress: 0 });
+          timeoutId = setTimeout(fetchStatus, 5000);
+        }
+      }
+    };
+
+    fetchStatus();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [resourceId, workspaceId]);
+
+  const handleRetry = async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+    try {
+      await reindexResourceKnowledge(resourceId, workspaceId);
+      setStatusInfo({ status: 'PENDING', progress: 0 });
+      showToast('Reindexing triggered successfully.', 'success');
+    } catch (err) {
+      console.error('Failed to trigger resource reindex:', err);
+      showToast('Failed to trigger reindexing.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { status, progress } = statusInfo;
+  const isProcessing = ['PENDING', 'NORMALIZING', 'CHUNKING', 'EMBEDDING', 'INDEXING', 'PROCESSING'].includes(status);
+
+  if (status === 'UNKNOWN') {
+    return (
+      <span className="ai-badge-tiny" style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'rgba(255, 255, 255, 0.5)', border: '1px solid rgba(255, 255, 255, 0.2)' }}>
+        Loading
+      </span>
+    );
+  }
+
+  if (status === 'ERROR') {
+    return (
+      <span className="ai-badge-tiny" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+        Unavailable
+      </span>
+    );
+  }
+
+  if (status === 'NOT_INDEXED') {
+    return (
+      <span className="ai-badge-tiny" style={{ background: 'rgba(156, 163, 175, 0.1)', color: '#9ca3af', border: '1px solid rgba(156, 163, 175, 0.2)' }}>
+        Not Indexed
+      </span>
+    );
+  }
+
+  if (status === 'READY') {
+    return (
+      <span className="ai-badge-tiny" style={{ background: 'rgba(52, 211, 153, 0.1)', color: '#34d399', border: '1px solid rgba(52, 211, 153, 0.2)' }}>
+        Ready
+      </span>
+    );
+  }
+
+  if (status === 'FAILED') {
+    return (
+      <span className="ai-badge-tiny" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+        Failed
+        <button 
+          onClick={handleRetry} 
+          disabled={loading}
+          style={{ background: 'none', border: 'none', color: '#66b8ff', cursor: 'pointer', padding: '0 2px', textDecoration: 'underline', fontStyle: 'normal', fontSize: 'inherit', fontWeight: 'bold' }}
+        >
+          {loading ? '...' : 'Retry'}
+        </button>
+      </span>
+    );
+  }
+
+  if (isProcessing) {
+    let label = 'Processing...';
+    if (status === 'PENDING') label = 'Queued';
+    else if (status === 'NORMALIZING') label = 'Normalizing...';
+    else if (status === 'CHUNKING') label = 'Chunking...';
+    else if (status === 'EMBEDDING') label = 'Embedding...';
+    else if (status === 'INDEXING') label = 'Indexing...';
+
+    return (
+      <span className="ai-badge-tiny" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <span className="ai-badge-tiny">
+      Ready
+    </span>
+  );
+}
 
 export const ResourceExplorer = React.memo(({ 
   session, 
@@ -330,7 +503,7 @@ export const ResourceExplorer = React.memo(({
                     ) : (
                       <>
                         <span className="item-title" title={res.title}>{res.title}</span>
-                        <span className="ai-badge-tiny">Ready</span>
+                        <KnowledgeStatusBadge resourceId={res._id} workspaceId={session?._id} />
                       </>
                     )}
                   </div>
@@ -448,7 +621,7 @@ export const ResourceExplorer = React.memo(({
                     ) : (
                       <>
                         <span className="item-title" title={res.title}>{res.title}</span>
-                        <span className="ai-badge-tiny">Ready</span>
+                        <KnowledgeStatusBadge resourceId={res._id} workspaceId={session?._id} />
                       </>
                     )}
                   </div>

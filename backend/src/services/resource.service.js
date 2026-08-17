@@ -51,6 +51,237 @@ class ResourceService {
   /**
    * Append a resource to the session's resources array and update statistics
    */
+  /**
+   * Helper to decode and save PDF base64 fileData to disk.
+   */
+  async _saveBase64PdfToDisk(fileData) {
+    if (!fileData || typeof fileData !== 'string' || !fileData.startsWith('data:application/pdf;base64,')) {
+      return null;
+    }
+
+    try {
+      const matches = fileData.match(/^data:(.+);base64,(.+)$/);
+      if (!matches) return null;
+
+      const base64Data = matches[2];
+      const buffer = Buffer.from(base64Data, 'base64');
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const filename = `file-${uniqueSuffix}.pdf`;
+
+      const fs = await import('fs');
+      const path = await import('path');
+      const fileURLToPath = (await import('url')).fileURLToPath;
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      const uploadsDir = path.resolve(__dirname, '../../uploads');
+
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const filePath = path.join(uploadsDir, filename);
+      fs.writeFileSync(filePath, buffer);
+
+      logger.info(`[Resource Service] PDF decoded and written to disk at: ${filePath}`);
+      return `uploads/${filename}`;
+    } catch (err) {
+      logger.error(`[Resource Service] Failed to save base64 PDF to disk: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Helper to save PDF extracted text and pages directly to KnowledgeDocument and KnowledgeChunks.
+   */
+  async _savePdfContentToKnowledge(userId, workspaceId, resourceId, title, url, extractedText, pages) {
+    if (!extractedText) return;
+
+    try {
+      const KnowledgeDocument = mongoose.model('KnowledgeDocument');
+      const KnowledgeChunk = mongoose.model('KnowledgeChunk');
+      const hashUtil = (await import('../knowledge/utils/hash.util.js')).default;
+      const contentHash = hashUtil.generateContentHash(extractedText);
+
+      // 1. Upsert KnowledgeDocument (no raw content.text/content.pages fields!)
+      const doc = await KnowledgeDocument.findOneAndUpdate(
+        { userId, workspaceId, resourceId },
+        {
+          $set: {
+            type: 'PDF',
+            title,
+            source: { url, filename: title, platform: 'Upload' },
+            contentHash,
+            embeddingModel: process.env.KNOWLEDGE_EMBEDDING_MODEL || 'gemini-embedding-001',
+            processingStatus: 'READY'
+          }
+        },
+        { upsert: true, new: true }
+      );
+
+      // 2. Chunking
+      const chunkingService = (await import('../knowledge/services/chunking.service.js')).default;
+      const normalizedData = { text: extractedText, pages: pages || [], sections: [] };
+      const rawChunks = chunkingService.chunk(normalizedData, { title, type: 'PDF' });
+
+      // Delete existing chunks
+      await KnowledgeChunk.deleteMany({ documentId: doc._id });
+
+      // Prepare chunk models
+      const chunkDocuments = rawChunks.map((chunk, idx) => ({
+        documentId: doc._id,
+        resourceId,
+        workspaceId,
+        userId,
+        text: chunk.text,
+        embedding: new Array(3072).fill(0), // Dummy embedding for Phase 3.3 foundation
+        metadata: {
+          pageStart: chunk.metadata?.pageStart || chunk.metadata?.pageNumber || null,
+          pageEnd: chunk.metadata?.pageEnd || chunk.metadata?.pageNumber || null,
+          section: chunk.metadata?.section || '',
+          heading: chunk.metadata?.heading || ''
+        },
+        chunkIndex: chunk.chunkIndex,
+        documentVersion: doc.documentVersion,
+        contentHash: doc.contentHash
+      }));
+
+      if (chunkDocuments.length > 0) {
+        await KnowledgeChunk.insertMany(chunkDocuments);
+      }
+
+      // Update chunk count on document
+      await KnowledgeDocument.updateOne(
+        { _id: doc._id },
+        { $set: { chunkCount: chunkDocuments.length } }
+      );
+
+      logger.info(`[Resource Service] PDF text saved to Knowledge base: Document=${doc._id}, Chunks=${chunkDocuments.length}`);
+    } catch (err) {
+      logger.error(`[Resource Service] Failed to save PDF to Knowledge base: ${err.message}`);
+    }
+  }
+
+  /**
+   * Helper to save YouTube transcript/translation data to KnowledgeDocument and KnowledgeChunks.
+   */
+  async _saveYoutubeContentToKnowledge(userId, workspaceId, resourceId, title, url, youtubeData) {
+    const transcript = youtubeData.transcript || '';
+    if (!transcript) return;
+
+    try {
+      const KnowledgeDocument = mongoose.model('KnowledgeDocument');
+      const KnowledgeChunk = mongoose.model('KnowledgeChunk');
+      const hashUtil = (await import('../knowledge/utils/hash.util.js')).default;
+      const contentHash = hashUtil.generateContentHash(transcript);
+
+      // 1. Upsert KnowledgeDocument (no raw transcript items!)
+      const doc = await KnowledgeDocument.findOneAndUpdate(
+        { userId, workspaceId, resourceId },
+        {
+          $set: {
+            type: 'YOUTUBE',
+            title,
+            source: { url, filename: title, platform: 'YouTube' },
+            youtubeData: {
+              videoId: youtubeData.videoId,
+              videoUrl: youtubeData.videoUrl || url,
+              authorName: youtubeData.authorName,
+              authorUrl: youtubeData.authorUrl,
+              thumbnailUrl: youtubeData.thumbnailUrl,
+              duration: youtubeData.duration,
+              publishedDate: youtubeData.publishedDate,
+              chapters: youtubeData.chapters || []
+            },
+            metadata: {
+              language: youtubeData.transcriptLanguage || 'en',
+              wordCount: transcript.split(/\s+/).filter(Boolean).length,
+              duration: parseInt(youtubeData.duration, 10) || 0,
+              extractedAt: new Date(),
+              chapters: youtubeData.chapters || []
+            },
+            contentHash,
+            embeddingModel: process.env.KNOWLEDGE_EMBEDDING_MODEL || 'gemini-embedding-001',
+            processingStatus: 'READY'
+          }
+        },
+        { upsert: true, new: true }
+      );
+
+      // 2. Chunking
+      const chunkingService = (await import('../knowledge/services/chunking.service.js')).default;
+      const normalizationService = (await import('../knowledge/services/normalization.service.js')).default;
+      
+      const mockResource = { type: 'youtube', title, url, data: youtubeData };
+      const normalizedData = normalizationService.normalize(mockResource);
+      const rawChunks = chunkingService.chunk(normalizedData, { title, type: 'YOUTUBE' });
+
+      // Delete existing chunks
+      await KnowledgeChunk.deleteMany({ documentId: doc._id });
+
+      const items = youtubeData.transcriptItems || youtubeData.originalTranscriptItems || [];
+      const englishItems = youtubeData.englishTranscriptItems || [];
+
+      const chunkDocuments = rawChunks.map((chunk) => {
+        const chunkTextLower = chunk.text.toLowerCase();
+        const matchedItems = items.filter(item => item.text && chunkTextLower.includes(item.text.toLowerCase()));
+        
+        let tStart = null;
+        let tEnd = null;
+        if (matchedItems.length > 0) {
+          const sortedMatched = [...matchedItems].sort((a, b) => (a.seconds || 0) - (b.seconds || 0));
+          tStart = sortedMatched[0].seconds;
+          tEnd = sortedMatched[sortedMatched.length - 1].seconds;
+        }
+
+        const itemsMetadata = matchedItems.map(item => {
+          const enCounterpart = englishItems.find(en => en.time === item.time || en.seconds === item.seconds);
+          return {
+            text: enCounterpart ? enCounterpart.text : item.text,
+            originalText: item.text,
+            time: item.time,
+            seconds: item.seconds
+          };
+        });
+
+        return {
+          documentId: doc._id,
+          resourceId,
+          workspaceId,
+          userId,
+          text: chunk.text,
+          embedding: new Array(3072).fill(0), // Dummy embedding
+          metadata: {
+            timestampStart: tStart,
+            timestampEnd: tEnd,
+            section: '',
+            heading: '',
+            transcriptItems: itemsMetadata
+          },
+          chunkIndex: chunk.chunkIndex,
+          documentVersion: doc.documentVersion,
+          contentHash: doc.contentHash
+        };
+      });
+
+      if (chunkDocuments.length > 0) {
+        await KnowledgeChunk.insertMany(chunkDocuments);
+      }
+
+      // Update chunk count on document
+      await KnowledgeDocument.updateOne(
+        { _id: doc._id },
+        { $set: { chunkCount: chunkDocuments.length } }
+      );
+
+      logger.info(`[Resource Service] YouTube transcript saved to Knowledge base: Document=${doc._id}, Chunks=${chunkDocuments.length}`);
+    } catch (err) {
+      logger.error(`[Resource Service] Failed to save YouTube to Knowledge base: ${err.message}`);
+    }
+  }
+
+  /**
+   * Append a resource to the session's resources array and update statistics
+   */
   async linkResourceToSession(session, { type, url, title, data }) {
     try {
       if (!type || !url) {
@@ -77,54 +308,92 @@ class ResourceService {
         r => r.type === type && r.url === url
       );
 
-      const existingData = existingResourceIndex > -1 ? (session.resources[existingResourceIndex].data || {}) : {};
+      const existingResource = existingResourceIndex > -1 ? session.resources[existingResourceIndex] : null;
+      const resourceId = existingResource ? existingResource._id : new mongoose.Types.ObjectId().toString();
+      const existingData = existingResource ? (existingResource.data || {}) : {};
       
-      // Perform deep merge to avoid losing rich fields during lightweight updates
       const mergedData = {
         ...existingData,
         ...(data || {})
       };
 
-      // Explicitly preserve heavy payload keys if they exist in the DB but are missing in the update
-      if (existingData.fileData && !mergedData.fileData) {
-        mergedData.fileData = existingData.fileData;
-      }
-      if (existingData.extractedText && !mergedData.extractedText) {
-        mergedData.extractedText = existingData.extractedText;
-      }
-      if (existingData.pages && !mergedData.pages) {
-        mergedData.pages = existingData.pages;
-      }
-      if (existingData.transcriptItems && !mergedData.transcriptItems) {
-        mergedData.transcriptItems = existingData.transcriptItems;
-      }
-      if (existingData.originalTranscriptItems && !mergedData.originalTranscriptItems) {
-        mergedData.originalTranscriptItems = existingData.originalTranscriptItems;
-      }
-      if (existingData.chapters && !mergedData.chapters) {
-        mergedData.chapters = existingData.chapters;
+      // Handle base64 PDF content if present
+      if (type === 'pdf') {
+        const fileUrlDisk = await this._saveBase64PdfToDisk(mergedData.fileData);
+        if (fileUrlDisk) {
+          mergedData.storagePath = fileUrlDisk;
+        }
       }
 
+      // Save heavy PDF content to Knowledge base in the background
+      if (type === 'pdf' && mergedData.extractedText) {
+        await this._savePdfContentToKnowledge(
+          session.user.toString(),
+          session._id.toString(),
+          resourceId,
+          title || url,
+          url,
+          mergedData.extractedText,
+          mergedData.pages
+        );
+      }
+
+      // Save heavy YouTube transcript content to Knowledge base in the background
+      if (type === 'youtube' && (mergedData.transcript || mergedData.transcriptItems)) {
+        await this._saveYoutubeContentToKnowledge(
+          session.user.toString(),
+          session._id.toString(),
+          resourceId,
+          title || url,
+          url,
+          mergedData
+        );
+      }
+
+      // Keep only lightweight info in mergedData
+      const strippedData = {
+        _id: resourceId,
+        filename: mergedData.filename || url,
+        pdfFilename: mergedData.pdfFilename || mergedData.filename || url,
+        fileSize: mergedData.fileSize || existingData.fileSize,
+        fileType: mergedData.fileType || existingData.fileType || 'application/pdf',
+        storagePath: mergedData.storagePath || existingData.storagePath,
+        pageNumber: mergedData.pageNumber !== undefined ? mergedData.pageNumber : existingData.pageNumber || 1,
+        scale: mergedData.scale !== undefined ? mergedData.scale : existingData.scale || 1.0,
+        fitMode: mergedData.fitMode || existingData.fitMode || 'page',
+        lastOpened: mergedData.lastOpened || existingData.lastOpened || new Date().toISOString(),
+        processingStatus: mergedData.processingStatus || existingData.processingStatus || 'completed',
+        
+        // YouTube lightweight metadata
+        videoId: mergedData.videoId || existingData.videoId,
+        videoUrl: mergedData.videoUrl || url,
+        title: mergedData.title || title || existingData.title,
+        authorName: mergedData.authorName || existingData.authorName,
+        authorUrl: mergedData.authorUrl || existingData.authorUrl,
+        thumbnailUrl: mergedData.thumbnailUrl || existingData.thumbnailUrl,
+        duration: mergedData.duration || existingData.duration,
+        publishedDate: mergedData.publishedDate || existingData.publishedDate
+      };
+
       const resourcePayload = {
+        _id: resourceId,
         type,
         url,
-        title: title || 'Untitled Resource',
-        data: mergedData,
+        title: title || existingResource?.title || 'Untitled Resource',
+        data: strippedData,
         updatedAt: new Date()
       };
 
       if (existingResourceIndex > -1) {
         logger.info(`[Resource Service] Found existing resource, updating details in-place`);
         session.resources[existingResourceIndex] = {
-          ...session.resources[existingResourceIndex],
+          ...existingResource,
           ...resourcePayload,
-          _id: session.resources[existingResourceIndex]._id || new mongoose.Types.ObjectId().toString(),
-          addedAt: session.resources[existingResourceIndex].addedAt || new Date()
+          addedAt: existingResource.addedAt || new Date()
         };
       } else {
         logger.info(`[Resource Service] Appending new resource to list`);
         session.resources.push({
-          _id: new mongoose.Types.ObjectId().toString(),
           ...resourcePayload,
           addedAt: new Date()
         });
@@ -140,11 +409,11 @@ class ResourceService {
       session.metadata.lastOpened = new Date().toISOString();
 
       if (type === 'youtube') {
-        session.metadata.youtube = mergedData;
+        session.metadata.youtube = strippedData;
       } else if (type === 'pdf') {
-        session.metadata.pdf = mergedData;
+        session.metadata.pdf = strippedData;
       } else if (type === 'notes') {
-        session.metadata.notes = mergedData;
+        session.metadata.notes = strippedData;
       }
 
       session.markModified('resources');
@@ -159,8 +428,8 @@ class ResourceService {
 
       logger.info(`[Resource Service] Updated statistics: resourceCount=${session.resourceCount}, videoCount=${session.videoCount}, pdfCount=${session.pdfCount}, notesCount=${session.notesCount}`);
       
-      // Trigger background Workspace Mind Map generation asynchronously (Step 13 & 16)
-      if (session && session.user && session._id) {
+      // Trigger background Workspace Mind Map generation asynchronously if enabled
+      if (session && session.user && session._id && process.env.AUTOMATIC_MIND_MAP_GENERATION === 'true') {
         const resourcesForMap = session.resources || [];
         mindMapService.generateWorkspaceMindMapBackground(
           session.user.toString(),

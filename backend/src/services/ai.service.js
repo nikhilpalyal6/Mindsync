@@ -135,7 +135,7 @@ class AIService {
     });
 
     // 2. Build Enriched Workshop Memory & Context via ContextBuilderService
-    const { systemInstruction, messages: boundedHistory } = await contextBuilderService.buildContext({
+    const { systemInstruction, messages: boundedHistory, citations } = await contextBuilderService.buildContext({
       userId,
       studySessionId: conversation.studySession,
       conversationId,
@@ -159,6 +159,56 @@ class AIService {
         "Please verify your connection and try again in a moment.";
     }
 
+    // Parse and validate citations (Stage 3)
+    let validatedCitations = [];
+    if (status === 'completed' && citations && Array.isArray(citations) && citations.length > 0) {
+      try {
+        const citationRegex = /\[(\d+)\]/g;
+        const matches = [...assistantContent.matchAll(citationRegex)];
+        
+        // Extract indices and keep the first-reference order
+        const uniqueIndices = [];
+        for (const match of matches) {
+          const index = parseInt(match[1], 10);
+          if (!uniqueIndices.includes(index)) {
+            uniqueIndices.push(index);
+          }
+        }
+        
+        // Build map for quick validation lookup
+        const citationMap = new Map();
+        for (const citation of citations) {
+          citationMap.set(citation.index, citation);
+        }
+        
+        // Map unique extracted indices to citation objects
+        for (const idx of uniqueIndices) {
+          const citation = citationMap.get(idx);
+          if (citation) {
+            // Defensive cleanup: only copy schema-defined fields
+            const clean = {
+              index: citation.index,
+              chunkId: citation.chunkId,
+              documentId: citation.documentId,
+              resourceId: citation.resourceId,
+              workspaceId: citation.workspaceId,
+              title: citation.title,
+              resourceType: citation.resourceType,
+              chunkIndex: citation.chunkIndex
+            };
+            if (citation.pageStart !== undefined) clean.pageStart = citation.pageStart;
+            if (citation.pageEnd !== undefined) clean.pageEnd = citation.pageEnd;
+            if (citation.timestampStart !== undefined) clean.timestampStart = citation.timestampStart;
+            if (citation.timestampEnd !== undefined) clean.timestampEnd = citation.timestampEnd;
+            validatedCitations.push(clean);
+          }
+        }
+      } catch (err) {
+        console.error('[Citation Validation] Error during citation parsing/validation:', err);
+        validatedCitations = [];
+      }
+    }
+
     // 4. Save Assistant Message in MongoDB
     const assistantMessage = await AIMessage.create({
       conversation: conversationId,
@@ -166,6 +216,7 @@ class AIService {
       role: 'assistant',
       content: assistantContent,
       status: status,
+      citations: validatedCitations,
     });
 
     // 5. Update conversation lastMessageAt
@@ -184,7 +235,10 @@ class AIService {
 
     return {
       userMessage,
-      assistantMessage,
+      assistantMessage: {
+        ...assistantMessage.toObject(),
+        citations: validatedCitations,
+      },
     };
   }
 }

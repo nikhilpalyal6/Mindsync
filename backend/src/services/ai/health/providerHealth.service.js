@@ -155,20 +155,33 @@ class ProviderHealthService {
       }
     }
 
+    const threshold = aiRouterConfig.tuning?.failureThreshold || this.MAX_CONSECUTIVE_FAILURES;
+
+    // Handle Quota Exceeded error immediately
+    if (error?.type === 'QUOTA_EXCEEDED') {
+      const quotaCooldown = parseInt(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS, 10) || 3600000;
+      state.healthy = false;
+      state.consecutiveFailures = threshold;
+      state.retryAfter = Date.now() + quotaCooldown;
+      logger.error(`[AI Health CB] Quota exceeded for ${provider.toUpperCase()}. Circuit opened immediately. Cooldown: ${quotaCooldown / 1000}s.`);
+    }
+
     // Handle probe failure vs normal execution failure
     if (state.halfOpen) {
       logger.error(`[AI Health CB] Recovery probe failed for ${provider.toUpperCase()}. Closing circuit and resetting cooldown.`);
       state.halfOpen = false;
       state.probeInProgress = false;
       // Probe fail keeps provider unhealthy and starts new cooldown period
-    } else {
+    } else if (error?.type !== 'QUOTA_EXCEEDED') {
       state.consecutiveFailures += 1;
     }
 
-    const threshold = aiRouterConfig.tuning?.failureThreshold || this.MAX_CONSECUTIVE_FAILURES;
     if (state.consecutiveFailures >= threshold || !state.healthy) {
       state.healthy = false;
-      logger.error(`[AI Health CB] Circuit Breaker OPEN for ${provider.toUpperCase()}. Provider marked UNHEALTHY. Cooldown: ${cooldownDuration / 1000}s. consecutive failures: ${state.consecutiveFailures}`);
+      const cooldownVal = error?.type === 'QUOTA_EXCEEDED' 
+        ? (parseInt(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS, 10) || 3600000) 
+        : cooldownDuration;
+      logger.error(`[AI Health CB] Circuit Breaker OPEN for ${provider.toUpperCase()}. Provider marked UNHEALTHY. Cooldown: ${cooldownVal / 1000}s. consecutive failures: ${state.consecutiveFailures}`);
     } else {
       logger.warn(`[AI Health CB] Failures count for ${provider.toUpperCase()}: ${state.consecutiveFailures}/${threshold}`);
     }

@@ -326,7 +326,7 @@ export const PDFViewer = React.memo(forwardRef(({
     onDocumentLoadSuccess?.(doc);
   };
 
-  // Scroll to selected page when pageNumber, scale, or fitMode changes
+  // Scroll to selected page when pageNumber, scale, fitMode, or numPages changes
   useEffect(() => {
     if (pageNumber && pageRefs.current[pageNumber] && containerRef.current) {
       isScrollingToPageRef.current = true;
@@ -340,7 +340,7 @@ export const PDFViewer = React.memo(forwardRef(({
         isScrollingToPageRef.current = false;
       }, 150);
     }
-  }, [pageNumber, scale, fitMode]);
+  }, [pageNumber, scale, fitMode, numPages]);
 
   // Handle scroll detection for automatic page number updating
   const handleScroll = useCallback(() => {

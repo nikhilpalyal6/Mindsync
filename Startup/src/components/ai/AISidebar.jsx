@@ -2,7 +2,7 @@ import React from 'react';
 import ChatLayout from '../chat/ChatLayout';
 import './AISidebar.css';
 
-export const AISidebar = React.memo(({ session, activeResource }) => {
+export const AISidebar = React.memo(({ session, activeResource, onCitationClick }) => {
   return (
     <div className="ai-sidebar-container" style={{
       height: '100%',
@@ -11,7 +11,7 @@ export const AISidebar = React.memo(({ session, activeResource }) => {
       flexDirection: 'column',
       minHeight: 0
     }}>
-      <ChatLayout session={session} activeResource={activeResource} />
+      <ChatLayout session={session} activeResource={activeResource} onCitationClick={onCitationClick} />
     </div>
   );
 });

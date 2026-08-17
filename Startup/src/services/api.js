@@ -37,7 +37,8 @@ const apiRequest = async (endpoint, options = {}) => {
     endpoint.includes('/summary') ||
     endpoint.startsWith('/ai/quiz/') ||
     endpoint.startsWith('/ai/flashcards/') ||
-    endpoint.startsWith('/ai/explain/')
+    endpoint.startsWith('/ai/explain/') ||
+    endpoint.startsWith('/knowledge/resource/')
   );
 
   if (isDedupe) {
@@ -705,5 +706,19 @@ export const getMindMapByWorkspace = async (workspaceId) => {
 
 export const generateMindMap = async (workspaceId) => {
   return await api.post(`/mind-maps/workspace/${workspaceId}/generate`);
+};
+
+// --- KNOWLEDGE ENGINE API ---
+export const getResourceKnowledgeStatus = async (resourceId, workspaceId, options = {}) => {
+  const query = workspaceId ? `?workspaceId=${workspaceId}` : '';
+  return await api.get(`/knowledge/resource/${resourceId}/status${query}`, options);
+};
+
+export const reindexResourceKnowledge = async (resourceId, workspaceId) => {
+  return await api.post(`/knowledge/resource/${resourceId}/reindex`, { workspaceId });
+};
+
+export const fetchPdfFile = async (sessionId, resourceId) => {
+  return await api.get(`/study/${sessionId}/resources/${encodeURIComponent(resourceId)}/file`);
 };
 

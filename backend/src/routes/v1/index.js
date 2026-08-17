@@ -10,6 +10,7 @@ import highlightsRoutes from './highlights.routes.js';
 import studyPlanRoutes from './studyPlan.routes.js';
 import studyTaskRoutes from './studyTask.routes.js';
 import mindMapRoutes from './mindMap.routes.js';
+import knowledgeRoutes from './knowledge.routes.js';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/highlights', highlightsRoutes);
 router.use('/study-plans', studyPlanRoutes);
 router.use('/study-tasks', studyTaskRoutes);
 router.use('/mind-maps', mindMapRoutes);
+router.use('/knowledge', knowledgeRoutes);
 
 export default router;

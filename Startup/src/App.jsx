@@ -43,8 +43,7 @@ import Toast from './components/Toast'
 function AppContent() {
   const location = useLocation()
   const isAuthPage = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email'].some(path => location.pathname.startsWith(path))
-  const studyRoutes = ['/study', '/study/viewer']
-  const isStudyMode = studyRoutes.includes(location.pathname)
+  const isStudyMode = location.pathname.startsWith('/study') && location.pathname !== '/study-planner'
   const isAdminRoute = location.pathname.startsWith('/admin')
 
   useEffect(() => {
@@ -69,6 +68,7 @@ function AppContent() {
         <Route path="/reset-password/:token" element={<GuestRoute><ResetPassword /></GuestRoute>} />
         <Route path="/verify-email/:token" element={<GuestRoute><VerifyEmail /></GuestRoute>} />
         <Route path="/study" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
+        <Route path="/study/:workspaceId" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
         <Route path="/study/viewer" element={<ProtectedRoute><StudyViewer /></ProtectedRoute>} />
         <Route path="/study-planner" element={<ProtectedRoute><StudyPlanner /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

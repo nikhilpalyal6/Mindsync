@@ -15,7 +15,7 @@ import {
   sendAIMessage 
 } from '../../services/api';
 
-export const ChatLayout = React.memo(({ session, activeResource }) => {
+export const ChatLayout = React.memo(({ session, activeResource, onCitationClick }) => {
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -254,7 +254,7 @@ export const ChatLayout = React.memo(({ session, activeResource }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
             {messages.map((msg, i) => (
-              <MessageBubble key={msg._id || i} message={msg} />
+              <MessageBubble key={msg._id || i} message={msg} onCitationClick={onCitationClick} />
             ))}
             {sending && <TypingIndicator />}
             <div ref={messagesEndRef} />

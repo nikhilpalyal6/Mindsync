@@ -4,6 +4,7 @@ import { normalizeResponse } from '../utils/providerNormalizer.js';
 import {
   AIRequestValidationError,
   AIRateLimitError,
+  AIQuotaExceededError,
   AIServerError,
   AITimeoutError,
   AINetworkError,
@@ -35,7 +36,8 @@ class GeminiService {
     systemInstruction,
     temperature = 0.7,
     maxTokens = 4096,
-    jsonMode = false
+    jsonMode = false,
+    pdfBase64
   }) {
     const startTime = Date.now();
     const modelName = aiRouterConfig.providers.gemini.model();
@@ -85,8 +87,21 @@ class GeminiService {
         responseText = response.text() || '';
         usageMetadata = response.usageMetadata || {};
       } else {
-        const promptText = prompt || '';
-        const result = await model.generateContent(promptText);
+        let parts = [];
+        if (pdfBase64) {
+          parts = [
+            {
+              inlineData: {
+                data: pdfBase64,
+                mimeType: 'application/pdf'
+              }
+            },
+            { text: prompt || 'Extract all readable text, formulas, headings, and details from this PDF document.' }
+          ];
+        } else {
+          parts = prompt || '';
+        }
+        const result = await model.generateContent(parts);
         const response = await result.response;
         responseText = response.text() || '';
         usageMetadata = response.usageMetadata || {};
@@ -120,7 +135,10 @@ class GeminiService {
       if (errorMsg.includes('400') || errorMsg.includes('InvalidArgument') || errorMsg.includes('API_KEY_INVALID')) {
         throw new AIRequestValidationError(errorMsg, this.providerName, err);
       }
-      if (errorMsg.includes('429') || errorMsg.includes('RESOURCE_EXHAUSTED') || errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('rate limit')) {
+      if (errorMsg.includes('RESOURCE_EXHAUSTED') || errorMsg.toLowerCase().includes('quota')) {
+        throw new AIQuotaExceededError(errorMsg, this.providerName, err);
+      }
+      if (errorMsg.includes('429') || errorMsg.toLowerCase().includes('rate limit')) {
         throw new AIRateLimitError(errorMsg, this.providerName, err);
       }
       if (errorMsg.toLowerCase().includes('timeout') || errorMsg.toLowerCase().includes('deadline')) {

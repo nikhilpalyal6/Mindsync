@@ -3,7 +3,7 @@ import { FileText, Upload, Sparkles, CheckCircle, BookOpen, Trash2 } from 'lucid
 import { pdfjs } from 'react-pdf';
 import PDFToolbar from './PDFToolbar';
 import PDFViewer from './PDFViewer';
-import { updateStudySession, addResource, getHighlights, createHighlight, deleteHighlight, getSmartHighlights, acceptSmartHighlights, rejectSmartHighlights, rejectSmartHighlightSingle, acceptAllSmartHighlights, analyzeSmartHighlightsForPage, regenerateSmartHighlightsForPage } from '../../services/api';
+import { updateStudySession, addResource, getHighlights, createHighlight, deleteHighlight, getSmartHighlights, acceptSmartHighlights, rejectSmartHighlights, rejectSmartHighlightSingle, acceptAllSmartHighlights, analyzeSmartHighlightsForPage, regenerateSmartHighlightsForPage, fetchPdfFile } from '../../services/api';
 import './pdfWorkspace.css';
 
 // Ensure workerSrc is set for text extraction
@@ -190,7 +190,7 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
   const viewportCacheRef = useRef(new Map());
 
   const fetchHighlightsList = useCallback(async () => {
-    if (!resourceId) return;
+    if (!resourceId || resourceId === 'pdf_doc' || resourceId === 'default') return;
     setLoadingHighlights(true);
     setHighlightError(null);
     try {
@@ -240,13 +240,16 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
     if (!session?._id) return;
 
     const isActivePdf = activeResource?.type === 'pdf';
-    const pdfMeta = activeResource?.data || {};
+    const pdfMeta = activeResource?.data || session?.metadata?.pdf || {};
     const savedFileName = activeResource?.title || pdfMeta.filename || pdfMeta.pdfFilename || '';
     const currentResourceId = activeResource?._id || savedFileName || 'default';
 
     // Only restore state if we actually loaded a NEW PDF resource!
-    if (lastLoadedResourceRef.current !== currentResourceId) {
+    if (lastLoadedResourceRef.current !== currentResourceId || !file) {
       lastLoadedResourceRef.current = currentResourceId;
+
+      // Invalidate the previous PDF content to prevent stale render during load
+      setFile(null);
 
       const savedPage = window.__targetPdfPage || pdfMeta.pageNumber || 1;
       window.__targetPdfPage = null;
@@ -296,8 +299,27 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
       if (savedFileName) {
         setFileName(savedFileName);
       }
+
+      // 3. Fallback: Fetch PDF binary from backend on demand
+      if (activeResource?._id) {
+        fetchPdfFile(session._id, activeResource._id)
+          .then((res) => {
+            if (res?.success && res?.data?.fileData) {
+              const fetchedFile = res.data.fileData;
+              setFile(fetchedFile);
+              setFileName(savedFileName || 'Saved Document.pdf');
+              if (cacheKey) {
+                inMemoryPDFCache.set(cacheKey, { file: fetchedFile, fileName: savedFileName });
+              }
+              console.log(`[PDF Processing] Loaded PDF from on-demand server endpoint: ${savedFileName}`);
+            }
+          })
+          .catch((err) => {
+            console.error('[PDF Loading Error] Failed to fetch PDF from backend:', err);
+          });
+      }
     }
-  }, [session?._id, activeResource?._id, session?.metadata?.pdf?.lastOpened]);
+  }, [session?._id, activeResource?._id, activeResource?.data?.fileData, session?.metadata?.pdf?.fileData, session?.metadata?.pdf?.lastOpened]);
 
   // Extract readable text from PDF using pdfjs-dist
   const extractPDFText = async (arrayBuffer) => {
@@ -549,7 +571,7 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
 
   // Page Change Handler
   const handlePageChange = useCallback(async (newPage) => {
-    if (newPage >= 1 && newPage <= numPages) {
+    if (newPage >= 1 && (numPages === 0 || newPage <= numPages)) {
       setPageNumber(newPage);
       await persistPDFState({ pageNumber: newPage });
     }
@@ -569,7 +591,7 @@ export const PDFWorkspace = React.memo(({ session, activeResource }) => {
   }, [handlePageChange]);
 
   const loadPageSuggestions = useCallback(async (pageNum, isRegen = false) => {
-    if (!resourceId || !session?._id) return;
+    if (!resourceId || resourceId === 'pdf_doc' || resourceId === 'default' || !session?._id) return;
 
     console.log(`[SmartHighlights] REQUEST START\nresourceId: ${resourceId}\npageNumber: ${pageNum}\npageNumberType: ${typeof pageNum}`);
 

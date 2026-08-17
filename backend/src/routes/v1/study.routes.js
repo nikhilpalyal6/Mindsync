@@ -35,6 +35,9 @@ router.route('/:sessionId/resources/:resourceId')
   .patch(studyController.renameResource)
   .delete(studyController.deleteResource);
 
+router.route('/:sessionId/resources/:resourceId/file')
+  .get(studyController.getPdfFile);
+
 router.route('/:sessionId/resources/:resourceId/replace')
   .put(studyController.replaceResource);
 

@@ -4,6 +4,7 @@ import logger from './config/logger.js';
 import { connectDB, disconnectDB } from './database/connection.js';
 import { verifyEmailConnection } from './config/email.js';
 import { logEvent } from './utils/auditLogger.js';
+import { runChunkCountBackfill } from './knowledge/scripts/backfillChunkCounts.js';
 
 let server;
 
@@ -21,6 +22,13 @@ const startServer = async () => {
     server = app.listen(config.port, async () => {
       logger.info(`MindSync server running in ${config.env} mode on port ${config.port}`);
       logger.info(`Health check: http://localhost:${config.port}/api/v1/health`);
+
+      // Asynchronously trigger legacy chunk count backfill migration
+      setImmediate(() => {
+        runChunkCountBackfill().catch((error) => {
+          logger.error('Chunk count backfill failed', { error: error.message });
+        });
+      });
 
       // Log system initialization events
       await logEvent({

@@ -137,7 +137,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
 
   // Fetch cached quiz on mount
   const loadQuiz = useCallback(async () => {
-    if (!studySessionId || !resourceId) return;
+    if (!studySessionId || !resourceId || resourceId === 'pdf_doc' || resourceId === 'default') return;
     setLoading(true);
     setError(null);
     try {
@@ -184,6 +184,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
     }
 
     const savePreferences = async () => {
+      if (!resourceId || resourceId === 'pdf_doc' || resourceId === 'default') return;
       try {
         await updateQuestionState(resourceId, 'preferences', {
           studySessionId,

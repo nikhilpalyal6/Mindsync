@@ -1,5 +1,64 @@
 import mongoose from 'mongoose';
 
+const citationSchema = new mongoose.Schema(
+  {
+    index: {
+      type: Number,
+      required: true,
+      min: 1
+    },
+    chunkId: {
+      type: String,
+      required: true
+    },
+    documentId: {
+      type: String,
+      required: true
+    },
+    resourceId: {
+      type: String,
+      required: true
+    },
+    workspaceId: {
+      type: String,
+      required: true
+    },
+    title: {
+      type: String,
+      required: true
+    },
+    resourceType: {
+      type: String,
+      required: true,
+      enum: ['pdf', 'youtube', 'notes']
+    },
+    chunkIndex: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    pageStart: {
+      type: Number,
+      required: false
+    },
+    pageEnd: {
+      type: Number,
+      required: false
+    },
+    timestampStart: {
+      type: Number,
+      required: false
+    },
+    timestampEnd: {
+      type: Number,
+      required: false
+    }
+  },
+  {
+    _id: false
+  }
+);
+
 const aiMessageSchema = new mongoose.Schema(
   {
     conversation: {
@@ -29,6 +88,10 @@ const aiMessageSchema = new mongoose.Schema(
     },
     attachments: {
       type: Array,
+      default: [],
+    },
+    citations: {
+      type: [citationSchema],
       default: [],
     },
   },

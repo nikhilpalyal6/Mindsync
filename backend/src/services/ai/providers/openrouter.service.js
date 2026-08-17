@@ -3,6 +3,7 @@ import { normalizeResponse } from '../utils/providerNormalizer.js';
 import {
   AIRequestValidationError,
   AIRateLimitError,
+  AIQuotaExceededError,
   AIServerError,
   AITimeoutError,
   AINetworkError,
@@ -23,7 +24,8 @@ class OpenRouterService {
     systemInstruction,
     temperature = 0.7,
     maxTokens = 4096,
-    jsonMode = false
+    jsonMode = false,
+    pdfBase64
   }) {
     const startTime = Date.now();
     const apiKey = aiRouterConfig.providers.openrouter.apiKey();
@@ -38,7 +40,23 @@ class OpenRouterService {
     const activeSystemPrompt = systemPrompt || systemInstruction || 
       'You are MindSync AI, an expert, encouraging, and clear AI learning co-pilot.';
 
-    if (messages && Array.isArray(messages)) {
+    if (pdfBase64) {
+      formattedMessages = [
+        { role: 'system', content: activeSystemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt || 'Extract all readable text, formulas, headings, and details from this PDF document.' },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:application/pdf;base64,${pdfBase64}`
+              }
+            }
+          ]
+        }
+      ];
+    } else if (messages && Array.isArray(messages)) {
       formattedMessages = [
         { role: 'system', content: activeSystemPrompt },
         ...messages.map(msg => ({
@@ -94,7 +112,10 @@ class OpenRouterService {
         if (statusCode === 400 || errorText.includes('invalid_request_error')) {
           throw new AIRequestValidationError(errorText, this.providerName, new Error(errorText));
         }
-        if (statusCode === 429 || errorText.toLowerCase().includes('rate limit') || errorText.toLowerCase().includes('quota') || errorText.toLowerCase().includes('credits')) {
+        if (errorText.toLowerCase().includes('quota') || errorText.toLowerCase().includes('credits') || errorText.includes('RESOURCE_EXHAUSTED')) {
+          throw new AIQuotaExceededError(errorText, this.providerName, new Error(errorText));
+        }
+        if (statusCode === 429 || errorText.toLowerCase().includes('rate limit')) {
           throw new AIRateLimitError(errorText, this.providerName, new Error(errorText));
         }
         if (statusCode >= 500) {

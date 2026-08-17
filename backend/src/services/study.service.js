@@ -41,7 +41,7 @@ async function migrateLegacySession(session) {
       const alreadyExists = session.resources.some(r => r.type === 'youtube' && r.url === url);
       if (!alreadyExists) {
         session.resources.push({
-          _id: new mongoose.Types.ObjectId().toString(),
+          _id: `youtube_${session._id.toString()}`,
           type: 'youtube',
           url: url,
           title: meta.youtube.title || 'YouTube Video',
@@ -59,7 +59,7 @@ async function migrateLegacySession(session) {
       const alreadyExists = session.resources.some(r => r.type === 'pdf' && r.url === url);
       if (!alreadyExists) {
         session.resources.push({
-          _id: new mongoose.Types.ObjectId().toString(),
+          _id: `pdf_${session._id.toString()}`,
           type: 'pdf',
           url: url,
           title: url,
@@ -76,7 +76,7 @@ async function migrateLegacySession(session) {
       const alreadyExists = session.resources.some(r => r.type === 'notes');
       if (!alreadyExists) {
         session.resources.push({
-          _id: new mongoose.Types.ObjectId().toString(),
+          _id: `notes_${session._id.toString()}`,
           type: 'notes',
           url: 'default_notes_id',
           title: 'Revision Notes',
@@ -92,7 +92,8 @@ async function migrateLegacySession(session) {
   // Ensure all existing resources have an _id
   session.resources = session.resources.map(r => {
     if (!r._id) {
-      r._id = new mongoose.Types.ObjectId().toString();
+      const typePrefix = r.type === 'pdf' ? 'pdf_' : r.type === 'youtube' ? 'youtube_' : r.type === 'notes' ? 'notes_' : 'resource_';
+      r._id = `${typePrefix}${session._id.toString()}`;
       needsSave = true;
     }
     return r;
@@ -100,6 +101,48 @@ async function migrateLegacySession(session) {
 
   if (needsSave) {
     console.log(`[Migration] Migrating legacy study session resources: "${session.title}"`);
+    
+    try {
+      const KnowledgeDocument = mongoose.model('KnowledgeDocument');
+      const KnowledgeJob = mongoose.model('KnowledgeJob');
+      const KnowledgeChunk = mongoose.model('KnowledgeChunk');
+
+      for (const r of session.resources) {
+        const prefix = `${r.type}_${session._id.toString()}`;
+        if (r._id === prefix) {
+          const oldResourceIdCandidates = [];
+          if (r.type === 'pdf') {
+            if (r.url) oldResourceIdCandidates.push(r.url);
+          } else if (r.type === 'youtube') {
+            if (r.data?.videoId) oldResourceIdCandidates.push(r.data.videoId);
+            if (r.url) oldResourceIdCandidates.push(r.url);
+          } else if (r.type === 'notes') {
+            oldResourceIdCandidates.push('default_notes_id');
+          }
+
+          for (const oldId of oldResourceIdCandidates) {
+            if (oldId && oldId !== r._id) {
+              console.log(`[Migration Reconciliation] Reconciling legacy resourceId: old="${oldId}" -> new="${r._id}"`);
+              await KnowledgeDocument.updateMany(
+                { workspaceId: session._id, resourceId: oldId },
+                { $set: { resourceId: r._id } }
+              );
+              await KnowledgeJob.updateMany(
+                { workspaceId: session._id, resourceId: oldId },
+                { $set: { resourceId: r._id } }
+              );
+              await KnowledgeChunk.updateMany(
+                { workspaceId: session._id, resourceId: oldId },
+                { $set: { resourceId: r._id } }
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Migration Reconciliation] Error updating knowledge documents:', err);
+    }
+
     session.markModified('resources');
     await session.save();
   }
@@ -144,18 +187,187 @@ class StudyService {
     return result;
   }
 
+  async saveSessionWithRetry(sessionId, mutateFn) {
+    let attempts = 0;
+    while (attempts < 10) {
+      try {
+        const session = await StudySession.findById(sessionId);
+        if (!session) {
+          throw ApiError.notFound('Study session not found');
+        }
+        await mutateFn(session);
+        return await session.save();
+      } catch (error) {
+        if (error.name === 'VersionError' || error.message.includes('No matching document found')) {
+          attempts++;
+          logger.warn(`[Concurrency Retry] VersionError encountered for session ${sessionId}, attempt ${attempts}/10. Retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 50 * attempts));
+        } else {
+          throw error;
+        }
+      }
+    }
+    throw new ApiError(500, `Failed to save StudySession ${sessionId} after 10 attempts due to concurrent modifications.`);
+  }
+
   async getSessionById(userId, sessionId) {
     console.log('[DEBUG SERVICE] Entering getSessionById. User ID:', userId, 'Session ID:', sessionId);
-    const session = await StudySession.findOne({ _id: sessionId, user: userId });
-    if (!session) {
+    const sessionDoc = await StudySession.findOne({ _id: sessionId, user: userId }).lean();
+    if (!sessionDoc) {
       throw ApiError.notFound('Study session not found');
     }
-    await migrateLegacySession(session);
-    return session.toObject();
+
+    // Check if migration/reconciliation is needed (e.g. empty resources or missing resource IDs)
+    const needsMigration = !sessionDoc.resources || sessionDoc.resources.length === 0 || sessionDoc.resources.some(r => !r._id);
+    if (needsMigration) {
+      console.log('[DEBUG SERVICE] Session requires migration, fetching full document...');
+      const fullSession = await StudySession.findOne({ _id: sessionId, user: userId });
+      await migrateLegacySession(fullSession);
+      return fullSession.toObject();
+    }
+
+    // Dynamic population of resources
+    const populatedResources = [];
+    const KnowledgeDocument = mongoose.model('KnowledgeDocument');
+    const KnowledgeChunk = mongoose.model('KnowledgeChunk');
+    
+    const fs = await import('fs');
+    const path = await import('path');
+    const fileURLToPath = (await import('url')).fileURLToPath;
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const backendDir = path.resolve(__dirname, '../../');
+
+    for (const r of (sessionDoc.resources || [])) {
+      const resourceId = r._id?.toString();
+      const populatedRes = { ...r, data: { ...(r.data || {}) } };
+
+      if (r.type === 'pdf') {
+        // 1. Populate fileData from disk if storagePath is present
+        const storagePath = r.data?.storagePath;
+        if (storagePath) {
+          const absPath = path.resolve(backendDir, storagePath);
+          if (fs.existsSync(absPath)) {
+            const fileBuffer = fs.readFileSync(absPath);
+            const base64Data = fileBuffer.toString('base64');
+            populatedRes.data.fileData = `data:${r.data.fileType || 'application/pdf'};base64,${base64Data}`;
+          }
+        }
+
+        // 2. Populate extractedText and pages from Knowledge base
+        const doc = await KnowledgeDocument.findOne({ userId, workspaceId: sessionId, resourceId });
+        if (doc) {
+          const chunks = await KnowledgeChunk.find({ documentId: doc._id }).sort({ chunkIndex: 1 }).lean();
+          
+          let extractedText = '';
+          const pagesMap = new Map();
+
+          for (const chunk of chunks) {
+            extractedText += chunk.text + '\n\n';
+            
+            const pageStart = chunk.metadata?.pageStart;
+            const pageEnd = chunk.metadata?.pageEnd;
+            if (pageStart !== null && pageStart !== undefined) {
+              for (let pNum = pageStart; pNum <= (pageEnd || pageStart); pNum++) {
+                if (!pagesMap.has(pNum)) {
+                  pagesMap.set(pNum, { pageNumber: pNum, text: '' });
+                }
+                pagesMap.get(pNum).text += chunk.text + ' ';
+              }
+            }
+          }
+
+          populatedRes.data.extractedText = extractedText.trim();
+          populatedRes.data.pages = Array.from(pagesMap.values()).map(p => ({
+            pageNumber: p.pageNumber,
+            text: p.text.trim(),
+            extractionStatus: 'completed'
+          }));
+          populatedRes.data.pageCount = doc.metadata?.pageCount || populatedRes.data.pages.length;
+          populatedRes.data.totalPages = doc.metadata?.pageCount || populatedRes.data.pages.length;
+          populatedRes.data.processingStatus = doc.processingStatus === 'READY' ? 'completed' : doc.processingStatus === 'FAILED' ? 'failed' : 'processing';
+        }
+      } else if (r.type === 'youtube') {
+        const doc = await KnowledgeDocument.findOne({ userId, workspaceId: sessionId, resourceId });
+        if (doc) {
+          const chunks = await KnowledgeChunk.find({ documentId: doc._id }).sort({ chunkIndex: 1 }).lean();
+          
+          let originalTranscript = '';
+          let englishTranscript = '';
+          const originalTranscriptItems = [];
+          const englishTranscriptItems = [];
+
+          for (const chunk of chunks) {
+            originalTranscript += chunk.text + '\n';
+            
+            const chunkItems = chunk.metadata?.transcriptItems || [];
+            for (const item of chunkItems) {
+              originalTranscriptItems.push({
+                text: item.originalText || item.text,
+                time: item.time,
+                seconds: item.seconds
+              });
+              if (item.text) {
+                englishTranscriptItems.push({
+                  text: item.text,
+                  time: item.time,
+                  seconds: item.seconds
+                });
+              }
+            }
+          }
+
+          englishTranscript = englishTranscriptItems.map(i => i.text).join(' ');
+
+          populatedRes.data = {
+            ...populatedRes.data,
+            videoId: doc.youtubeData?.videoId || populatedRes.data.videoId,
+            videoUrl: doc.youtubeData?.videoUrl || populatedRes.data.videoUrl,
+            title: doc.title,
+            authorName: doc.youtubeData?.authorName,
+            authorUrl: doc.youtubeData?.authorUrl,
+            thumbnailUrl: doc.youtubeData?.thumbnailUrl,
+            duration: doc.youtubeData?.duration,
+            publishedDate: doc.youtubeData?.publishedDate,
+            chapters: doc.metadata?.chapters || [],
+            originalTranscript: originalTranscript.trim(),
+            originalTranscriptItems,
+            englishTranscript: englishTranscript.trim() || originalTranscript.trim(),
+            englishTranscriptItems: englishTranscriptItems.length > 0 ? englishTranscriptItems : originalTranscriptItems,
+            transcriptItems: englishTranscriptItems.length > 0 ? englishTranscriptItems : originalTranscriptItems,
+            transcript: englishTranscript.trim() || originalTranscript.trim(),
+            transcriptLanguage: doc.metadata?.language || 'en',
+            translationStatus: 'completed',
+            translated: englishTranscriptItems.length > 0,
+            hasTranscript: originalTranscriptItems.length > 0,
+            processingStatus: doc.processingStatus === 'READY' ? 'completed' : doc.processingStatus === 'FAILED' ? 'failed' : 'processing'
+          };
+        }
+      }
+
+      populatedResources.push(populatedRes);
+    }
+
+    sessionDoc.resources = populatedResources;
+
+    // Sync active metadata shortcuts in returned object for frontend state consistency
+    if (sessionDoc.metadata) {
+      if (sessionDoc.metadata.activeResourceType === 'pdf' && sessionDoc.metadata.pdf) {
+        const activePdf = populatedResources.find(r => r.type === 'pdf' && (r.title === sessionDoc.metadata.pdf.filename || r._id?.toString() === sessionDoc.metadata.pdf._id?.toString()));
+        if (activePdf) sessionDoc.metadata.pdf = activePdf.data;
+      } else if (sessionDoc.metadata.activeResourceType === 'youtube' && sessionDoc.metadata.youtube) {
+        const activeYt = populatedResources.find(r => r.type === 'youtube' && (r.url === sessionDoc.metadata.youtube.videoUrl || r._id?.toString() === sessionDoc.metadata.youtube._id?.toString()));
+        if (activeYt) sessionDoc.metadata.youtube = activeYt.data;
+      } else if (sessionDoc.metadata.activeResourceType === 'notes' && sessionDoc.metadata.notes) {
+        const activeNotes = populatedResources.find(r => r.type === 'notes' && (r.url === sessionDoc.metadata.notes.noteId || r._id?.toString() === sessionDoc.metadata.notes._id?.toString()));
+        if (activeNotes) sessionDoc.metadata.notes = activeNotes.data;
+      }
+    }
+
+    return sessionDoc;
   }
 
   async createSession(userId, { title, description = '', metadata = {} }) {
-    // Check if this is a resource-triggered session creation
     const isResourceSession = 
       title?.endsWith('Workspace') || 
       description?.startsWith('PDF Document:') || 
@@ -165,7 +377,6 @@ class StudyService {
       metadata?.pasteText;
 
     if (isResourceSession) {
-      // Find or create a single active session (prevents duplicates)
       const session = await resourceService.findOrCreateActiveSession(userId, title);
 
       if (session.title === 'My Study Session') {
@@ -177,7 +388,6 @@ class StudyService {
           : description;
       }
 
-      // Link any metadata payload to resources array
       if (metadata.pdf || description?.startsWith('PDF Document:')) {
         const pdfName = metadata.pdf?.filename || description?.replace('PDF Document: ', '') || 'Document.pdf';
         await resourceService.linkResourceToSession(session, {
@@ -218,7 +428,6 @@ class StudyService {
       return savedSession;
     }
 
-    // Default flow: create new session
     const session = new StudySession({
       user: userId,
       title: title || 'Untitled Study Session',
@@ -238,104 +447,62 @@ class StudyService {
   }
 
   async updateSession(userId, sessionId, updates) {
-    const session = await StudySession.findOne({ _id: sessionId, user: userId });
-    
-    if (!session) {
-      throw ApiError.notFound('Study session not found or unauthorized');
-    }
+    const updatedSession = await this.saveSessionWithRetry(sessionId, async (session) => {
+      if (session.user.toString() !== userId.toString()) {
+        throw ApiError.forbidden('Unauthorized to update this session');
+      }
 
-    const oldTitle = session.title;
-    const oldPinned = session.pinned;
-
-    // Set allowable updates
-    const allowedUpdates = [
-      'title', 'description', 'pinned', 'lastOpened', 'metadata',
-      'pdfCount', 'youtubeCount', 'notesCount', 'flashcardsCount', 'quizCount', 'chatCount'
-    ];
-    
-    for (const field of allowedUpdates) {
-      if (updates[field] !== undefined) {
-        if (field === 'metadata') {
-          // Perform a deep merge to avoid losing sub-keys (like base64 fileData or transcript arrays)
-          session.metadata = deepMerge(session.metadata || {}, updates.metadata || {});
-          session.markModified('metadata');
-        } else {
-          session[field] = updates[field];
+      const allowedUpdates = [
+        'title', 'description', 'pinned', 'lastOpened', 'metadata',
+        'pdfCount', 'youtubeCount', 'notesCount', 'flashcardsCount', 'quizCount', 'chatCount'
+      ];
+      
+      for (const field of allowedUpdates) {
+        if (updates[field] !== undefined) {
+          if (field === 'metadata') {
+            session.metadata = deepMerge(session.metadata || {}, updates.metadata || {});
+            session.markModified('metadata');
+          } else {
+            session[field] = updates[field];
+          }
         }
       }
-    }
 
-    // Link updated resource to array and update counts atomically
-    if (updates.metadata) {
-      const meta = updates.metadata;
-
-      // Sync PDF
-      if (meta.pdf && (meta.pdf.filename || meta.pdf.pdfFilename)) {
-        const pdfUrl = meta.pdf.pdfFilename || meta.pdf.filename;
-        const pdfTitle = meta.pdf.filename || meta.pdf.pdfFilename || 'PDF Document';
-        await resourceService.linkResourceToSession(session, {
-          type: 'pdf',
-          url: pdfUrl,
-          title: pdfTitle,
-          data: meta.pdf
-        });
+      if (updates.metadata) {
+        const meta = updates.metadata;
+        if (meta.pdf && (meta.pdf.filename || meta.pdf.pdfFilename)) {
+          await resourceService.linkResourceToSession(session, {
+            type: 'pdf',
+            url: meta.pdf.pdfFilename || meta.pdf.filename,
+            title: meta.pdf.filename || meta.pdf.pdfFilename || 'PDF Document',
+            data: meta.pdf
+          });
+        }
+        if (meta.youtube && meta.youtube.videoUrl) {
+          await resourceService.linkResourceToSession(session, {
+            type: 'youtube',
+            url: meta.youtube.videoUrl,
+            title: meta.youtube.title || 'YouTube Video',
+            data: meta.youtube
+          });
+        }
+        if (meta.notes && meta.notes.noteId) {
+          await resourceService.linkResourceToSession(session, {
+            type: 'notes',
+            url: meta.notes.noteId,
+            title: meta.notes.title || 'Note',
+            data: meta.notes
+          });
+        } else if (meta.notesContent || meta.noteContent || (meta.notes && (meta.notes.content || meta.notes.notesContent))) {
+          await resourceService.linkResourceToSession(session, {
+            type: 'notes',
+            url: 'default_notes_id',
+            title: meta.notes?.title || 'Lecture Notes',
+            data: meta.notes || { content: meta.notesContent || meta.noteContent }
+          });
+        }
       }
-
-      // Sync YouTube
-      if (meta.youtube && meta.youtube.videoUrl) {
-        await resourceService.linkResourceToSession(session, {
-          type: 'youtube',
-          url: meta.youtube.videoUrl,
-          title: meta.youtube.title || 'YouTube Video',
-          data: meta.youtube
-        });
-      }
-
-      // Sync Notes
-      if (meta.notes && meta.notes.noteId) {
-        await resourceService.linkResourceToSession(session, {
-          type: 'notes',
-          url: meta.notes.noteId,
-          title: meta.notes.title || 'Note',
-          data: meta.notes
-        });
-      } else if (meta.notesContent || meta.noteContent || (meta.notes && (meta.notes.content || meta.notes.notesContent))) {
-        const notesId = 'default_notes_id';
-        const notesTitle = meta.notes?.title || 'Lecture Notes';
-        await resourceService.linkResourceToSession(session, {
-          type: 'notes',
-          url: notesId,
-          title: notesTitle,
-          data: meta.notes || { content: meta.notesContent || meta.noteContent }
-        });
-      }
-    }
-
-    const updatedSession = await session.save();
-
-    // Log relevant activities
-    if (updates.title && updates.title !== oldTitle) {
-      await this.logActivity(userId, {
-        session: updatedSession._id,
-        sessionTitle: updatedSession.title,
-        action: 'renamed',
-        details: `Renamed workspace from "${oldTitle}" to "${updatedSession.title}"`
-      });
-    } else if (updates.pinned !== undefined && updates.pinned !== oldPinned) {
-      await this.logActivity(userId, {
-        session: updatedSession._id,
-        sessionTitle: updatedSession.title,
-        action: updates.pinned ? 'pinned' : 'unpinned',
-        details: `${updates.pinned ? 'Pinned' : 'Unpinned'} workspace "${updatedSession.title}"`
-      });
-    } else if (updates.lastOpened) {
-      await this.logActivity(userId, {
-        session: updatedSession._id,
-        sessionTitle: updatedSession.title,
-        action: 'opened',
-        details: `Opened workspace "${updatedSession.title}"`
-      });
-    }
+    });
 
     return updatedSession;
   }
@@ -349,6 +516,20 @@ class StudyService {
     const title = session.title;
     await StudySession.deleteOne({ _id: sessionId });
 
+    try {
+      const KnowledgeDocument = (await import('../models/knowledgeDocument.model.js')).default;
+      const KnowledgeChunk = (await import('../models/knowledgeChunk.model.js')).default;
+      const KnowledgeJob = (await import('../models/knowledgeJob.model.js')).default;
+      await KnowledgeDocument.deleteMany({ workspaceId: sessionId });
+      await KnowledgeChunk.deleteMany({ workspaceId: sessionId });
+      await KnowledgeJob.deleteMany({ workspaceId: sessionId });
+
+      const retrievalService = (await import('../knowledge/services/retrieval.service.js')).default;
+      retrievalService.invalidateWorkspaceCache(sessionId);
+    } catch (keErr) {
+      logger.error(`[Workspace Cleanup Error] Failed to cleanup knowledge engine data for session ${sessionId}: ${keErr.message}`);
+    }
+
     await this.logActivity(userId, {
       session: null,
       sessionTitle: title,
@@ -360,7 +541,9 @@ class StudyService {
   }
 
   async getResources(userId, sessionId) {
-    const session = await StudySession.findOne({ _id: sessionId, user: userId }).lean();
+    const session = await StudySession.findOne({ _id: sessionId, user: userId })
+      .select('-metadata -resources.data.fileData -resources.data.originalTranscript -resources.data.originalTranscriptItems -resources.data.englishTranscript -resources.data.englishTranscriptItems -resources.data.transcriptItems -resources.data.transcript')
+      .lean();
     if (!session) {
       throw ApiError.notFound('Study session not found or unauthorized');
     }
@@ -368,13 +551,60 @@ class StudyService {
   }
 
   async addResource(userId, sessionId, { type, url, title, data }) {
-    let session = await StudySession.findOne({ _id: sessionId, user: userId });
+    const session = await StudySession.findOne({ _id: sessionId, user: userId });
     if (!session) {
       throw ApiError.notFound('Study session not found or unauthorized');
     }
-    
-    session = await resourceService.linkResourceToSession(session, { type, url, title, data });
-    return await session.save();
+
+    const existingRes = session.resources?.find(r => r.type === type && r.url === url);
+    await resourceService.linkResourceToSession(session, { type, url, title, data });
+
+    if (existingRes) {
+      const updatedRes = session.resources.find(r => r._id?.toString() === existingRes._id?.toString());
+      const updateQuery = {
+        'resources.$.title': updatedRes.title,
+        'resources.$.data': updatedRes.data,
+        'resources.$.updatedAt': new Date(),
+        metadata: session.metadata,
+        videoCount: session.videoCount,
+        youtubeCount: session.youtubeCount,
+        pdfCount: session.pdfCount,
+        notesCount: session.notesCount,
+        resourceCount: session.resourceCount
+      };
+
+      await StudySession.updateOne(
+        { _id: sessionId, 'resources._id': existingRes._id },
+        { $set: updateQuery }
+      );
+    } else {
+      const newRes = session.resources[session.resources.length - 1];
+      const setQuery = {
+        metadata: session.metadata,
+        videoCount: session.videoCount,
+        youtubeCount: session.youtubeCount,
+        pdfCount: session.pdfCount,
+        notesCount: session.notesCount,
+        resourceCount: session.resourceCount
+      };
+
+      await StudySession.updateOne(
+        { _id: sessionId },
+        {
+          $push: { resources: newRes },
+          $set: setQuery
+        }
+      );
+    }
+
+    await this.logActivity(userId, {
+      session: sessionId,
+      sessionTitle: session.title,
+      action: 'updated',
+      details: `Linked resource to workspace "${session.title}"`
+    });
+
+    return await this.getSessionById(userId, sessionId);
   }
 
   async renameResource(userId, sessionId, resourceId, newTitle) {
@@ -395,34 +625,33 @@ class StudyService {
       throw ApiError.notFound('Resource not found in this study session');
     }
 
-    // Update title
-    session.resources[resourceIndex].title = newTitle.trim();
-    session.resources[resourceIndex].updatedAt = new Date();
+    const resource = session.resources[resourceIndex];
+    const type = resource.type;
 
-    // If active metadata matches, update it too
+    const updateQuery = {
+      'resources.$.title': newTitle.trim(),
+      'resources.$.updatedAt': new Date()
+    };
+
     if (session.metadata) {
-      const resource = session.resources[resourceIndex];
-      const type = resource.type;
       if (type === 'pdf' && session.metadata.pdf) {
-        session.metadata.pdf.filename = newTitle.trim();
+        updateQuery['metadata.pdf.filename'] = newTitle.trim();
       } else if (type === 'youtube' && session.metadata.youtube) {
-        session.metadata.youtube.title = newTitle.trim();
+        updateQuery['metadata.youtube.title'] = newTitle.trim();
       } else if (type === 'notes' && session.metadata.notes) {
-        session.metadata.notes.title = newTitle.trim();
+        updateQuery['metadata.notes.title'] = newTitle.trim();
       }
     }
 
-    session.markModified('resources');
-    session.markModified('metadata');
+    await StudySession.updateOne(
+      { _id: sessionId, 'resources._id': resource._id },
+      { $set: updateQuery }
+    );
 
-    return await session.save();
+    return await this.getSessionById(userId, sessionId);
   }
 
   async replaceResource(userId, sessionId, resourceId, { url, title, data }) {
-    if (!url) {
-      throw ApiError.badRequest('Replacement URL/identifier is required');
-    }
-
     const session = await StudySession.findOne({ _id: sessionId, user: userId });
     if (!session) {
       throw ApiError.notFound('Study session not found or unauthorized');
@@ -438,35 +667,42 @@ class StudyService {
 
     const oldResource = session.resources[resourceIndex];
 
-    // Update details in-place
-    session.resources[resourceIndex] = {
-      ...oldResource,
+    await resourceService.linkResourceToSession(session, {
+      type: oldResource.type,
       url,
       title: title || oldResource.title,
-      data: data || {},
-      ai: {}, // Clear previous AI contents for new file grounding
-      updatedAt: new Date()
-    };
-
-    // Update active metadata shortcuts if applicable
-    if (session.metadata) {
-      const type = oldResource.type;
-      if (type === 'pdf') {
-        session.metadata.pdf = data || {};
-      } else if (type === 'youtube') {
-        session.metadata.youtube = data || {};
-      } else if (type === 'notes') {
-        session.metadata.notes = data || {};
+      data: {
+        ...data,
+        processingStatus: 'completed'
       }
+    });
+
+    const updatedRes = session.resources.find(r => r._id?.toString() === resourceId);
+
+    if (updatedRes) {
+      const updateQuery = {
+        'resources.$.url': url,
+        'resources.$.title': title || oldResource.title,
+        'resources.$.data': updatedRes.data,
+        'resources.$.updatedAt': new Date(),
+        metadata: session.metadata,
+        videoCount: session.videoCount,
+        youtubeCount: session.youtubeCount,
+        pdfCount: session.pdfCount,
+        notesCount: session.notesCount,
+        resourceCount: session.resourceCount
+      };
+
+      await StudySession.updateOne(
+        { _id: sessionId, 'resources._id': resourceId },
+        { $set: updateQuery }
+      );
     }
 
-    // Cascade: delete past PDFChat logs, AIConversations and AIMessages for the old resourceId
     try {
       await PDFChat.deleteMany({ workspaceId: sessionId, resourceId: resourceId });
-
       const conversations = await AIConversation.find({ studySession: sessionId, resourceId: resourceId }).lean();
       const conversationIds = conversations.map(c => c._id);
-      
       if (conversationIds.length > 0) {
         await AIMessage.deleteMany({ conversation: { $in: conversationIds } });
         await AIConversation.deleteMany({ _id: { $in: conversationIds } });
@@ -475,10 +711,7 @@ class StudyService {
       logger.error(`[Resource Replace Cleanup Error] Failed to cleanup sub-data for replaced resource ${resourceId}: ${err.message}`);
     }
 
-    session.markModified('resources');
-    session.markModified('metadata');
-
-    return await session.save();
+    return await this.getSessionById(userId, sessionId);
   }
 
   async deleteResource(userId, sessionId, resourceId) {
@@ -487,7 +720,6 @@ class StudyService {
       throw ApiError.notFound('Study session not found or unauthorized');
     }
 
-    // Find the resource inside session.resources
     const resourceIndex = session.resources.findIndex(
       r => (r._id && r._id.toString() === resourceId) || r.url === resourceId || r.title === resourceId
     );
@@ -497,64 +729,64 @@ class StudyService {
     }
 
     const resource = session.resources[resourceIndex];
-    
-    // Remove the resource
+    const type = resource.type;
+
     session.resources.splice(resourceIndex, 1);
 
-    // Update metadata if this was the active resource
     if (session.metadata) {
-      const typeMap = {
-        pdf: 'pdf',
-        youtube: 'youtube',
-        notes: 'notes'
-      };
-      
+      const typeMap = { pdf: 'pdf', youtube: 'youtube', notes: 'notes' };
       const activeType = typeMap[resource.type] || 'pdf';
-      
-      // If the activeResourceType matches the deleted resource's type, clear the active status
       if (session.metadata.activeResourceType === activeType || session.metadata.lastTab === activeType) {
         session.metadata.activeResourceType = '';
         session.metadata.lastTab = '';
-        
-        // Also clear the active metadata sub-key
-        if (activeType === 'pdf') {
-          session.metadata.pdf = null;
-        } else if (activeType === 'youtube') {
-          session.metadata.youtube = null;
-        } else if (activeType === 'notes') {
-          session.metadata.notes = null;
-        }
+        if (activeType === 'pdf') session.metadata.pdf = null;
+        else if (activeType === 'youtube') session.metadata.youtube = null;
+        else if (activeType === 'notes') session.metadata.notes = null;
       }
     }
 
-    // Update counts
-    session.videoCount = session.resources.filter(r => r.type === 'youtube').length;
-    session.youtubeCount = session.videoCount;
-    session.pdfCount = session.resources.filter(r => r.type === 'pdf').length;
-    session.notesCount = session.resources.filter(r => r.type === 'notes').length;
-    session.resourceCount = session.resources.length;
+    const videoCount = session.resources.filter(r => r.type === 'youtube').length;
+    const pdfCount = session.resources.filter(r => r.type === 'pdf').length;
+    const notesCount = session.resources.filter(r => r.type === 'notes').length;
+    const resourceCount = session.resources.length;
 
-    session.markModified('resources');
-    session.markModified('metadata');
+    await StudySession.updateOne(
+      { _id: sessionId },
+      {
+        $set: {
+          resources: session.resources,
+          metadata: session.metadata,
+          videoCount,
+          youtubeCount: videoCount,
+          pdfCount,
+          notesCount,
+          resourceCount
+        }
+      }
+    );
 
-    const savedSession = await session.save();
-
-    // Cleanup associated data asynchronously
     try {
-      await PDFChat.deleteMany({ workspaceId: sessionId, resourceId: resourceId });
-      
-      const conversations = await AIConversation.find({ studySession: sessionId, resourceId: resourceId }).lean();
+      await PDFChat.deleteMany({ workspaceId: sessionId, resourceId });
+      const conversations = await AIConversation.find({ studySession: sessionId, resourceId }).lean();
       const conversationIds = conversations.map(c => c._id);
-      
       if (conversationIds.length > 0) {
         await AIMessage.deleteMany({ conversation: { $in: conversationIds } });
         await AIConversation.deleteMany({ _id: { $in: conversationIds } });
       }
+
+      const KnowledgeDocument = (await import('../models/knowledgeDocument.model.js')).default;
+      const KnowledgeChunk = (await import('../models/knowledgeChunk.model.js')).default;
+      const KnowledgeJob = (await import('../models/knowledgeJob.model.js')).default;
+      await KnowledgeDocument.deleteMany({ resourceId });
+      await KnowledgeChunk.deleteMany({ resourceId });
+      await KnowledgeJob.deleteMany({ resourceId });
+
+      const retrievalService = (await import('../knowledge/services/retrieval.service.js')).default;
+      retrievalService.invalidateWorkspaceCache(sessionId);
     } catch (err) {
       logger.error(`[Resource Cleanup Error] Failed to cleanup sub-data for resource ${resourceId}: ${err.message}`);
     }
 
-    // Log activity
     await this.logActivity(userId, {
       session: sessionId,
       sessionTitle: session.title,
@@ -562,7 +794,7 @@ class StudyService {
       details: `Deleted ${resource.type} resource "${resource.title}"`
     });
 
-    return savedSession;
+    return await this.getSessionById(userId, sessionId);
   }
 
   async getActivities(userId) {

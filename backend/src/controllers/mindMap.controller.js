@@ -50,7 +50,8 @@ class MindMapController {
       userId.toString(),
       workspaceId,
       session.title,
-      session.resources || []
+      session.resources || [],
+      true
     ).catch(err => logger.error(`[Workspace MindMap Generation] Error: ${err.message}`));
 
     res.status(HTTP_STATUS.OK).json(

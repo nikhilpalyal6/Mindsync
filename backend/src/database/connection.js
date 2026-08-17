@@ -9,18 +9,19 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_DELAY_MS = 5000;
 
 mongoose.set('strictQuery', true);
+mongoose.set('bufferCommands', false);
 
 const connectionOptions = {
   maxPoolSize: 10,
   minPoolSize: 2,
-  serverSelectionTimeoutMS: 10000,
+  serverSelectionTimeoutMS: 5000, // Fail fast on server selection during outage
   socketTimeoutMS: 45000,
   family: 4,
 };
 
 const handleConnectionError = (error) => {
   isConnected = false;
-  logger.error('MongoDB connection error', { error: error.message });
+  logger.error('[MongoDB] error', { error: error.message });
 
   if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
     reconnectAttempts += 1;
@@ -38,7 +39,7 @@ const registerEventHandlers = () => {
   mongoose.connection.on('connected', () => {
     isConnected = true;
     reconnectAttempts = 0;
-    logger.info('MongoDB connected successfully');
+    logger.info('[MongoDB] connected');
     logEvent({
       category: 'system_event',
       action: 'MongoDB Connected',
@@ -50,7 +51,7 @@ const registerEventHandlers = () => {
 
   mongoose.connection.on('disconnected', () => {
     isConnected = false;
-    logger.warn('MongoDB disconnected');
+    logger.warn('[MongoDB] disconnected');
   });
 
   mongoose.connection.on('error', handleConnectionError);
@@ -58,7 +59,7 @@ const registerEventHandlers = () => {
   mongoose.connection.on('reconnected', () => {
     isConnected = true;
     reconnectAttempts = 0;
-    logger.info('MongoDB reconnected');
+    logger.info('[MongoDB] reconnected');
     logEvent({
       category: 'system_event',
       action: 'MongoDB Reconnected',

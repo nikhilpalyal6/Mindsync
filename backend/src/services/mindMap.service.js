@@ -105,7 +105,12 @@ class MindMapService {
   }
 
   // AI-powered graph extraction pipeline running in backend background thread (Workspace Scoped)
-  async generateWorkspaceMindMapBackground(userId, workspaceId, workspaceTitle, resources) {
+  async generateWorkspaceMindMapBackground(userId, workspaceId, workspaceTitle, resources, isManual = false) {
+    if (!isManual && process.env.AUTOMATIC_MIND_MAP_GENERATION !== 'true') {
+      logger.info('[MindMap] Automatic generation disabled by feature flag.');
+      return null;
+    }
+
     // 1. Filter out empty resources
     const validResources = (resources || []).filter(r => {
       const text = r.data?.extractedText || r.data?.transcript || r.data?.content || r.data?.noteContent || r.data?.notesContent || '';

@@ -52,6 +52,16 @@ export const errorHandler = (err, req, res, _next) => {
       error = handleJWTError();
     } else if (error.name === 'TokenExpiredError') {
       error = handleJWTExpiredError();
+    } else if (
+      error.name === 'MongoNetworkError' ||
+      error.name === 'MongoServerSelectionError' ||
+      error.name === 'MongooseError' ||
+      error.message?.includes('buffering timed out') ||
+      error.message?.includes('topology was destroyed') ||
+      error.message?.includes('connection timed out') ||
+      error.message?.includes('selection timed out')
+    ) {
+      error = new ApiError(HTTP_STATUS.SERVICE_UNAVAILABLE, 'Database temporarily unavailable');
     } else {
       logger.error('Unhandled error', {
         message: error.message,

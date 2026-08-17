@@ -69,6 +69,7 @@ export function useWorkspaceState() {
   const selectSession = useCallback(async (session, onRestored) => {
     setActiveSession(session);
     localStorage.setItem('mindsync_last_study_session_id', session._id);
+    localStorage.setItem('mindsync_active_workspace_id', session._id);
 
     let fullSession = session;
     try {
@@ -83,7 +84,7 @@ export function useWorkspaceState() {
 
           if (meta.youtube && (meta.youtube.videoUrl || meta.youtube.url)) {
             resources.push({
-              _id: meta.youtube.videoId || `yt_${Date.now()}`,
+              _id: `youtube_${fullSession._id}`,
               type: 'youtube',
               url: meta.youtube.videoUrl || meta.youtube.url,
               title: meta.youtube.title || 'YouTube Video',
@@ -94,7 +95,7 @@ export function useWorkspaceState() {
           }
           if (meta.pdf && (meta.pdf.filename || meta.pdf.pdfFilename)) {
             resources.push({
-              _id: `pdf_${Date.now()}`,
+              _id: `pdf_${fullSession._id}`,
               type: 'pdf',
               url: meta.pdf.pdfFilename || meta.pdf.filename,
               title: meta.pdf.filename || meta.pdf.pdfFilename || 'Document.pdf',
@@ -105,7 +106,7 @@ export function useWorkspaceState() {
           }
           if (meta.notes && (meta.notes.content || meta.notes.notesContent)) {
             resources.push({
-              _id: 'default_notes_id',
+              _id: `notes_${fullSession._id}`,
               type: 'notes',
               url: 'default_notes_id',
               title: meta.notes.title || 'Revision Notes',
@@ -169,10 +170,12 @@ export function useWorkspaceState() {
   }, [activeSession, fetchSessionsAndActivities]);
 
   const deleteWorkspace = useCallback(async (id) => {
+    console.log(`[Navigation Logger] DELETE request triggered for workspace ${id}. Reason: Explicit user deletion action.`);
     setSessions(prev => prev.filter(s => s._id !== id));
     if (activeSession?._id === id) {
       setActiveSession(null);
       localStorage.removeItem('mindsync_last_study_session_id');
+      localStorage.removeItem('mindsync_active_workspace_id');
     }
 
     try {
@@ -241,6 +244,47 @@ export function useTabState(initialTab = 'overview') {
 // Hook for Resource Selection & Counts
 export function useResourceState(activeSession, setActiveSession, setSessions) {
   const [activeResource, setActiveResource] = useState(null);
+
+  // Auto-initialize activeResource when activeSession loads/updates
+  useEffect(() => {
+    if (!activeSession) {
+      setActiveResource(null);
+      return;
+    }
+    
+    // Only auto-initialize if there is no activeResource or it has no data
+    if (!activeResource || !activeResource.data) {
+      const activeType = activeSession.metadata?.activeResourceType || activeSession.metadata?.lastTab;
+      if (activeType === 'pdf' && activeSession.metadata?.pdf) {
+        const metaPdf = activeSession.metadata.pdf;
+        const matchingRes = activeSession.resources?.find(r => 
+          r.type === 'pdf' && 
+          (r._id === metaPdf._id || r.title === metaPdf.filename || r.title === metaPdf.pdfFilename || r.url === metaPdf.filename || r.url === metaPdf.pdfFilename)
+        );
+        if (matchingRes && matchingRes.data) {
+          setActiveResource(matchingRes);
+        }
+      } else if (activeType === 'youtube' && activeSession.metadata?.youtube) {
+        const metaYt = activeSession.metadata.youtube;
+        const matchingRes = activeSession.resources?.find(r => 
+          r.type === 'youtube' && 
+          (r._id === metaYt.videoId || r.url === metaYt.videoUrl || r.url === metaYt.url)
+        );
+        if (matchingRes && matchingRes.data) {
+          setActiveResource(matchingRes);
+        }
+      } else if (activeType === 'notes' && activeSession.metadata?.notes) {
+        const metaNotes = activeSession.metadata.notes;
+        const matchingRes = activeSession.resources?.find(r => 
+          r.type === 'notes' && 
+          (r.url === metaNotes.noteId || r._id === metaNotes.noteId)
+        );
+        if (matchingRes && matchingRes.data) {
+          setActiveResource(matchingRes);
+        }
+      }
+    }
+  }, [activeSession, activeResource]);
 
   // Derive resources categories
   const pdfs = useMemo(() => {

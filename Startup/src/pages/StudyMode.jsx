@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Search, RefreshCw, MoreVertical, Pin, Trash2, Edit3, Copy, Archive, FileText, Video, BookOpen, Layers, HelpCircle, MessageSquare, Plus, Clock, Folder, Sparkles, Loader2 } from 'lucide-react'
 import { 
@@ -274,7 +274,7 @@ export default function StudyMode() {
     try {
       const res = await createWorkspace(title, description)
       setShowCreateModal(false)
-      selectSession(res, (restored) => setActiveTab(restored))
+      navigate(`/study/${res._id}`);
     } catch (err) {
       setCreateModalError(err.message || 'Failed to create study workspace.')
     } finally {
@@ -326,7 +326,7 @@ export default function StudyMode() {
       const response = await uploadPdfResource(targetSessionId, file);
       
       const fullSession = (response.success && response.data) ? response.data : response;
-      const newlyAddedRes = fullSession.resources?.find(r => r.title === file.name || r.type === 'pdf');
+      const newlyAddedRes = fullSession.resources?.find(r => r.type === 'pdf' && (r.title === file.name || r.url === file.name || r.title?.includes(file.name)));
 
       // Update sessions list
       setSessions(prev => {
@@ -384,7 +384,7 @@ export default function StudyMode() {
           
           // Fetch the updated full session
           const fullSession = await getStudySessionById(targetSessionId);
-          const newlyAddedRes = fullSession.resources?.find(r => r.url === pasteUrl || r.type === 'youtube');
+          const newlyAddedRes = fullSession.resources?.find(r => r.type === 'youtube' && (r.url === pasteUrl || r.data?.videoUrl === pasteUrl));
 
           // Update sessions list
           setSessions(prev => {
@@ -448,7 +448,7 @@ export default function StudyMode() {
           const sessionTitle = pasteUrl ? 'Web Link Study Workspace' : 'Lecture Notes Workspace'
           const description = pasteUrl ? `Web resources: ${pasteUrl}` : 'Pasted text content.'
           const res = await createWorkspace(sessionTitle, description)
-          selectSession(res, () => setActiveTab('overview'))
+          navigate(`/study/${res._id}`);
         } catch (err) {
           console.error('Failed to create session for pasted content:', err)
         }
@@ -569,51 +569,55 @@ export default function StudyMode() {
     if (ac) ac.scrollTop = 0;
   }, [activeTab]);
 
-  // Automatically load or initialize today's active study session/workspace on mount
+  const { workspaceId } = useParams();
+
+  // URL-driven workspace selection effect
   useEffect(() => {
     if (loading) return;
-    if (hasInitializedRef.current) return;
-    hasInitializedRef.current = true;
 
-    // Determine today's local date range (local timezone of the user's browser)
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const todayEnd = todayStart + 86400000;
+    console.log(`[Navigation Logger] current pathname: ${window.location.pathname}, current workspaceId in URL: ${workspaceId || 'none'}, activeSessionId: ${activeSession?._id || 'none'}`);
 
-    const todaySession = sessions.find(s => {
-      const createdTime = new Date(s.createdAt).getTime();
-      return createdTime >= todayStart && createdTime < todayEnd;
-    });
-
-    if (todaySession) {
-      console.log(`[Workspace Auto-Init] Found today's session: ${todaySession._id}`);
-      selectSession(todaySession, () => setActiveTab('overview'));
+    if (workspaceId) {
+      if (activeSession?._id !== workspaceId) {
+        const targetSession = sessions.find(s => s._id === workspaceId);
+        if (targetSession) {
+          console.log(`[Navigation Logger] Restoring workspace: ${workspaceId}. Reason: URL matches saved session.`);
+          selectSession(targetSession, () => {
+            const meta = targetSession.metadata || {};
+            const tabMap = {
+              pdf: 'pdf_viewer',
+              youtube: 'video_viewer',
+              notes: 'notes_viewer',
+              flashcards: 'flashcards',
+              quiz: 'quiz',
+              mindmap: 'mindmap'
+            };
+            const targetTab = tabMap[meta.lastTab || meta.activeResourceType] || 'overview';
+            setActiveTab(targetTab);
+          });
+        } else {
+          console.warn(`[Navigation Logger] Workspace ID ${workspaceId} not found in user sessions, redirecting to /study`);
+          navigate('/study');
+        }
+      }
     } else {
-      console.log("[Workspace Auto-Init] Today's session not found, initializing...");
-      const initSession = async () => {
-        if (autoCreationPromise) {
-          try {
-            const res = await autoCreationPromise;
-            selectSession(res, () => setActiveTab('overview'));
-          } catch (err) {
-            console.error('[Workspace Auto-Init] Auto-creation failed in other instance:', err);
-          }
-          return;
-        }
-
-        try {
-          autoCreationPromise = createWorkspace("My Study Session", "Auto-created active study session");
-          const res = await autoCreationPromise;
-          console.log('[Workspace Auto-Init] Today\'s session created successfully:', res._id);
-          selectSession(res, () => setActiveTab('overview'));
-        } catch (err) {
-          console.error('[Workspace Auto-Init] Failed to create today\'s session:', err);
-          autoCreationPromise = null; // Allow retry on failure
-        }
-      };
-      initSession();
+      if (activeSession) {
+        console.log(`[Navigation Logger] No workspaceId in URL, clearing active session state.`);
+        setActiveSession(null);
+      }
     }
-  }, [loading, sessions, selectSession, createWorkspace, setActiveTab]);
+  }, [workspaceId, loading, sessions, activeSession?._id, selectSession, setActiveSession, setActiveTab, navigate]);
+
+  // Cleanup active workspace session ID when navigating away from Study Mode
+  useEffect(() => {
+    return () => {
+      // If we are leaving the study route completely (e.g. going to dashboard/profile)
+      if (!window.location.pathname.startsWith('/study')) {
+        console.log(`[Navigation Logger] Navigating away to ${window.location.pathname}, clearing mindsync_active_workspace_id`);
+        localStorage.removeItem('mindsync_active_workspace_id');
+      }
+    };
+  }, []);
 
   // If a workspace is active, render the permanent, highly advanced StudyWorkspaceLayout
   if (activeSession) {
@@ -621,7 +625,10 @@ export default function StudyMode() {
       <>
         <StudyWorkspaceLayout 
           session={activeSession}
-          onBack={() => setActiveSession(null)}
+          onBack={() => {
+            console.log('[Navigation Logger] Clicking back to listing page');
+            navigate('/study');
+          }}
           onSessionUpdate={(updatedSession) => {
             setActiveSession(updatedSession);
             setSessions(prev => prev.map(s => s._id === updatedSession._id ? updatedSession : s));
@@ -817,10 +824,14 @@ export default function StudyMode() {
                             className="session-list-item"
                             role="button"
                             tabIndex={0}
-                            onClick={() => selectSession(session, () => setActiveTab('overview'))}
+                            onClick={() => {
+                              console.log(`[Navigation Logger] Clicking sidebar pinned workspace ${session._id}`);
+                              navigate(`/study/${session._id}`);
+                            }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
-                                selectSession(session, () => setActiveTab('overview'));
+                                console.log(`[Navigation Logger] Pressing enter on sidebar pinned workspace ${session._id}`);
+                                navigate(`/study/${session._id}`);
                               }
                             }}
                           >
@@ -887,10 +898,14 @@ export default function StudyMode() {
                             className="session-list-item"
                             role="button"
                             tabIndex={0}
-                            onClick={() => selectSession(session, () => setActiveTab('overview'))}
+                            onClick={() => {
+                              console.log(`[Navigation Logger] Clicking sidebar unpinned workspace ${session._id}`);
+                              navigate(`/study/${session._id}`);
+                            }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
-                                selectSession(session, () => setActiveTab('overview'));
+                                console.log(`[Navigation Logger] Pressing enter on sidebar unpinned workspace ${session._id}`);
+                                navigate(`/study/${session._id}`);
                               }
                             }}
                           >
@@ -1105,7 +1120,10 @@ export default function StudyMode() {
                         key={session._id}
                         session={session}
                         activeSessionId={activeSession?._id}
-                        onSelect={(session) => selectSession(session, () => setActiveTab('overview'))}
+                        onSelect={(session) => {
+                          console.log(`[Navigation Logger] Selected workspace ${session._id} from listing`);
+                          navigate(`/study/${session._id}`);
+                        }}
                         onRename={renameWorkspace}
                         onTogglePin={togglePinWorkspace}
                         onDelete={deleteWorkspace}
@@ -1124,7 +1142,10 @@ export default function StudyMode() {
                         key={session._id}
                         session={session}
                         activeSessionId={activeSession?._id}
-                        onSelect={(session) => selectSession(session, () => setActiveTab('overview'))}
+                        onSelect={(session) => {
+                          console.log(`[Navigation Logger] Selected workspace ${session._id} from listing`);
+                          navigate(`/study/${session._id}`);
+                        }}
                         onRename={renameWorkspace}
                         onTogglePin={togglePinWorkspace}
                         onDelete={deleteWorkspace}
@@ -1143,7 +1164,10 @@ export default function StudyMode() {
                         key={session._id}
                         session={session}
                         activeSessionId={activeSession?._id}
-                        onSelect={(session) => selectSession(session, () => setActiveTab('overview'))}
+                        onSelect={(session) => {
+                          console.log(`[Navigation Logger] Selected workspace ${session._id} from listing`);
+                          navigate(`/study/${session._id}`);
+                        }}
                         onRename={renameWorkspace}
                         onTogglePin={togglePinWorkspace}
                         onDelete={deleteWorkspace}
@@ -1162,7 +1186,10 @@ export default function StudyMode() {
                         key={session._id}
                         session={session}
                         activeSessionId={activeSession?._id}
-                        onSelect={(session) => selectSession(session, () => setActiveTab('overview'))}
+                        onSelect={(session) => {
+                          console.log(`[Navigation Logger] Selected workspace ${session._id} from listing`);
+                          navigate(`/study/${session._id}`);
+                        }}
                         onRename={renameWorkspace}
                         onTogglePin={togglePinWorkspace}
                         onDelete={deleteWorkspace}
@@ -1181,7 +1208,10 @@ export default function StudyMode() {
                         key={session._id}
                         session={session}
                         activeSessionId={activeSession?._id}
-                        onSelect={(session) => selectSession(session, () => setActiveTab('overview'))}
+                        onSelect={(session) => {
+                          console.log(`[Navigation Logger] Selected workspace ${session._id} from listing`);
+                          navigate(`/study/${session._id}`);
+                        }}
                         onRename={renameWorkspace}
                         onTogglePin={togglePinWorkspace}
                         onDelete={deleteWorkspace}

@@ -146,6 +146,11 @@ class AIRouterService {
         const isEnabled = providerConf.enabled();
         const isHealthy = providerHealthService.isHealthy(name);
 
+        if (requestParams.requestType === 'pdf_extraction' && !providerConf.metadata?.supportsPdfExtraction) {
+          skippedList.push({ name, reason: 'does not support PDF text extraction' });
+          continue;
+        }
+
         if (!isEnabled) {
           const reason = !providerConf.apiKey() ? 'API key missing' : 'disabled in env';
           skippedList.push({ name, reason });
@@ -169,6 +174,9 @@ class AIRouterService {
       if (activeQueue.length === 0) {
         const backupProviders = providersToEvaluate.filter(name => {
           const providerConf = aiRouterConfig.providers[name];
+          if (requestParams.requestType === 'pdf_extraction' && !providerConf?.metadata?.supportsPdfExtraction) {
+            return false;
+          }
           return providerConf && providerConf.enabled();
         });
         backupProviders.forEach(name => {
@@ -285,6 +293,21 @@ class AIRouterService {
 
       // If routing queue exhausted, compile detailed reports (Step 8)
       const errorReports = [];
+      let finalCode = 'AI_EXTRACTION_UNAVAILABLE';
+
+      const hasQuotaExceeded = errorsLog.some(e => e.type === 'QUOTA_EXCEEDED');
+      const hasRateLimit = errorsLog.some(e => e.type === 'RATE_LIMIT');
+      const hasAuthError = errorsLog.some(e => e.type === 'INVALID_REQUEST');
+
+      if (hasQuotaExceeded) {
+        finalCode = 'AI_QUOTA_EXCEEDED';
+      } else if (hasRateLimit) {
+        finalCode = 'AI_RATE_LIMITED';
+      } else if (hasAuthError) {
+        finalCode = 'AI_AUTH_ERROR';
+      } else if (errorsLog.length === 0 && skippedList.every(s => s.reason === 'health circuit open')) {
+        finalCode = 'AI_PROVIDER_UNAVAILABLE';
+      }
       
       errorsLog.forEach(e => {
         const displayName = aiRouterConfig.providers[e.provider]?.name || e.provider;
@@ -307,7 +330,9 @@ class AIRouterService {
       const finalErrorMessage = `Fallback chain failed.\n${errorReports.join('\n')}`;
       logger.error(`[AI Router] AI Router error: ${finalErrorMessage}`);
       
-      throw new Error(`Fallback chain failed.\n${errorReports.join('\n')}`);
+      const routerError = new Error(finalErrorMessage);
+      routerError.code = finalCode;
+      throw routerError;
     });
   }
 }

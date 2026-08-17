@@ -97,7 +97,7 @@ class GroqService {
       logger.error(`[Groq Provider] Error (Status: ${statusCode}): ${errorMsg}`);
 
       // Map to standard error types
-      if (statusCode === 400 || errorMsg.includes('invalid_request_error')) {
+      if ((statusCode === 400 || errorMsg.includes('invalid_request_error')) && !errorMsg.includes('model_not_found') && statusCode !== 404) {
         throw new AIRequestValidationError(errorMsg, this.providerName, err);
       }
       if (statusCode === 429 || errorMsg.toLowerCase().includes('rate limit') || errorMsg.toLowerCase().includes('quota')) {
