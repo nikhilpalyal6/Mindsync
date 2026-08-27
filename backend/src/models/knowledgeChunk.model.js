@@ -59,6 +59,19 @@ const knowledgeChunkSchema = new mongoose.Schema(
   }
 );
 
+// Validate page numbers pre-validate
+knowledgeChunkSchema.pre('validate', function(next) {
+  if (this.metadata) {
+    if (this.metadata.pageStart !== null && this.metadata.pageStart !== undefined && this.metadata.pageStart < 1) {
+      this.metadata.pageStart = null;
+    }
+    if (this.metadata.pageEnd !== null && this.metadata.pageEnd !== undefined && this.metadata.pageEnd < 1) {
+      this.metadata.pageEnd = null;
+    }
+  }
+  next();
+});
+
 // Compound index for strict scoping & authorization
 knowledgeChunkSchema.index({ userId: 1, workspaceId: 1, resourceId: 1 });
 

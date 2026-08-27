@@ -11,7 +11,8 @@ import {
   Terminal, 
   ChevronLeft, 
   ChevronRight, 
-  LogOut 
+  LogOut,
+  Video
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -25,6 +26,7 @@ export const AdminSidebar = ({ collapsed, onCollapseToggle, mobileOpen }) => {
     { path: '/admin/ai', label: 'AI Monitor', icon: Cpu },
     { path: '/admin/notifications', label: 'Notifications', icon: BellRing },
     { path: '/admin/reports', label: 'Reports', icon: FileSpreadsheet },
+    { path: '/admin/study-rooms', label: 'Study Rooms', icon: Video },
     { path: '/admin/settings', label: 'Settings', icon: Sliders },
     { path: '/admin/system-logs', label: 'System Logs', icon: Terminal },
   ];

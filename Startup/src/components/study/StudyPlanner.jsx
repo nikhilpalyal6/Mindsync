@@ -11,7 +11,8 @@ import {
   getStudyPlanTasks, updateStudyTask, deleteStudyTask, 
   completeStudyTask, getTodayTasks, getUpcomingTasks,
   getStudySessions, generateAIStudyPlan, acceptAIStudyPlan,
-  getPlanProgress, getAdaptationPreview, applyAdaptation
+  getPlanProgress, getAdaptationPreview, applyAdaptation,
+  getStudyRooms, createRoomGoal
 } from '../../services/api';
 
 const WEEKDAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
@@ -85,6 +86,40 @@ export default function StudyPlanner() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // { type: 'plan'|'task', id: string, name: string }
+
+  // Study in Room Selector Modal states
+  const [studyInRoomTask, setStudyInRoomTask] = useState(null);
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+
+  const handleOpenStudyInRoom = async (task) => {
+    setStudyInRoomTask(task);
+    setLoadingRooms(true);
+    try {
+      const rooms = await getStudyRooms();
+      setAvailableRooms(Array.isArray(rooms) ? rooms : (rooms?.data || []));
+    } catch (err) {
+      console.error(err);
+      alert('Failed to load study rooms.');
+    } finally {
+      setLoadingRooms(false);
+    }
+  };
+
+  const handleJoinAndLinkTask = async (roomId) => {
+    if (!studyInRoomTask) return;
+    try {
+      await createRoomGoal(roomId, {
+        title: studyInRoomTask.title,
+        description: studyInRoomTask.description || '',
+        studyTaskId: studyInRoomTask._id
+      });
+      window.location.href = `/study-rooms/${roomId}`;
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Failed to link task to room goal.');
+    }
+  };
 
   // Fetch Dashboard Stats/Lists
   const loadDashboardData = useCallback(async () => {
@@ -1295,10 +1330,32 @@ export default function StudyPlanner() {
                             }}>
                               {task.title}
                             </span>
-                            <div style={{ display: 'flex', gap: '6px', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)' }}>
-                              <span>{task.taskType}</span>
-                              <span>•</span>
-                              <span>{task.estimatedMinutes}m</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                              <div style={{ display: 'flex', gap: '6px', fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)' }}>
+                                <span>{task.taskType}</span>
+                                <span>•</span>
+                                <span>{task.estimatedMinutes}m</span>
+                              </div>
+                              {!isCompleted && (
+                                <>
+                                  <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)' }}>•</span>
+                                  <button
+                                    onClick={() => handleOpenStudyInRoom(task)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#60a5fa',
+                                      fontSize: '0.65rem',
+                                      padding: 0,
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      textDecoration: 'underline'
+                                    }}
+                                  >
+                                    Study in Room
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1345,10 +1402,30 @@ export default function StudyPlanner() {
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{task.title}</span>
-                          <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', display: 'flex', gap: '6px' }}>
+                          <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span>{task.taskType}</span>
                             <span>•</span>
                             <span>{task.estimatedMinutes}m</span>
+                            {task.status !== 'COMPLETED' && (
+                              <>
+                                <span>•</span>
+                                <button
+                                  onClick={() => handleOpenStudyInRoom(task)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#60a5fa',
+                                    fontSize: '0.65rem',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    fontWeight: 600,
+                                    textDecoration: 'underline'
+                                  }}
+                                >
+                                  Study in Room
+                                </button>
+                              </>
+                            )}
                           </span>
                         </div>
 
@@ -2399,6 +2476,129 @@ export default function StudyPlanner() {
               </div>
             </div>
           ) : null}
+
+          {studyInRoomTask && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.85)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 9999,
+              backdropFilter: 'blur(8px)'
+            }}>
+              <div style={{
+                backgroundColor: '#111827',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px',
+                padding: '24px',
+                width: '100%',
+                maxWidth: '500px',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, color: '#fff', fontSize: '1.1rem', fontWeight: 600 }}>Study Task in Room</h3>
+                  <button onClick={() => setStudyInRoomTask(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '1.2rem' }}>&times;</button>
+                </div>
+
+                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem' }}>
+                  Link task <strong style={{ color: '#fff' }}>"{studyInRoomTask.title}"</strong> as a personal goal in one of the study rooms below:
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }} className="admin-scrollbar">
+                  {loadingRooms ? (
+                    <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.5)', padding: '20px 0', fontSize: '0.85rem' }}>
+                      Loading available study rooms...
+                    </div>
+                  ) : availableRooms.filter(r => r.status === 'LIVE' || r.status === 'SCHEDULED').length === 0 ? (
+                    <div style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', padding: '20px 0', fontSize: '0.85rem' }}>
+                      No active or scheduled study rooms found. Please start a room or check back later!
+                    </div>
+                  ) : (
+                    availableRooms.filter(r => r.status === 'LIVE' || r.status === 'SCHEDULED').map((room) => {
+                      const isLive = room.status === 'LIVE';
+                      const isFull = room.participantCount >= room.capacity;
+                      const isLocked = room.isLocked;
+                      const isJoinable = isLive && !isFull && !isLocked;
+
+                      return (
+                        <div
+                          key={room._id}
+                          style={{
+                            padding: '12px',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            background: 'rgba(255,255,255,0.02)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '12px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
+                            <span style={{ fontWeight: 600, color: '#fff', fontSize: '0.9rem', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                              {room.title}
+                            </span>
+                            <div style={{ display: 'flex', gap: '8px', fontSize: '0.7rem', color: 'rgba(255,255,255,0.5)' }}>
+                              <span>Subject: {room.subject || 'General'}</span>
+                              <span>•</span>
+                              <span>Seats: {room.participantCount || 0} / {room.capacity}</span>
+                            </div>
+                          </div>
+
+                          {isJoinable ? (
+                            <button
+                              onClick={() => handleJoinAndLinkTask(room._id)}
+                              style={{
+                                background: '#3b82f6',
+                                color: '#fff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Join & Link
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: isFull ? '#ef4444' : isLocked ? '#f59e0b' : 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
+                              {isLive ? (isFull ? 'Full' : 'Locked') : 'Scheduled'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setStudyInRoomTask(null)}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

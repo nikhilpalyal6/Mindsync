@@ -12,6 +12,10 @@ class ProviderHealthService {
     // Default configuration bounds (overridden dynamically from aiRouterConfig)
     this.MAX_CONSECUTIVE_FAILURES = 3;
     this.COOLDOWN_PERIOD_MS = 60 * 1000;
+
+    if (process.env.NODE_ENV === 'development') {
+      this.resetHealth();
+    }
   }
 
   /**
@@ -68,6 +72,8 @@ class ProviderHealthService {
 
     // Respect Retry-After limits
     if (state.retryAfter && now < state.retryAfter) {
+      const cooldownRemaining = Math.max(0, Math.round((state.retryAfter - now) / 1000));
+      logger.info(`[Provider Health] provider=${provider} state=OPEN cooldownRemaining=${cooldownRemaining}s`);
       return false;
     }
 
@@ -81,7 +87,7 @@ class ProviderHealthService {
         state.halfOpen = true;
         state.probeInProgress = false;
         this.healthState.set(provider, state);
-        logger.warn(`[AI Health CB] Provider ${provider.toUpperCase()} entered HALF-OPEN state. Cooldown expired.`);
+        logger.warn(`[Provider Health] provider=${provider} state=HALF_OPEN`);
       }
 
       // Allow exactly ONE concurrent probe request
@@ -97,6 +103,8 @@ class ProviderHealthService {
       return true;
     }
 
+    const cooldownRemaining = Math.max(0, Math.round((cooldownLimit - timeSinceLastFailure) / 1000));
+    logger.info(`[Provider Health] provider=${provider} state=OPEN cooldownRemaining=${cooldownRemaining}s`);
     return false;
   }
 
@@ -107,6 +115,8 @@ class ProviderHealthService {
     this._initProviderState(provider);
     const state = this.healthState.get(provider);
     const metric = this.metrics.get(provider);
+
+    const wasUnhealthy = !state.healthy || state.halfOpen;
 
     // Reset health & breaker state on success
     state.healthy = true;
@@ -126,7 +136,11 @@ class ProviderHealthService {
     metric.tokenSum += tokensProcessed;
     this.metrics.set(provider, metric);
 
-    logger.debug(`[AI Health CB] Recorded SUCCESS for ${provider.toUpperCase()} (Latency: ${latencyMs}ms, Tokens: ${tokensProcessed})`);
+    if (wasUnhealthy) {
+      logger.info(`[Provider Health] provider=${provider} probe=SUCCESS state=CLOSED`);
+    } else {
+      logger.debug(`[AI Health CB] Recorded SUCCESS for ${provider.toUpperCase()} (Latency: ${latencyMs}ms, Tokens: ${tokensProcessed})`);
+    }
   }
 
   /**
@@ -157,13 +171,28 @@ class ProviderHealthService {
 
     const threshold = aiRouterConfig.tuning?.failureThreshold || this.MAX_CONSECUTIVE_FAILURES;
 
-    // Handle Quota Exceeded error immediately
-    if (error?.type === 'QUOTA_EXCEEDED') {
+    // Handle Quota, Credits, Model, or Key errors immediately
+    if (
+      error?.type === 'QUOTA_EXCEEDED' || 
+      error?.type === 'INSUFFICIENT_CREDITS' || 
+      error?.type === 'MODEL_NOT_FOUND' || 
+      error?.type === 'INVALID_API_KEY' ||
+      error?.type === 'OLLAMA_UNAVAILABLE' ||
+      error?.type === 'OLLAMA_MODEL_NOT_FOUND'
+    ) {
       const quotaCooldown = parseInt(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS, 10) || 3600000;
       state.healthy = false;
       state.consecutiveFailures = threshold;
       state.retryAfter = Date.now() + quotaCooldown;
-      logger.error(`[AI Health CB] Quota exceeded for ${provider.toUpperCase()}. Circuit opened immediately. Cooldown: ${quotaCooldown / 1000}s.`);
+      logger.error(`[AI Health CB] Permanent/Quota error ${error.type} for ${provider.toUpperCase()}. Circuit opened immediately. Cooldown: ${quotaCooldown / 1000}s.`);
+    }
+
+    // Handle formatting or schema validation errors immediately to skip subsequent slow batch attempts
+    const errMsg = (error?.message || '').toLowerCase();
+    if (errMsg.includes('json') || errMsg.includes('boundaries') || errMsg.includes('concepts') || errMsg.includes('importance')) {
+      state.healthy = false;
+      state.consecutiveFailures = threshold;
+      logger.warn(`[AI Health CB] Formatting/intelligence error for ${provider.toUpperCase()}. Circuit opened immediately to bypass subsequent batches.`);
     }
 
     // Handle probe failure vs normal execution failure
@@ -181,7 +210,7 @@ class ProviderHealthService {
       const cooldownVal = error?.type === 'QUOTA_EXCEEDED' 
         ? (parseInt(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS, 10) || 3600000) 
         : cooldownDuration;
-      logger.error(`[AI Health CB] Circuit Breaker OPEN for ${provider.toUpperCase()}. Provider marked UNHEALTHY. Cooldown: ${cooldownVal / 1000}s. consecutive failures: ${state.consecutiveFailures}`);
+      logger.error(`[Provider Health] provider=${provider} state=OPEN cooldownRemaining=${Math.round(cooldownVal / 1000)}s`);
     } else {
       logger.warn(`[AI Health CB] Failures count for ${provider.toUpperCase()}: ${state.consecutiveFailures}/${threshold}`);
     }
@@ -192,6 +221,15 @@ class ProviderHealthService {
     metric.requestCount += 1;
     metric.failureCount += 1;
     this.metrics.set(provider, metric);
+  }
+
+  /**
+   * Resets all provider health states and metrics in memory.
+   */
+  resetHealth() {
+    this.healthState.clear();
+    this.metrics.clear();
+    logger.info('[Provider Health] All provider health states and metrics reset.');
   }
 
   /**

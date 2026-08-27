@@ -504,7 +504,7 @@ class StudyService {
       }
     });
 
-    return updatedSession;
+    return await this.getSessionById(userId, sessionId);
   }
 
   async deleteSession(userId, sessionId) {

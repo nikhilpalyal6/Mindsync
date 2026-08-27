@@ -29,8 +29,14 @@ class ChunkingService {
     const chunks = [];
     let chunkIndex = 0;
 
+    const maxPages = doc.pageCount || (doc.pages.length > 0 ? Math.max(...doc.pages.map(p => p.pageNumber).filter(n => typeof n === 'number' && !isNaN(n))) : 0);
+
     doc.pages.forEach(page => {
       const pageNum = page.pageNumber;
+      if (typeof pageNum !== 'number' || isNaN(pageNum) || pageNum < 1 || (maxPages > 0 && pageNum > maxPages)) {
+        logger.warn(`[Chunking Service] Skipping page with invalid or out-of-bounds pageNumber: ${pageNum} (max pages: ${maxPages})`);
+        return;
+      }
       const text = this._normalizeWhitespace(page.text || '');
       if (!text) return;
 

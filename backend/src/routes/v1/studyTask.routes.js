@@ -15,6 +15,9 @@ router.route('/today')
 router.route('/upcoming')
   .get(studyPlanController.getUpcomingTasks);
 
+router.route('/pending')
+  .get(studyPlanController.getPendingTasks);
+
 router.route('/:taskId')
   .patch(validate(updateTaskValidator), studyPlanController.updateTask)
   .delete(studyPlanController.deleteTask);

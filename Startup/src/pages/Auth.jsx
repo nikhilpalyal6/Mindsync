@@ -17,6 +17,7 @@ export default function Auth() {
   const [error, setError] = useState('')
   const [validationErrors, setValidationErrors] = useState({})
   const [rateLimit, setRateLimit] = useState({ active: false, retryAfter: null })
+  const [rememberMe, setRememberMe] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -34,13 +35,15 @@ export default function Auth() {
 
   useEffect(() => {
     // Reset form when switching between login/signup
+    const rememberedEmail = !isSignup ? (localStorage.getItem('mindsync_remember_email') || '') : '';
     setFormData({
       name: '',
       username: '',
-      email: '',
+      email: rememberedEmail,
       password: '',
       agreeToTerms: false
     })
+    setRememberMe(!!rememberedEmail)
     setIsLoading(false)
     setError('')
     setValidationErrors({})
@@ -88,6 +91,11 @@ export default function Auth() {
         await register(formData.name, formData.username, formData.email, formData.password)
       } else {
         await login(formData.email, formData.password)
+        if (rememberMe) {
+          localStorage.setItem('mindsync_remember_email', formData.email)
+        } else {
+          localStorage.removeItem('mindsync_remember_email')
+        }
       }
 
       const currentUser = await loginComplete()
@@ -291,6 +299,7 @@ export default function Auth() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
+                  autoComplete="username"
                 />
                 {getFieldError('email') && (
                   <div className="field-error">{getFieldError('email')}</div>
@@ -312,6 +321,7 @@ export default function Auth() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
+                    autoComplete={isSignup ? "new-password" : "current-password"}
                   />
                   <button
                     type="button"
@@ -338,7 +348,11 @@ export default function Auth() {
               {!isSignup && (
                 <div className="form-options">
                   <label className="remember-me">
-                    <input type="checkbox" />
+                    <input 
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                    />
                     <span>Remember me</span>
                   </label>
                   <Link to="/forgot-password" className="forgot-password">

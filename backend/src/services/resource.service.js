@@ -111,6 +111,12 @@ class ResourceService {
             title,
             source: { url, filename: title, platform: 'Upload' },
             contentHash,
+            metadata: {
+              language: 'en',
+              wordCount: extractedText.split(/\s+/).filter(Boolean).length,
+              pageCount: pages ? pages.length : 0,
+              extractedAt: new Date()
+            },
             embeddingModel: process.env.KNOWLEDGE_EMBEDDING_MODEL || 'gemini-embedding-001',
             processingStatus: 'READY'
           }
@@ -363,6 +369,9 @@ class ResourceService {
         fitMode: mergedData.fitMode || existingData.fitMode || 'page',
         lastOpened: mergedData.lastOpened || existingData.lastOpened || new Date().toISOString(),
         processingStatus: mergedData.processingStatus || existingData.processingStatus || 'completed',
+        pageCount: mergedData.pageCount !== undefined ? mergedData.pageCount : existingData.pageCount,
+        totalPages: mergedData.totalPages !== undefined ? mergedData.totalPages : existingData.totalPages,
+        pages: mergedData.pages || [],
         
         // YouTube lightweight metadata
         videoId: mergedData.videoId || existingData.videoId,

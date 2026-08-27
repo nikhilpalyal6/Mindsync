@@ -599,6 +599,18 @@ class StudyPlanController {
       this.applyLocks.delete(lockKey);
     }
   });
+
+  getPendingTasks = asyncHandler(async (req, res) => {
+    const userId = req.user._id;
+    const tasks = await StudyTask.find({
+      user: userId,
+      status: { $in: ['PENDING', 'IN_PROGRESS'] }
+    }).sort({ scheduledDate: 1, order: 1 });
+
+    res.status(HTTP_STATUS.OK).json(
+      ApiResponse.success({ tasks }, 'Pending study tasks retrieved successfully.')
+    );
+  });
 }
 
 export default new StudyPlanController();

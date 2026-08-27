@@ -11,6 +11,8 @@ import studyPlanRoutes from './studyPlan.routes.js';
 import studyTaskRoutes from './studyTask.routes.js';
 import mindMapRoutes from './mindMap.routes.js';
 import knowledgeRoutes from './knowledge.routes.js';
+import workshopIntelligenceRoutes from './workshopIntelligence.routes.js';
+import studyRoomRoutes from '../../studyRooms/routes/studyRoom.routes.js';
 
 const router = Router();
 
@@ -26,5 +28,7 @@ router.use('/study-plans', studyPlanRoutes);
 router.use('/study-tasks', studyTaskRoutes);
 router.use('/mind-maps', mindMapRoutes);
 router.use('/knowledge', knowledgeRoutes);
+router.use('/workshops', workshopIntelligenceRoutes);
+router.use('/study-rooms', studyRoomRoutes);
 
 export default router;

@@ -3,7 +3,7 @@ dotenv.config();
 
 export const aiRouterConfig = {
   // Global priority sequence. Providers will be tried in this order.
-  priority: ['groq', 'gemini', 'openrouter'],
+  priority: ['ollama', 'gemini', 'openrouter', 'groq'],
   
   // Tuning parameters for routing, queue, and cache
   tuning: {
@@ -27,7 +27,7 @@ export const aiRouterConfig = {
       name: 'Groq',
       enabled: () => process.env.GROQ_ENABLED !== 'false' && !!process.env.GROQ_API_KEY,
       apiKey: () => process.env.GROQ_API_KEY,
-      model: () => process.env.MODEL_NAME || 'llama-3.3-70b-versatile',
+      model: () => process.env.GROQ_MODEL || process.env.MODEL_NAME || 'llama-3.1-8b-instant',
       metadata: {
         supportsJSON: true,
         supportsStreaming: true,
@@ -85,6 +85,29 @@ export const aiRouterConfig = {
         supportsTextGeneration: true,
         maxContext: 1048576,
         maxOutputTokens: 8192,
+        preferredForQuiz: false,
+        preferredForSummary: false,
+        preferredForTutor: false,
+        preferredForRAG: false,
+        preferredForChat: false
+      }
+    },
+    ollama: {
+      name: 'Ollama',
+      enabled: () => process.env.OLLAMA_ENABLED !== 'false',
+      apiKey: () => 'local',
+      model: () => process.env.OLLAMA_MODEL || process.env.OLLAMA_RERANK_MODEL || 'qwen3:4b',
+      metadata: {
+        supportsJSON: true,
+        supportsStreaming: false,
+        supportsLongContext: false,
+        supportsVision: false,
+        supportsPdfExtraction: false,
+        supportsOcr: false,
+        supportsDocumentInput: false,
+        supportsTextGeneration: true,
+        maxContext: 4096,
+        maxOutputTokens: 2048,
         preferredForQuiz: false,
         preferredForSummary: false,
         preferredForTutor: false,

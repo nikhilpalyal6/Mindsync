@@ -5,7 +5,7 @@ export const validateAIConfig = () => {
   const provider = (process.env.AI_PROVIDER || 'groq').toLowerCase();
   const geminiApiKey = process.env.GEMINI_API_KEY;
   const groqApiKey = process.env.GROQ_API_KEY;
-  const modelName = process.env.MODEL_NAME || (provider === 'groq' ? 'llama-3.3-70b-versatile' : 'gemini-2.5-flash');
+  const modelName = (provider === 'groq' ? process.env.GROQ_MODEL : null) || process.env.MODEL_NAME || (provider === 'groq' ? 'llama-3.1-8b-instant' : 'gemini-2.5-flash');
   const temperature = parseFloat(process.env.TEMPERATURE || '0.7');
   const maxOutputTokens = parseInt(process.env.MAX_OUTPUT_TOKENS || '4096', 10);
 

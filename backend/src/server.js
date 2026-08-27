@@ -5,6 +5,8 @@ import { connectDB, disconnectDB } from './database/connection.js';
 import { verifyEmailConnection } from './config/email.js';
 import { logEvent } from './utils/auditLogger.js';
 import { runChunkCountBackfill } from './knowledge/scripts/backfillChunkCounts.js';
+import { initStudyRoomRealtime } from './studyRooms/realtime/studyRoom.socket.js';
+import { startRoomScheduler, stopRoomScheduler } from './studyRooms/utils/scheduler.js';
 
 let server;
 
@@ -22,6 +24,12 @@ const startServer = async () => {
     server = app.listen(config.port, async () => {
       logger.info(`MindSync server running in ${config.env} mode on port ${config.port}`);
       logger.info(`Health check: http://localhost:${config.port}/api/v1/health`);
+
+      // Initialize realtime ws layer for Study Rooms
+      initStudyRoomRealtime(server);
+
+      // Start the scheduled rooms auto-start cron/reconciler
+      startRoomScheduler();
 
       // Asynchronously trigger legacy chunk count backfill migration
       setImmediate(() => {
@@ -81,6 +89,9 @@ const gracefulShutdown = async (signal) => {
   if (server) {
     server.close(async () => {
       logger.info('HTTP server closed');
+      try {
+        stopRoomScheduler();
+      } catch (err) {}
       await disconnectDB();
       process.exit(0);
     });

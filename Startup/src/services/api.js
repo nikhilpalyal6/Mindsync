@@ -1,12 +1,13 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
 
 class ApiError extends Error {
-  constructor(message, statusCode, errors = [], retryAfter = null) {
+  constructor(message, statusCode, errors = [], retryAfter = null, code = null) {
     super(message)
     this.name = 'ApiError'
     this.statusCode = statusCode
     this.errors = errors
     this.retryAfter = retryAfter
+    this.code = code
   }
 }
 
@@ -164,7 +165,8 @@ const apiRequestInternal = async (endpoint, options = {}) => {
         message,
         response.status,
         data.errors || [],
-        retryAfter ? parseInt(retryAfter, 10) : null
+        retryAfter ? parseInt(retryAfter, 10) : null,
+        data.code || null
       )
     }
 
@@ -679,6 +681,10 @@ export const getUpcomingTasks = async () => {
   return await api.get('/study-tasks/upcoming');
 };
 
+export const getPendingTasks = async () => {
+  return await api.get('/study-tasks/pending');
+};
+
 export const generateAIStudyPlan = async (planParams) => {
   return await api.post('/study-plans/ai/generate', planParams);
 };
@@ -708,6 +714,31 @@ export const generateMindMap = async (workspaceId) => {
   return await api.post(`/mind-maps/workspace/${workspaceId}/generate`);
 };
 
+// --- WORKSHOP INTELLIGENCE API ---
+export const getWorkshopIntelligence = async (workshopId) => {
+  return await api.get(`/workshops/${workshopId}/intelligence`);
+};
+
+export const initializeWorkshopIntelligence = async (workshopId) => {
+  return await api.post(`/workshops/${workshopId}/intelligence/initialize`);
+};
+
+export const extractWorkshopKnowledge = async (workshopId) => {
+  return await api.post(`/workshops/${workshopId}/intelligence/extract`, {}, { timeout: 300000 });
+};
+
+export const extractWorkshopRelationships = async (workshopId) => {
+  return await api.post(`/workshops/${workshopId}/intelligence/relationships/extract`, {}, { timeout: 300000 });
+};
+
+export const getWorkshopGraph = async (workshopId) => {
+  return await api.get(`/workshops/${workshopId}/intelligence/graph`);
+};
+
+export const getWorkshopInsights = async (workshopId) => {
+  return await api.get(`/workshops/${workshopId}/intelligence/insights`);
+};
+
 // --- KNOWLEDGE ENGINE API ---
 export const getResourceKnowledgeStatus = async (resourceId, workspaceId, options = {}) => {
   const query = workspaceId ? `?workspaceId=${workspaceId}` : '';
@@ -721,4 +752,116 @@ export const reindexResourceKnowledge = async (resourceId, workspaceId) => {
 export const fetchPdfFile = async (sessionId, resourceId) => {
   return await api.get(`/study/${sessionId}/resources/${encodeURIComponent(resourceId)}/file`);
 };
+
+// --- STUDY ROOMS API ---
+export const getStudyRooms = async (filters = {}) => {
+  const cleanParams = {};
+  Object.keys(filters).forEach(key => {
+    if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+      cleanParams[key] = filters[key];
+    }
+  });
+  const query = new URLSearchParams(cleanParams).toString();
+  const endpoint = query ? `/study-rooms?${query}` : '/study-rooms';
+  return await api.get(endpoint);
+};
+
+export const getStudyRoom = async (roomId) => {
+  return await api.get(`/study-rooms/${roomId}`);
+};
+
+export const createStudyRoom = async (roomData) => {
+  return await api.post('/study-rooms', roomData);
+};
+
+export const joinStudyRoom = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/join`, {});
+};
+
+export const leaveStudyRoom = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/leave`, {});
+};
+
+export const patchStudyRoom = async (roomId, roomData) => {
+  return await api.patch(`/study-rooms/${roomId}`, roomData);
+};
+
+export const deleteStudyRoom = async (roomId) => {
+  return await api.delete(`/study-rooms/${roomId}`);
+};
+
+export const startStudyRoom = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/start`, {});
+};
+
+export const endStudyRoom = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/end`, {});
+};
+
+export const cancelStudyRoom = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/cancel`, {});
+};
+
+export const lockStudyRoom = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/lock`, {});
+};
+
+export const unlockStudyRoom = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/unlock`, {});
+};
+
+export const getStudyRoomParticipants = async (roomId) => {
+  return await api.get(`/study-rooms/${roomId}/participants`);
+};
+
+export const getStudyRoomTimeline = async (roomId) => {
+  return await api.get(`/study-rooms/${roomId}/timeline`);
+};
+
+export const getCurrentFocusSession = async (roomId) => {
+  return await api.get(`/study-rooms/${roomId}/focus/current`);
+};
+
+export const startFocusSession = async (roomId, data) => {
+  return await api.post(`/study-rooms/${roomId}/focus/start`, data);
+};
+
+export const endFocusSession = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/focus/end`, {});
+};
+
+export const pauseFocusSession = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/focus/pause`, {});
+};
+
+export const resumeFocusSession = async (roomId) => {
+  return await api.post(`/study-rooms/${roomId}/focus/resume`, {});
+};
+
+export const createRoomGoal = async (roomId, data) => {
+  return await api.post(`/study-rooms/${roomId}/goals`, data);
+};
+
+export const getRoomGoals = async (roomId) => {
+  return await api.get(`/study-rooms/${roomId}/goals`);
+};
+
+export const patchRoomGoal = async (roomId, goalId, data) => {
+  return await api.patch(`/study-rooms/${roomId}/goals/${goalId}`, data);
+};
+
+export const completeRoomGoal = async (roomId, goalId) => {
+  return await api.post(`/study-rooms/${roomId}/goals/${goalId}/complete`, {});
+};
+
+export const getStudyRoomChat = async (roomId) => {
+  return await api.get(`/study-rooms/${roomId}/chat`);
+};
+
+export const deleteStudyRoomChatMessage = async (roomId, chatId) => {
+  return await api.delete(`/study-rooms/${roomId}/chat/${chatId}`);
+};
+
+
+
 

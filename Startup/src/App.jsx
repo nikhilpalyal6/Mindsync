@@ -24,6 +24,7 @@ const AdminNotifications = lazy(() => import('./pages/admin/AdminNotifications')
 const AdminReports = lazy(() => import('./pages/admin/AdminReports').then(module => ({ default: module.AdminReports })));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings').then(module => ({ default: module.AdminSettings })));
 const AdminSystemLogs = lazy(() => import('./pages/admin/AdminSystemLogs').then(module => ({ default: module.AdminSystemLogs })));
+const AdminStudyRooms = lazy(() => import('./pages/admin/studyRooms/AdminStudyRooms').then(module => ({ default: module.default || module.AdminStudyRooms })));
 import './App.css'
 import AOS from 'aos'
 import 'aos/dist/aos.css'
@@ -31,7 +32,8 @@ import { useEffect } from 'react'
 import Pricing from './pages/Pricing'
 import Contact from './pages/Contact'
 import StudyMode from './pages/StudyMode'
-import Community from './pages/Community'
+import StudyRooms from './pages/studyRooms/StudyRooms'
+import StudyRoomWorkspace from './pages/studyRooms/StudyRoomWorkspace'
 import StudyViewer from './pages/StudyViewer'
 import StudyPlanner from './components/study/StudyPlanner'
 import { AuthProvider } from './contexts/AuthContext'
@@ -43,7 +45,8 @@ import Toast from './components/Toast'
 function AppContent() {
   const location = useLocation()
   const isAuthPage = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify-email'].some(path => location.pathname.startsWith(path))
-  const isStudyMode = location.pathname.startsWith('/study') && location.pathname !== '/study-planner'
+  const isStudyMode = (location.pathname === '/study' || location.pathname.startsWith('/study/')) && location.pathname !== '/study-planner'
+  const isWorkspace = location.pathname.startsWith('/study-rooms/') && location.pathname !== '/study-rooms'
   const isAdminRoute = location.pathname.startsWith('/admin')
 
   useEffect(() => {
@@ -57,7 +60,7 @@ function AppContent() {
   return (
     <div className="app-container">
       <ScrollToTop />
-      {!isAuthPage && !isStudyMode && !isAdminRoute && <Navbar />}
+      {!isAuthPage && !isStudyMode && !isAdminRoute && !isWorkspace && <Navbar />}
       <Toast />
       <div className="main-content">
         <Routes>
@@ -74,7 +77,8 @@ function AppContent() {
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         <Route path="/pricing" element={<Pricing />} />
-        <Route path="/about" element={<Community />} />
+        <Route path="/study-rooms" element={<ProtectedRoute><StudyRooms /></ProtectedRoute>} />
+        <Route path="/study-rooms/:roomId" element={<ProtectedRoute><StudyRoomWorkspace /></ProtectedRoute>} />
         <Route path="/contact" element={<Contact />} />
         {/* Admin Routes */}
         <Route path="/admin" element={
@@ -89,13 +93,14 @@ function AppContent() {
           <Route path="ai" element={<AdminAI />} />
           <Route path="notifications" element={<AdminNotifications />} />
           <Route path="reports" element={<AdminReports />} />
+          <Route path="study-rooms" element={<AdminStudyRooms />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="system-logs" element={<AdminSystemLogs />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
       </div>
-      {!isAuthPage && !isStudyMode && !isAdminRoute && <Footer />}
+      {!isAuthPage && !isStudyMode && !isAdminRoute && !isWorkspace && !location.pathname.startsWith('/study-rooms') && <Footer />}
     </div>
   )
 }

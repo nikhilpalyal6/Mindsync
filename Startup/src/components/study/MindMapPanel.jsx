@@ -20,56 +20,64 @@ import {
   AlertTriangle,
   Play,
   FileText,
-  RefreshCw
+  RefreshCw,
+  SlidersHorizontal
 } from 'lucide-react';
-import { getMindMapByWorkspace, generateMindMap } from '../../services/api';
+import { 
+  getWorkshopIntelligence,
+  initializeWorkshopIntelligence,
+  extractWorkshopKnowledge,
+  extractWorkshopRelationships,
+  getWorkshopGraph,
+  getWorkshopInsights
+} from '../../services/api';
 import '@xyflow/react/dist/style.css';
 
-// COLOR ASSIGNMENTS PER NODE TYPE
-const COLOR_THEMES = {
-  ROOT: { color: '#a855f7', bg: 'rgba(168, 85, 247, 0.08)', border: 'rgba(168, 85, 247, 0.3)' },
-  RESOURCE: { color: '#a855f7', bg: 'rgba(168, 85, 247, 0.08)', border: 'rgba(168, 85, 247, 0.3)' },
-  TOPIC: { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.08)', border: 'rgba(59, 130, 246, 0.3)' },
-  SUBTOPIC: { color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.08)', border: 'rgba(6, 182, 212, 0.3)' },
-  CONCEPT: { color: '#10b981', bg: 'rgba(16, 185, 129, 0.08)', border: 'rgba(16, 185, 129, 0.3)' },
-  FORMULA: { color: '#eab308', bg: 'rgba(234, 179, 8, 0.08)', border: 'rgba(234, 179, 8, 0.3)' },
-  PROCESS: { color: '#f97316', bg: 'rgba(249, 115, 22, 0.08)', border: 'rgba(249, 115, 22, 0.3)' },
-  DEFINITION: { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.3)' },
-  EXAMPLE: { color: '#22c55e', bg: 'rgba(34, 197, 94, 0.08)', border: 'rgba(34, 197, 94, 0.3)' },
-  IMPORTANT: { color: '#ec4899', bg: 'rgba(236, 72, 153, 0.08)', border: 'rgba(236, 72, 153, 0.3)' }
+// COLOR ASSIGNMENTS PER NODE IMPORTANCE
+const IMPORTANCE_THEMES = {
+  HIGH: { color: '#ec4899', bg: 'rgba(236, 72, 153, 0.08)', border: 'rgba(236, 72, 153, 0.3)' },
+  MEDIUM: { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.08)', border: 'rgba(59, 130, 246, 0.3)' },
+  LOW: { color: '#10b981', bg: 'rgba(16, 185, 129, 0.08)', border: 'rgba(16, 185, 129, 0.3)' }
 };
 
-// Custom React Flow Node Component
-const CustomMindMapNode = React.memo(({ data, selected }) => {
-  const theme = COLOR_THEMES[data.type] || COLOR_THEMES.CONCEPT;
+const CustomConceptNode = React.memo(({ data, selected }) => {
+  const isHigh = data.importance >= 0.8;
+  const isMed = data.importance >= 0.5 && data.importance < 0.8;
+  const theme = isHigh ? IMPORTANCE_THEMES.HIGH : (isMed ? IMPORTANCE_THEMES.MEDIUM : IMPORTANCE_THEMES.LOW);
   
+  const isHighlighted = data.isHighlighted;
+  const highlightColor = '#a855f7'; // Purple glow for active elements
+  const activeColor = isHighlighted ? highlightColor : theme.color;
+
   return (
     <div
       style={{
         padding: '12px 16px',
         borderRadius: '10px',
         backgroundColor: '#0a0d14',
-        border: `1.5px solid ${selected ? '#ffffff' : theme.color}`,
+        border: `1.5px solid ${selected ? '#ffffff' : activeColor}`,
         boxShadow: selected 
           ? `0 0 20px 0 rgba(255, 255, 255, 0.15), inset 0 0 12px 0 ${theme.border}` 
-          : `0 4px 12px 0 rgba(0, 0, 0, 0.45)`,
+          : (isHighlighted 
+            ? `0 0 15px 0 ${highlightColor}, inset 0 0 10px 0 rgba(168, 85, 247, 0.2)` 
+            : `0 4px 12px 0 rgba(0, 0, 0, 0.45)`),
         color: '#ffffff',
-        width: data.type === 'ROOT' ? '220px' : (['TOPIC', 'RESOURCE'].includes(data.type) ? '190px' : '170px'),
+        width: '180px',
         boxSizing: 'border-box',
         cursor: 'pointer',
         position: 'relative',
         transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: theme.color, border: 'none', width: '6px', height: '6px' }} />
+      <Handle type="target" position={Position.Top} style={{ background: activeColor, border: 'none', width: '6px', height: '6px' }} />
       
-      {/* Node Header Indicator bar */}
+      {/* Indicator bar */}
       <div 
         style={{
           position: 'absolute',
           left: 0, top: 0, bottom: 0,
           width: '4px',
-          backgroundColor: theme.color,
+          backgroundColor: activeColor,
           borderTopLeftRadius: '8px',
           borderBottomLeftRadius: '8px'
         }}
@@ -80,26 +88,21 @@ const CustomMindMapNode = React.memo(({ data, selected }) => {
           <span style={{ 
             fontSize: '8px', 
             fontWeight: 700, 
-            color: theme.color, 
+            color: activeColor, 
             letterSpacing: '0.05em',
             textTransform: 'uppercase'
           }}>
-            {data.type}
+            Concept
           </span>
-          {data.importance === 'HIGH' && (
-            <span style={{ 
-              fontSize: '7px', 
-              color: '#ef4444', 
-              fontWeight: 800, 
-              backgroundColor: 'rgba(239, 68, 68, 0.12)', 
-              padding: '1px 4px', 
-              borderRadius: '3px' 
-            }}>
-              ★ HIGH
-            </span>
-          )}
+          <span style={{ 
+            fontSize: '7.5px', 
+            color: 'rgba(255, 255, 255, 0.45)', 
+            fontWeight: 600 
+          }}>
+            Imp: {data.importance.toFixed(1)}
+          </span>
         </div>
-        <h4 style={{ margin: 0, fontSize: '11.5px', fontWeight: 650, color: '#fff', lineHeight: 1.3 }}>
+        <h4 style={{ margin: 0, fontSize: '11px', fontWeight: 650, color: '#fff', lineHeight: 1.3 }}>
           {data.label}
         </h4>
         
@@ -116,51 +119,23 @@ const CustomMindMapNode = React.memo(({ data, selected }) => {
             {data.description}
           </p>
         )}
-
-        {/* Expand/Collapse badge indicator */}
-        {data.hasChildren && (
-          <div style={{ 
-            position: 'absolute', 
-            bottom: '-7px', 
-            left: '50%', 
-            transform: 'translateX(-50%)', 
-            fontSize: '7.5px', 
-            backgroundColor: '#1f2937', 
-            border: `1px solid ${theme.color}`, 
-            color: '#fff', 
-            padding: '1px 5px', 
-            borderRadius: '10px',
-            fontWeight: 700
-          }}>
-            {data.collapsed ? '＋ Expand' : '－ Collapse'}
-          </div>
-        )}
       </div>
 
-      <Handle type="source" position={Position.Bottom} style={{ background: theme.color, border: 'none', width: '6px', height: '6px' }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: activeColor, border: 'none', width: '6px', height: '6px' }} />
     </div>
   );
 });
 
-CustomMindMapNode.displayName = 'CustomMindMapNode';
+CustomConceptNode.displayName = 'CustomConceptNode';
 
-// Dagre Layout Generator
+// Dagre Layout Algorithm for layouting
 const getLayoutedElements = (nodes, edges, direction = 'TB') => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 70, ranksep: 100 });
+  dagreGraph.setGraph({ rankdir: direction, nodesep: 80, ranksep: 120 });
 
   nodes.forEach((node) => {
-    let width = 170;
-    let height = 65;
-    if (node.data?.type === 'ROOT') {
-      width = 220;
-      height = 80;
-    } else if (['TOPIC', 'RESOURCE'].includes(node.data?.type)) {
-      width = 190;
-      height = 75;
-    }
-    dagreGraph.setNode(node.id, { width, height });
+    dagreGraph.setNode(node.id, { width: 180, height: 70 });
   });
 
   edges.forEach((edge) => {
@@ -169,93 +144,80 @@ const getLayoutedElements = (nodes, edges, direction = 'TB') => {
 
   dagre.layout(dagreGraph);
 
-  const layedNodes = nodes.map((node) => {
+  const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     return {
       ...node,
       targetPosition: Position.Top,
       sourcePosition: Position.Bottom,
       position: {
-        x: nodeWithPosition.x - (node.data?.type === 'ROOT' ? 110 : (['TOPIC', 'RESOURCE'].includes(node.data?.type) ? 95 : 85)),
-        y: nodeWithPosition.y - (node.data?.type === 'ROOT' ? 40 : (['TOPIC', 'RESOURCE'].includes(node.data?.type) ? 37 : 32))
+        x: nodeWithPosition.x - 90,
+        y: nodeWithPosition.y - 35
       }
     };
   });
 
-  return { nodes: layedNodes, edges };
+  return { nodes: layoutedNodes, edges };
 };
 
-// Canvas Sub-component using React Flow Hooks
+// Canvas wrapper
 const MindMapCanvas = ({ 
   nodes: initialNodes, 
   edges: initialEdges, 
-  setSelectedNode, 
-  searchQuery
+  selectedNodeId,
+  setSelectedNodeId, 
+  searchQuery,
+  relationshipFilter,
+  highlightedNodeIds
 }) => {
   const { setCenter, fitView } = useReactFlow();
-  const [collapsedNodeIds, setCollapsedNodeIds] = useState(new Set());
   
-  // Custom nodes map registration
   const nodeTypes = useMemo(() => ({
-    customNode: CustomMindMapNode
+    customNode: CustomConceptNode
   }), []);
 
-  // Compute collapsing visible nodes and edges
+  // Compute filtering visible nodes and edges
   const elements = useMemo(() => {
-    const adj = {};
-    initialEdges.forEach(e => {
-      adj[e.sourceNode] = adj[e.sourceNode] || [];
-      adj[e.sourceNode].push(e.targetNode);
-    });
-
-    const hiddenIds = new Set();
-    const traverseAndHide = (parentId) => {
-      const children = adj[parentId] || [];
-      children.forEach(childId => {
-        hiddenIds.add(childId);
-        traverseAndHide(childId);
-      });
-    };
-
-    collapsedNodeIds.forEach(id => {
-      traverseAndHide(id);
-    });
-
     // Map database nodes to React Flow Node objects
     const rfNodes = initialNodes.map(node => ({
-      id: node.nodeId,
+      id: node.id,
       type: 'customNode',
       data: {
-        label: node.label,
-        type: node.type,
-        description: node.description,
-        importance: node.importance,
-        color: node.color,
-        sources: node.sources || [],
-        collapsed: collapsedNodeIds.has(node.nodeId),
-        hasChildren: initialEdges.some(e => e.sourceNode === node.nodeId)
+        label: node.data.name,
+        description: node.data.description,
+        importance: node.data.importance,
+        sources: node.data.sources || [],
+        isHighlighted: highlightedNodeIds.has(node.id) || selectedNodeId === node.id
       },
-      position: node.position || { x: 0, y: 0 }
+      position: { x: 0, y: 0 } // Positions calculated dynamically by dagre
     }));
 
-    // Map database edges to React Flow Edge objects
-    const rfEdges = initialEdges.map(edge => ({
-      id: `${edge.sourceNode}-${edge.targetNode}`,
-      source: edge.sourceNode,
-      target: edge.targetNode,
-      label: edge.relationship || '',
-      type: 'smoothstep',
-      animated: true,
-      style: { stroke: COLOR_THEMES[initialNodes.find(n => n.nodeId === edge.sourceNode)?.type]?.color || '#475569', strokeWidth: 1.5 },
-      labelStyle: { fill: '#94a3b8', fontSize: '9px', fontWeight: 500 }
-    }));
+    // Filter edges based on relationshipType
+    const filteredEdges = relationshipFilter === 'ALL'
+      ? initialEdges
+      : initialEdges.filter(e => e.type === relationshipFilter);
 
-    const visibleNodes = rfNodes.filter(n => !hiddenIds.has(n.id));
-    const visibleEdges = rfEdges.filter(e => !hiddenIds.has(e.source) && !hiddenIds.has(e.target));
+    // Map edges to React Flow Edge objects
+    const rfEdges = filteredEdges.map(edge => {
+      const isPathEdge = highlightedNodeIds.has(edge.source) && highlightedNodeIds.has(edge.target);
+      return {
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        label: edge.type.replace('_', ' '),
+        type: 'smoothstep',
+        animated: isPathEdge,
+        style: { 
+          stroke: isPathEdge ? '#a855f7' : '#475569', 
+          strokeWidth: isPathEdge ? 3 : 1.5 
+        },
+        labelStyle: { fill: '#94a3b8', fontSize: '9px', fontWeight: 500 }
+      };
+    });
 
-    // Perform Dagre Layout
-    return getLayoutedElements(visibleNodes, visibleEdges);
-  }, [initialNodes, initialEdges, collapsedNodeIds]);
+    // Layout using dagre
+    return getLayoutedElements(rfNodes, rfEdges);
+  }, [initialNodes, initialEdges, relationshipFilter, highlightedNodeIds, selectedNodeId]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(elements.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(elements.edges);
@@ -270,42 +232,26 @@ const MindMapCanvas = ({
     if (!searchQuery.trim()) return;
     const match = elements.nodes.find(n => n.data.label.toLowerCase().includes(searchQuery.toLowerCase()));
     if (match) {
-      setCenter(match.position.x + 85, match.position.y + 30, { zoom: 1.4, duration: 800 });
+      setCenter(match.position.x + 90, match.position.y + 35, { zoom: 1.4, duration: 800 });
+      setSelectedNodeId(match.id);
     }
-  }, [searchQuery, elements.nodes, setCenter]);
+  }, [searchQuery, elements.nodes, setCenter, setSelectedNodeId]);
 
-  // Node Selection Handler
+  // Center on selectedNodeId if set externally
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const match = elements.nodes.find(n => n.id === selectedNodeId);
+    if (match) {
+      setCenter(match.position.x + 90, match.position.y + 35, { zoom: 1.4, duration: 800 });
+    }
+  }, [selectedNodeId, elements.nodes, setCenter]);
+
   const onNodeClick = useCallback((event, node) => {
-    const rawNode = initialNodes.find(n => n.nodeId === node.id);
-    setSelectedNode(rawNode || null);
-  }, [initialNodes, setSelectedNode]);
-
-  // Double Click Toggle Collapse
-  const onNodeDoubleClick = useCallback((event, node) => {
-    setCollapsedNodeIds(prev => {
-      const next = new Set(prev);
-      if (next.has(node.id)) {
-        next.delete(node.id);
-      } else {
-        next.add(node.id);
-      }
-      return next;
-    });
-  }, []);
+    setSelectedNodeId(node.id);
+  }, [setSelectedNodeId]);
 
   const handleFitView = () => {
     fitView({ padding: 0.15, duration: 800 });
-  };
-
-  const handleExpandAll = () => {
-    setCollapsedNodeIds(new Set());
-  };
-
-  const handleCollapseAll = () => {
-    const topicNodeIds = initialNodes
-      .filter(n => ['TOPIC', 'RESOURCE'].includes(n.type))
-      .map(n => n.nodeId);
-    setCollapsedNodeIds(new Set(topicNodeIds));
   };
 
   return (
@@ -316,7 +262,6 @@ const MindMapCanvas = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
-        onNodeDoubleClick={onNodeDoubleClick}
         nodeTypes={nodeTypes}
         fitView
         colorMode="dark"
@@ -326,7 +271,11 @@ const MindMapCanvas = ({
       >
         <Background color="#27272a" variant="dots" gap={12} size={1} />
         <MiniMap 
-          nodeColor={(n) => COLOR_THEMES[n.data?.type]?.color || '#3b82f6'} 
+          nodeColor={(n) => {
+            const isHigh = n.data?.importance >= 0.8;
+            const isMed = n.data?.importance >= 0.5 && n.data?.importance < 0.8;
+            return isHigh ? '#ec4899' : (isMed ? '#3b82f6' : '#10b981');
+          }} 
           maskColor="rgba(0, 0, 0, 0.6)" 
           style={{ backgroundColor: '#0c0f17', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px' }}
         />
@@ -358,171 +307,320 @@ const MindMapCanvas = ({
         >
           FIT VIEW
         </button>
-        <div style={{ width: '1px', height: '14px', background: 'rgba(255, 255, 255, 0.08)' }} />
-        <button 
-          onClick={handleExpandAll} 
-          style={{ border: 'none', background: 'none', color: 'rgba(255,255,255,0.75)', fontSize: '9px', fontWeight: 700, cursor: 'pointer', padding: '4px 8px' }}
-          title="Expand all concepts"
-        >
-          EXPAND ALL
-        </button>
-        <div style={{ width: '1px', height: '14px', background: 'rgba(255, 255, 255, 0.08)' }} />
-        <button 
-          onClick={handleCollapseAll} 
-          style={{ border: 'none', background: 'none', color: 'rgba(255,255,255,0.75)', fontSize: '9px', fontWeight: 700, cursor: 'pointer', padding: '4px 8px' }}
-          title="Collapse down to Topics"
-        >
-          COLLAPSE ALL
-        </button>
       </div>
     </div>
   );
 };
 
 export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
-  const workspaceId = session?._id;
+  const workshopId = session?._id;
   const workspaceTitle = session?.title || 'Study Workspace';
   const resources = useMemo(() => session?.resources || [], [session?.resources]);
-  
-  // State Machine variables (pure read-only workspace scopes)
-  const [statusState, setStatusState] = useState('loading'); // loading | generating | completed | failed | empty
-  const [mindMapData, setMindMapData] = useState(null);
-  const [selectedNode, setSelectedNode] = useState(null);
+
+  // UI state variables
+  const [statusState, setStatusState] = useState('loading'); // loading | onboarding | generating | completed | failed | empty
+  const [rawStatus, setRawStatus] = useState(null);
+  const [activeStepText, setActiveStepText] = useState('');
+  const [graphData, setGraphData] = useState(null);
+  const [insightsData, setInsightsData] = useState(null);
+  const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [relationshipFilter, setRelationshipFilter] = useState('ALL');
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState(new Set());
+  const [activeSidebarTab, setActiveSidebarTab] = useState('insights'); // insights | details
   const [error, setError] = useState(null);
 
-  const pollingIntervalRef = useRef(null);
-  const timeoutRef = useRef(null);
-  const currentWorkspaceIdRef = useRef('');
+  const pollingTimeoutRef = useRef(null);
+  const isPollingInFlightRef = useRef(false);
+  const pollIdRef = useRef(0);
+  const currentWorkshopIdRef = useRef('');
+  const isGeneratingRef = useRef(false);
 
-  // Clears active timers
-  const clearTimers = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
+  const mapErrorText = (errorText, apiErrorCode) => {
+    const code = apiErrorCode || '';
+    const text = (errorText || '').trim();
+    const lowerText = text.toLowerCase();
+
+    if (code === 'OLLAMA_UNAVAILABLE' || lowerText.includes('ollama_unavailable')) {
+      return 'Local AI service is unavailable. Start Ollama and try again.';
     }
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+    if (code === 'OLLAMA_MODEL_NOT_FOUND' || lowerText.includes('ollama_model_not_found')) {
+      return 'Required local AI model qwen3:4b is not installed.';
+    }
+    if (code === 'RATE_LIMIT' || code === 'AI_RATE_LIMITED' || lowerText.includes('rate_limit') || lowerText.includes('rate limit') || lowerText.includes('429')) {
+      return 'AI providers are currently unavailable. Please retry shortly.';
+    }
+    if (code === 'QUOTA_EXCEEDED' || code === 'AI_QUOTA_EXCEEDED' || lowerText.includes('quota') || lowerText.includes('credit') || lowerText.includes('quota_exceeded')) {
+      return 'AI provider quota has been exceeded. Please retry later.';
+    }
+    if (code === 'AUTH_ERROR' || code === 'AI_AUTH_ERROR' || lowerText.includes('auth') || lowerText.includes('api key') || lowerText.includes('unauthorized')) {
+      return 'AI providers are currently unavailable. Please retry shortly.';
+    }
+    if (code === 'MODEL_NOT_FOUND' || lowerText.includes('model_not_found') || lowerText.includes('model not found')) {
+      return 'Required AI model is unavailable or misconfigured.';
+    }
+    if (code === 'PARTIAL_EXTRACTION' || lowerText.includes('partial_extraction') || lowerText.includes('partial success')) {
+      return 'Extraction partially succeeded. Some concepts were generated successfully.';
+    }
+
+    // Check for ALL_PROVIDERS_FAILED (Fallback chain failed)
+    if (code === 'ALL_PROVIDERS_FAILED' || lowerText.includes('fallback chain failed') || lowerText.includes('all providers failed')) {
+      const lines = text.split('\n').filter(line => line.trim() && !line.toLowerCase().includes('fallback chain failed'));
+      const formattedDetails = lines.map(line => {
+        const parts = line.split(':');
+        if (parts.length >= 2) {
+          const provider = parts[0].trim();
+          const detail = parts.slice(1).join(':').trim();
+          return `${provider}:\n${detail}`;
+        }
+        return line.trim();
+      });
+      return `AI provider error. Fallback chain failed:\n\n${formattedDetails.join('\n\n')}`;
+    }
+
+    // Default legacy mappings
+    if (lowerText.includes('unexpected non-whitespace character') || lowerText.includes('json') || lowerText.includes('syntaxerror') || lowerText.includes('invalid structured response') || lowerText.includes('structure')) {
+      return 'The AI returned an invalid structured response. Please retry extraction.';
+    }
+    if (lowerText.includes('database') || lowerText.includes('mongodb') || lowerText.includes('connection timed out') || lowerText.includes('503')) {
+      return 'Database temporarily unavailable.';
+    }
+
+    return text || 'An error occurred during extraction. Please try again.';
+  };
+
+  const isTerminalStatus = useCallback((status) => {
+    return status === 'COMPLETED' || status === 'PARTIAL' || status === 'FAILED';
+  }, []);
+
+  const clearTimers = useCallback(() => {
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+    isPollingInFlightRef.current = false;
+  }, []);
+
+  const fetchGraphAndInsights = async (wId) => {
+    setStatusState('loading');
+    setError(null);
+    try {
+      const [graph, insights] = await Promise.all([
+        getWorkshopGraph(wId),
+        getWorkshopInsights(wId)
+      ]);
+
+      if (graph && graph.nodes && graph.nodes.length > 0) {
+        setGraphData(graph);
+        setInsightsData(insights);
+        setStatusState('completed');
+      } else {
+        setStatusState('empty');
+      }
+    } catch (err) {
+      console.error('[Workshop Fetch Graph/Insights] Failed:', err);
+      setStatusState('failed');
+      setError('Failed to load workshop intelligence graph.');
     }
   };
 
-  // Start polling status (checking status updates, never triggering writes)
-  const startPolling = useCallback((wId) => {
+  // Poll status during background generation
+  const startPollingStatus = useCallback((wId) => {
     clearTimers();
     setStatusState('generating');
-    setError(null);
+    
+    pollIdRef.current += 1;
+    const currentPollId = pollIdRef.current;
+    console.log(`[Intelligence UI] generation started pollId=${currentPollId}`);
 
-    // Timeout guard: 45 seconds total maximum generation time (Step 18)
-    timeoutRef.current = setTimeout(() => {
-      clearTimers();
-      setStatusState('failed');
-      setError('Your workspace learning map is temporarily unavailable. It will be prepared automatically.');
-    }, 45000);
+    const poll = async () => {
+      if (currentWorkshopIdRef.current !== wId || currentPollId !== pollIdRef.current) {
+        return;
+      }
+      if (isPollingInFlightRef.current) {
+        // Retry later if a status call is already pending
+        console.log(`[Intelligence UI] scheduling next poll pollId=${currentPollId}`);
+        pollingTimeoutRef.current = setTimeout(poll, 2500);
+        return;
+      }
 
-    pollingIntervalRef.current = setInterval(async () => {
-      if (currentWorkspaceIdRef.current !== wId) return;
+      let isTerminal = false;
 
       try {
-        const res = await getMindMapByWorkspace(wId);
-        const mapDoc = res?.data?.mindMap;
-        const status = res?.data?.status;
+        isPollingInFlightRef.current = true;
+        const res = await getWorkshopIntelligence(wId);
+        const intel = res;
+        
+        if (intel) {
+          setRawStatus(intel.status);
+          console.log(`[Intelligence UI] status received=${intel.status} pollId=${currentPollId}`);
+        }
 
-        if (status === 'COMPLETED' && mapDoc) {
-          clearTimers();
-          if (mapDoc.nodes && mapDoc.nodes.length > 0) {
-            setMindMapData(mapDoc);
-            setStatusState('completed');
+        // Calculate processed resource count dynamically (succeeded and failed)
+        const processed = intel?.resources?.filter(r => r.status && r.status !== 'PENDING').length || 0;
+        const total = intel?.resourceCount || 0;
+
+        if (intel) {
+          if (isTerminalStatus(intel.status)) {
+            isTerminal = true;
+            console.log(`[Intelligence UI] terminal state=${intel.status} stopping pollId=${currentPollId}`);
+            
+            clearTimers();
+            pollIdRef.current += 1; // Authoritative cancellation token
+            isPollingInFlightRef.current = false;
+
+            if (intel.status === 'COMPLETED' || intel.status === 'PARTIAL') {
+              await fetchGraphAndInsights(wId);
+            } else {
+              setStatusState('failed');
+              setError(mapErrorText(intel.error, null));
+            }
+            console.log(`[Intelligence UI] polling stopped pollId=${currentPollId}`);
+            return;
           } else {
-            setStatusState('empty');
+            // Update active step text based on backend extraction stage
+            if (intel.status === 'READY') {
+              setActiveStepText('Initializing workshop context...');
+            } else if (intel.status === 'PROCESSING') {
+              setActiveStepText(`Extracting core concepts... (Processed ${processed}/${total} resources)`);
+            } else if (intel.status === 'EXTRACTING_RELATIONSHIPS') {
+              setActiveStepText('Extracting concept relationships...');
+            } else {
+              setActiveStepText('Analyzing workspace concepts...');
+            }
           }
-        } else if (status === 'FAILED') {
-          clearTimers();
-          setStatusState('failed');
-          setError(mapDoc?.error || 'AI generation failed.');
         }
       } catch (err) {
-        console.error('[MindMap Polling] Error checking status:', err);
+        console.error('[Workshop Status Polling] Error:', err);
+      } finally {
+        isPollingInFlightRef.current = false;
+        // Schedule next poll check ONLY if we did not transition to terminal/reset state
+        if (!isTerminal && currentWorkshopIdRef.current === wId && currentPollId === pollIdRef.current) {
+          console.log(`[Intelligence UI] scheduling next poll pollId=${currentPollId}`);
+          pollingTimeoutRef.current = setTimeout(poll, 2500);
+        }
       }
-    }, 2500);
-  }, []);
+    };
 
-  // Check database first (cache-first Step 14 & 15)
-  const checkExistingMindMap = useCallback(async (wId) => {
+    pollingTimeoutRef.current = setTimeout(poll, 2500);
+  }, [clearTimers, isTerminalStatus]);
+
+  const checkWorkspaceStatus = useCallback(async (wId) => {
     if (!wId) return;
     clearTimers();
-    currentWorkspaceIdRef.current = wId;
-
+    currentWorkshopIdRef.current = wId;
     setStatusState('loading');
     setError(null);
-    setMindMapData(null);
-    setSelectedNode(null);
 
-    // If workspace contains no content, mark empty instantly (Step 27)
-    const hasValidContent = resources.some(r => {
-      const text = r.data?.extractedText || r.data?.transcript || r.data?.content || '';
-      return text && text.trim().length > 0;
-    });
-
+    // If workspace contains no indexable resources, mark empty instantly
+    const hasValidContent = resources.some(r => r.type === 'pdf' || r.type === 'youtube' || r.type === 'notes');
     if (!hasValidContent) {
       setStatusState('empty');
       return;
     }
 
     try {
-      const res = await getMindMapByWorkspace(wId);
-      const mapDoc = res?.data?.mindMap;
-      const status = res?.data?.status;
-
-      if (status === 'COMPLETED' && mapDoc) {
-        if (mapDoc.nodes && mapDoc.nodes.length > 0) {
-          setMindMapData(mapDoc);
-          setStatusState('completed');
-        } else {
-          setStatusState('empty');
-        }
-      } else if (status === 'GENERATING') {
-        startPolling(wId);
-      } else if (status === 'FAILED') {
+      const intel = await getWorkshopIntelligence(wId);
+      if (intel) {
+        setRawStatus(intel.status);
+      }
+      if (!intel || intel.status === 'NOT_STARTED') {
+        setStatusState('onboarding');
+      } else if (intel.status === 'COMPLETED' || intel.status === 'PARTIAL') {
+        await fetchGraphAndInsights(wId);
+      } else if (intel.status === 'FAILED') {
         setStatusState('failed');
-        setError(mapDoc?.error || 'Your workspace learning map is temporarily unavailable.');
+        setError(mapErrorText(intel.error, null));
       } else {
-        // NOT_FOUND
-        setStatusState('not_generated');
+        startPollingStatus(wId);
       }
     } catch (err) {
-      console.error('[MindMap Check] Failed lookup:', err);
-      setStatusState('failed');
-      setError('Your workspace learning map is temporarily unavailable.');
+      // If 404 is returned, backend indicates it hasn't started yet
+      if (err.statusCode === 404) {
+        setStatusState('onboarding');
+      } else {
+        console.error('[Workshop Initial Check] Failed:', err);
+        setStatusState('failed');
+        setError(mapErrorText(err.message, err.code));
+      }
     }
-  }, [resources, startPolling]);
+  }, [resources, startPollingStatus, clearTimers]);
 
-  const handleGenerateMindMap = useCallback(async () => {
-    if (!workspaceId) return;
+  const handleGenerateIntelligence = useCallback(async () => {
+    if (!workshopId || isGeneratingRef.current || statusState === 'generating') {
+      console.log('[Intelligence UI] retry click ignored');
+      return;
+    }
+    
+    isGeneratingRef.current = true;
+    console.log('[Intelligence UI] retry click accepted');
+    console.log('[Intelligence UI] generation request started');
+
     setStatusState('generating');
+    setActiveStepText('Initializing workshop context...');
     setError(null);
-    try {
-      await generateMindMap(workspaceId);
-      startPolling(workspaceId);
-    } catch (err) {
-      console.error('[MindMap Generate] Failed:', err);
-      setStatusState('failed');
-      setError(err.message || 'Failed to trigger mind map generation. Please try again.');
-    }
-  }, [workspaceId, startPolling]);
 
-  // Load when workspace changes
+    try {
+      console.log('[Intelligence UI] POST generation triggered');
+      // Step 1: Initialize
+      const initIntel = await initializeWorkshopIntelligence(workshopId);
+      if (initIntel) {
+        setRawStatus(initIntel.status);
+      }
+      
+      // Step 2: Extract Concepts
+      setActiveStepText('Analyzing files & extracting concepts...');
+      const extractIntel = await extractWorkshopKnowledge(workshopId);
+      if (extractIntel) {
+        setRawStatus(extractIntel.status);
+      }
+
+      // Step 3: Extract Relationships
+      setActiveStepText('Connecting concepts and relationships...');
+      const relIntel = await extractWorkshopRelationships(workshopId);
+      if (relIntel) {
+        setRawStatus(relIntel.status);
+      }
+
+      console.log(`[Intelligence UI] generation request completed status=${relIntel?.status || 'unknown'}`);
+      // Step 4: Status check & Polling
+      startPollingStatus(workshopId);
+    } catch (err) {
+      console.log('[Intelligence UI] generation request completed status=failed');
+      console.error('[Workshop Generate Sequence] Failed:', err);
+      setStatusState('failed');
+      setError(mapErrorText(err.message, err.code));
+    } finally {
+      isGeneratingRef.current = false;
+    }
+  }, [workshopId, startPollingStatus, statusState]);
+
+  // Load when workshop changes
   useEffect(() => {
-    if (workspaceId) {
-      checkExistingMindMap(workspaceId);
+    if (workshopId) {
+      checkWorkspaceStatus(workshopId);
     }
     return () => clearTimers();
-  }, [workspaceId]);
+  }, [workshopId]);
 
-  const activeTheme = useMemo(() => {
-    if (!selectedNode) return null;
-    return COLOR_THEMES[selectedNode.type] || COLOR_THEMES.CONCEPT;
-  }, [selectedNode]);
+  // Auto-switch to details tab when selectedNodeId changes
+  useEffect(() => {
+    if (selectedNodeId) {
+      setActiveSidebarTab('details');
+    }
+  }, [selectedNodeId]);
+
+  // Retrieve active selected node details
+  const selectedConcept = useMemo(() => {
+    if (!selectedNodeId || !graphData?.nodes) return null;
+    return graphData.nodes.find(n => n.id === selectedNodeId);
+  }, [selectedNodeId, graphData?.nodes]);
+
+  // Highlighting prerequisite path helper
+  const handleSelectPath = useCallback((path) => {
+    const ids = new Set(path.concepts.map(c => c.id));
+    setHighlightedNodeIds(ids);
+  }, []);
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: '#09090b', overflow: 'hidden', position: 'relative' }}>
@@ -542,7 +640,7 @@ export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            🎓 AI Workspace Learning Map
+            🎓 Workshop Intelligence Map
           </span>
           <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>
             ({workspaceTitle})
@@ -550,109 +648,184 @@ export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
         </div>
 
         {/* Node search input */}
-        {statusState === 'completed' && mindMapData && (
-          <div 
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '6px',
-              padding: '6px 12px',
-              width: '220px'
-            }}
-          >
-            <Search size={12} style={{ color: 'rgba(255,255,255,0.4)' }} />
-            <input
-              type="text"
-              placeholder="Search concepts & files..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+        {statusState === 'completed' && graphData && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* If the state is PARTIAL, display a warning indicator and a retry button */}
+            {rawStatus === 'PARTIAL' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '16px' }}>
+                <span 
+                  style={{ 
+                    fontSize: '11px', 
+                    color: '#fb923c', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px',
+                    backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                    border: '1px solid rgba(251, 146, 60, 0.3)',
+                    padding: '4px 8px',
+                    borderRadius: '6px'
+                  }}
+                  title="Some files failed to extract concepts."
+                >
+                  <AlertTriangle size={12} />
+                  Partial Map
+                </span>
+                <button
+                  onClick={handleGenerateIntelligence}
+                  disabled={statusState === 'generating'}
+                  style={{
+                    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+                    border: '1px solid rgba(251, 146, 60, 0.4)',
+                    color: '#fdba74',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '10.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <RefreshCw size={11} />
+                  <span>Retry Failed Files</span>
+                </button>
+              </div>
+            )}
+
+            {/* Relationship Filters */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '16px' }}>
+              <SlidersHorizontal size={12} style={{ color: 'rgba(255,255,255,0.4)' }} />
+              <select
+                value={relationshipFilter}
+                onChange={(e) => setRelationshipFilter(e.target.value)}
+                style={{
+                  background: '#0c0f17',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '4px',
+                  color: '#fff',
+                  fontSize: '10.5px',
+                  padding: '4px 8px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="ALL">All Relationships</option>
+                <option value="PREREQUISITE_OF">Prerequisites</option>
+                <option value="RELATED_TO">Related To</option>
+                <option value="PART_OF">Part Of</option>
+                <option value="EXPLAINS">Explains</option>
+                <option value="LEADS_TO">Leads To</option>
+                <option value="CONTRASTS_WITH">Contrasts With</option>
+              </select>
+            </div>
+
+            {/* Search */}
+            <div 
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#fff',
-                fontSize: '11px',
-                outline: 'none',
-                width: '100%'
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '6px',
+                padding: '6px 12px',
+                width: '200px'
               }}
-            />
+            >
+              <Search size={12} style={{ color: 'rgba(255,255,255,0.4)' }} />
+              <input
+                type="text"
+                placeholder="Search concepts..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '11px',
+                  outline: 'none',
+                  width: '100%'
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
 
-      {/* 2. Viewport Canvas */}
+      {/* 2. Main Viewport Panel */}
       <div style={{ flex: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>
         
         {/* Loading Shell Overlay */}
         {statusState === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#09090b', zIndex: 10 }}>
             <Loader2 size={32} className="animate-spin" style={{ color: '#a855f7' }} />
-            <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', marginTop: '10px' }}>Checking stored maps cache...</span>
+            <span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', marginTop: '10px' }}>Loading workshop graph data...</span>
           </div>
         )}
 
-        {/* Preparing Mind Map State Shell (Step 15) */}
+        {/* Generating state Loader */}
         {statusState === 'generating' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#09090b', zIndex: 10 }}>
             <Loader2 size={36} className="animate-spin" style={{ color: '#c084fc', marginBottom: '14px' }} />
-            <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff' }}>Your workspace learning map is being prepared.</div>
-            <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', textAlign: 'center', maxWidth: '340px', lineHeight: 1.45 }}>
-              MindSync is analyzing and connecting all resource documents in this workspace automatically.
+            <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff' }}>Generating Workshop Intelligence Map...</div>
+            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '6px', textAlign: 'center' }}>
+              {activeStepText}
             </div>
           </div>
         )}
 
-        {/* Failed Generation State Shell */}
+        {/* Failed state Shell */}
         {statusState === 'failed' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#09090b', padding: '24px', boxSizing: 'border-box', zIndex: 10 }}>
             <AlertTriangle size={36} style={{ color: '#ef4444', marginBottom: '14px' }} />
-            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>Map Generation Failed</h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5 }}>
-              {error || 'Your workspace learning map is temporarily unavailable.'}
+            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>Extraction Failed</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', textAlign: 'center', maxWidth: '480px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+              {error || 'An error occurred while building workshop intelligence.'}
             </p>
             <button
-              onClick={handleGenerateMindMap}
+              onClick={handleGenerateIntelligence}
+              disabled={statusState === 'generating'}
               style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                backgroundColor: statusState === 'generating' ? 'rgba(255,255,255,0.05)' : 'rgba(239, 68, 68, 0.1)',
                 border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#f87171',
+                color: statusState === 'generating' ? 'rgba(255,255,255,0.3)' : '#f87171',
                 padding: '8px 18px',
                 borderRadius: '8px',
-                fontSize: '0.8rem',
+                fontSize: '11.5px',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: statusState === 'generating' ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px'
               }}
             >
               <RefreshCw size={13} />
-              <span>Retry Generation</span>
+              <span>Retry Map Generation</span>
             </button>
           </div>
         )}
 
-        {/* Not Generated State Shell */}
-        {statusState === 'not_generated' && (
+        {/* Onboarding page (Not Generated) */}
+        {statusState === 'onboarding' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#09090b', padding: '24px', boxSizing: 'border-box', zIndex: 10 }}>
             <Sparkles size={36} style={{ color: '#a855f7', marginBottom: '14px' }} />
-            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>Learning Map Not Generated</h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5 }}>
-              Generate a consolidated workspace learning map to visually connect all resources in this workspace.
+            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>Workshop Intelligence Not Generated</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', textAlign: 'center', maxWidth: '340px', lineHeight: 1.5 }}>
+              Analyze all files in this workshop to extract concepts, prerequisites, and build an interactive learning path map automatically.
             </p>
             <button
-              onClick={handleGenerateMindMap}
+              onClick={handleGenerateIntelligence}
+              disabled={statusState === 'generating'}
               style={{
-                backgroundColor: '#a855f7',
-                color: '#fff',
+                backgroundColor: statusState === 'generating' ? 'rgba(255,255,255,0.05)' : '#a855f7',
+                color: statusState === 'generating' ? 'rgba(255,255,255,0.3)' : '#fff',
                 border: 'none',
                 padding: '8px 18px',
                 borderRadius: '8px',
-                fontSize: '0.8rem',
+                fontSize: '11.5px',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: statusState === 'generating' ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px'
@@ -664,156 +837,422 @@ export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
           </div>
         )}
 
-        {/* Empty State Shell (Step 27) */}
+        {/* Empty state (No indexable resources) */}
         {statusState === 'empty' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: '#09090b', padding: '24px', boxSizing: 'border-box' }}>
             <Sparkles size={36} style={{ color: '#a855f7', marginBottom: '14px' }} />
-            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>No learning resources yet.</h3>
+            <h3 style={{ margin: 0, fontSize: '14px', color: '#fff', fontWeight: 600, marginBottom: '6px' }}>No learning resources yet</h3>
             <p style={{ margin: 0, fontSize: '11.5px', color: 'rgba(255,255,255,0.4)', textAlign: 'center', maxWidth: '320px', lineHeight: 1.5 }}>
-              Add lecture PDFs, videos, or study notes. A consolidated workspace learning map will compile automatically in the background.
+              Add lecture PDFs, video links, or study notes. Once you add files, you can build a workshop intelligence map here.
             </p>
           </div>
         )}
 
-        {/* React Flow Graph rendering container */}
-        {statusState === 'completed' && mindMapData && (
-          <div style={{ flex: 1, height: '100%', position: 'relative' }}>
-            <ReactFlowProvider>
-              <MindMapCanvas 
-                nodes={mindMapData.nodes} 
-                edges={mindMapData.edges}
-                setSelectedNode={setSelectedNode}
-                searchQuery={searchQuery}
-              />
-            </ReactFlowProvider>
-          </div>
-        )}
+        {/* Completed graph view */}
+        {statusState === 'completed' && graphData && (
+          <div style={{ flex: 1, display: 'flex', height: '100%', overflow: 'hidden' }}>
+            
+            {/* ReactFlow graph viewport */}
+            <div style={{ flex: 1, height: '100%', position: 'relative' }}>
+              <ReactFlowProvider>
+                <MindMapCanvas 
+                  nodes={graphData.nodes} 
+                  edges={graphData.edges}
+                  selectedNodeId={selectedNodeId}
+                  setSelectedNodeId={setSelectedNodeId}
+                  searchQuery={searchQuery}
+                  relationshipFilter={relationshipFilter}
+                  highlightedNodeIds={highlightedNodeIds}
+                />
+              </ReactFlowProvider>
+            </div>
 
-        {/* 3. Node Detail Context Drawer (Step 7 & 24) */}
-        {statusState === 'completed' && selectedNode && activeTheme && (
-          <div 
-            style={{
-              width: '340px',
-              backgroundColor: '#0c0f17',
-              borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
-              display: 'flex',
-              flexDirection: 'column',
-              zIndex: 8,
-              boxShadow: '-8px 0 24px rgba(0,0,0,0.5)'
-            }}
-          >
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Info size={13} style={{ color: activeTheme.color }} />
-                <span style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {/* Collapsible tabbed sidebar */}
+            <div 
+              style={{
+                width: '380px',
+                backgroundColor: '#0c0f17',
+                borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 8,
+                boxShadow: '-8px 0 24px rgba(0,0,0,0.5)',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Tab selectors */}
+              <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(14, 17, 24, 0.95)' }}>
+                <button
+                  onClick={() => {
+                    setActiveSidebarTab('insights');
+                    setHighlightedNodeIds(new Set());
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeSidebarTab === 'insights' ? '2px solid #a855f7' : 'none',
+                    color: activeSidebarTab === 'insights' ? '#fff' : 'rgba(255,255,255,0.5)',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textTransform: 'uppercase'
+                  }}
+                >
+                  Insights Summary
+                </button>
+                <button
+                  onClick={() => setActiveSidebarTab('details')}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: activeSidebarTab === 'details' ? '2px solid #a855f7' : 'none',
+                    color: activeSidebarTab === 'details' ? '#fff' : 'rgba(255,255,255,0.5)',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textTransform: 'uppercase'
+                  }}
+                >
                   Concept Details
-                </span>
-              </div>
-              <button 
-                onClick={() => setSelectedNode(null)} 
-                style={{ border: 'none', background: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
-              >
-                Close
-              </button>
-            </div>
-
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, overflowY: 'auto' }}>
-              
-              <div>
-                <span style={{ 
-                  fontSize: '8.5px', 
-                  fontWeight: 800, 
-                  color: activeTheme.color, 
-                  backgroundColor: activeTheme.bg,
-                  border: `1px solid ${activeTheme.border}`,
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  textTransform: 'uppercase'
-                }}>
-                  {selectedNode.type}
-                </span>
-                <h3 style={{ margin: '8px 0 4px 0', fontSize: '15px', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
-                  {selectedNode.label}
-                </h3>
+                </button>
               </div>
 
-              {selectedNode.description && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Description</span>
-                  <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.45 }}>
-                    {selectedNode.description}
-                  </p>
-                </div>
-              )}
-
-              {/* Source References citations list */}
-              {selectedNode.sources && selectedNode.sources.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '14px' }}>
-                  <span style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Source References</span>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {selectedNode.sources.map((src, index) => {
-                      // Lookup matching resource in the workspace list
-                      const matchedRes = resources.find(r => 
-                        r._id?.toString() === src.resourceId?.toString() || 
-                        r.url === src.resourceId || 
-                        r.title?.toLowerCase() === src.resourceName?.toLowerCase()
-                      );
-
-                      return (
-                        <div 
-                          key={index} 
-                          style={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: '5px', 
-                            background: 'rgba(255,255,255,0.02)', 
-                            padding: '8px 12px', 
-                            borderRadius: '6px', 
-                            border: '1px solid rgba(255,255,255,0.04)' 
-                          }}
-                        >
-                          <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.75)', fontWeight: 550, wordBreak: 'break-all' }}>
-                            {src.resourceName || 'Resource Document'}
-                          </span>
-                          
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                            <span style={{ fontSize: '9.5px', color: '#c084fc', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              {matchedRes?.type === 'youtube' ? <Play size={10} /> : <FileText size={10} />}
-                              {src.pageNumber ? `Page ${src.pageNumber}` : src.timestamp ? `Timestamp ${src.timestamp}` : src.sectionTitle || 'Content Section'}
-                            </span>
-
-                            {matchedRes && onNavigateToSource && (
-                              <button
-                                onClick={() => onNavigateToSource(matchedRes, src.pageNumber, src.timestamp)}
-                                style={{
-                                  backgroundColor: 'rgba(168, 85, 247, 0.12)',
-                                  border: '1px solid rgba(168, 85, 247, 0.3)',
-                                  borderRadius: '4px',
-                                  color: '#c084fc',
-                                  fontSize: '8.5px',
-                                  fontWeight: 700,
-                                  padding: '4px 8px',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.15s ease'
-                                }}
-                              >
-                                Jump to Source
-                              </button>
-                            )}
-                          </div>
+              {/* Tab Contents */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px', boxSizing: 'border-box' }}>
+                {activeSidebarTab === 'insights' && insightsData && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    
+                    {/* Summary statistics */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Summary</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#a855f7' }}>{insightsData.summary.conceptCount}</div>
+                          <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>Concepts</div>
                         </div>
-                      );
-                    })}
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#3b82f6' }}>{insightsData.summary.relationshipCount}</div>
+                          <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>Relationships</div>
+                        </div>
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#10b981' }}>{insightsData.summary.connectedConceptCount}</div>
+                          <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>Connected</div>
+                        </div>
+                        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#ef4444' }}>{insightsData.summary.isolatedConceptCount}</div>
+                          <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)' }}>Isolated</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Cycle warnings */}
+                    {insightsData.cycles && insightsData.cycles.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 800, color: '#ef4444', textTransform: 'uppercase' }}>⚠️ Cycle Warning Detected</span>
+                        <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '10px 12px', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <span style={{ fontSize: '10.5px', color: '#fca5a5', lineHeight: 1.4 }}>
+                            A cyclic dependency exists in your prerequisites graph structure. Review loops:
+                          </span>
+                          {insightsData.cycles.map((cyc, cIdx) => (
+                            <div key={cIdx} style={{ fontSize: '9.5px', color: '#f87171', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                              {cyc.conceptIds.map(cid => graphData.nodes.find(n => n.id === cid)?.data?.name || cid).join(' → ')}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Important concepts list */}
+                    {insightsData.importantConcepts && insightsData.importantConcepts.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Important Concepts</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {insightsData.importantConcepts.slice(0, 5).map((c) => (
+                            <div 
+                              key={c.id} 
+                              onClick={() => setSelectedNodeId(c.id)}
+                              style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                background: selectedNodeId === c.id ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.02)', 
+                                border: selectedNodeId === c.id ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.04)',
+                                padding: '8px 12px', 
+                                borderRadius: '6px', 
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <span style={{ fontSize: '11px', color: '#fff', fontWeight: 550 }}>{c.name}</span>
+                              <span style={{ fontSize: '9.5px', color: '#ec4899', fontWeight: 700 }}>Imp: {c.importance.toFixed(1)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Foundational concepts list */}
+                    {insightsData.foundationalConcepts && insightsData.foundationalConcepts.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Foundational Concepts (Prerequisites)</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {insightsData.foundationalConcepts.slice(0, 5).map((c) => (
+                            <div 
+                              key={c.id} 
+                              onClick={() => setSelectedNodeId(c.id)}
+                              style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                background: selectedNodeId === c.id ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.02)', 
+                                border: selectedNodeId === c.id ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.04)',
+                                padding: '8px 12px', 
+                                borderRadius: '6px', 
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <span style={{ fontSize: '11px', color: '#fff', fontWeight: 550 }}>{c.name}</span>
+                              <span style={{ fontSize: '9.5px', color: '#3b82f6', fontWeight: 600 }}>
+                                Dependents: {c.dependentConceptCount}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Hub concepts list */}
+                    {insightsData.hubConcepts && insightsData.hubConcepts.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Hub Concepts (Highly Connected)</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {insightsData.hubConcepts.slice(0, 5).map((c) => (
+                            <div 
+                              key={c.id} 
+                              onClick={() => setSelectedNodeId(c.id)}
+                              style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                background: selectedNodeId === c.id ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.02)', 
+                                border: selectedNodeId === c.id ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.04)',
+                                padding: '8px 12px', 
+                                borderRadius: '6px', 
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <span style={{ fontSize: '11px', color: '#fff', fontWeight: 550 }}>{c.name}</span>
+                              <span style={{ fontSize: '9.5px', color: '#10b981', fontWeight: 600 }}>Degree: {c.degree}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Isolated concepts */}
+                    {insightsData.isolatedConcepts && insightsData.isolatedConcepts.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Isolated Concepts</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {insightsData.isolatedConcepts.slice(0, 5).map((c) => (
+                            <div 
+                              key={c.id} 
+                              onClick={() => setSelectedNodeId(c.id)}
+                              style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center', 
+                                background: selectedNodeId === c.id ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.02)', 
+                                border: selectedNodeId === c.id ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(255,255,255,0.04)',
+                                padding: '8px 12px', 
+                                borderRadius: '6px', 
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <span style={{ fontSize: '11px', color: '#fff', fontWeight: 550 }}>{c.name}</span>
+                              <span style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.4)' }}>Disconnected</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Prerequisite paths */}
+                    {insightsData.prerequisitePaths && insightsData.prerequisitePaths.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Prerequisite Paths (Learning Sequence)</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {insightsData.prerequisitePaths.map((path, pIdx) => (
+                            <div 
+                              key={pIdx} 
+                              onClick={() => handleSelectPath(path)}
+                              style={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                gap: '5px', 
+                                background: 'rgba(255,255,255,0.02)', 
+                                border: '1px solid rgba(255,255,255,0.04)', 
+                                padding: '10px 12px', 
+                                borderRadius: '6px', 
+                                cursor: 'pointer'
+                              }}
+                              title="Click to highlight learning path on graph"
+                            >
+                              <span style={{ fontSize: '9.5px', color: '#a855f7', fontStyle: 'normal', fontWeight: 700 }}>Path {pIdx + 1}</span>
+                              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.45 }}>
+                                {path.concepts.map(c => c.name).join(' → ')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Relationship confidence stats */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ fontSize: '9px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Relationship Confidence</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.6)' }}>High Confidence (≥ 0.80):</span>
+                          <span style={{ color: '#fff', fontWeight: 700 }}>{insightsData.relationshipQuality.highConfidence}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.6)' }}>Medium Confidence (0.50 - 0.79):</span>
+                          <span style={{ color: '#fff', fontWeight: 700 }}>{insightsData.relationshipQuality.mediumConfidence}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.6)' }}>Low Confidence (&lt; 0.50):</span>
+                          <span style={{ color: '#fff', fontWeight: 700 }}>{insightsData.relationshipQuality.lowConfidence}</span>
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
-                </div>
-              )}
+                )}
+
+                {activeSidebarTab === 'details' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {selectedConcept ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div>
+                          <span style={{ 
+                            fontSize: '8.5px', 
+                            fontWeight: 800, 
+                            color: selectedConcept.data.importance >= 0.8 ? '#ec4899' : (selectedConcept.data.importance >= 0.5 ? '#3b82f6' : '#10b981'), 
+                            backgroundColor: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            textTransform: 'uppercase'
+                          }}>
+                            Concept ID: {selectedConcept.id.slice(-6)}
+                          </span>
+                          <h3 style={{ margin: '8px 0 4px 0', fontSize: '14.5px', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
+                            {selectedConcept.data.name}
+                          </h3>
+                        </div>
+
+                        {selectedConcept.data.description && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Description</span>
+                            <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.45 }}>
+                              {selectedConcept.data.description}
+                            </p>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.5)' }}>Concept Importance:</span>
+                          <span style={{ fontWeight: 700, color: '#ec4899' }}>{selectedConcept.data.importance.toFixed(2)}</span>
+                        </div>
+
+                        {/* Citations List */}
+                        {selectedConcept.data.sources && selectedConcept.data.sources.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+                            <span style={{ fontSize: '9px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Citations & Sources</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {selectedConcept.data.sources.map((src, index) => {
+                                // Find matched resource
+                                const matchedRes = resources.find(r => 
+                                  r._id?.toString() === src.resourceId?.toString() || 
+                                  r.url === src.resourceId || 
+                                  r.title?.toLowerCase() === src.resourceId?.toLowerCase() ||
+                                  (src.resourceName && r.title?.toLowerCase() === src.resourceName?.toLowerCase())
+                                );
+
+                                return (
+                                  <div 
+                                    key={index} 
+                                    style={{ 
+                                      display: 'flex', 
+                                      flexDirection: 'column', 
+                                      gap: '6px', 
+                                      background: 'rgba(255,255,255,0.02)', 
+                                      padding: '8px 12px', 
+                                      borderRadius: '6px', 
+                                      border: '1px solid rgba(255,255,255,0.04)' 
+                                    }}
+                                  >
+                                    <span style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.8)', fontWeight: 550, wordBreak: 'break-all' }}>
+                                      {matchedRes?.title || src.resourceName || 'Resource document'}
+                                    </span>
+                                    
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <span style={{ fontSize: '9.5px', color: '#c084fc', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        {matchedRes?.type === 'youtube' ? <Play size={10} /> : <FileText size={10} />}
+                                        {src.pageStart ? `Page ${src.pageStart}` : src.timestampStart ? `Time: ${src.timestampStart}s` : 'Reference'}
+                                      </span>
+
+                                      {matchedRes && onNavigateToSource && (
+                                        <button
+                                          onClick={() => onNavigateToSource(matchedRes, src.pageStart, src.timestampStart)}
+                                          style={{
+                                            backgroundColor: 'rgba(168, 85, 247, 0.12)',
+                                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                                            borderRadius: '4px',
+                                            color: '#c084fc',
+                                            fontSize: '8.5px',
+                                            fontWeight: 700,
+                                            padding: '4px 8px',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s ease'
+                                          }}
+                                        >
+                                          Jump to Source
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '200px', color: 'rgba(255,255,255,0.4)', gap: '8px' }}>
+                        <Info size={24} />
+                        <span style={{ fontSize: '11px' }}>Select a concept node to view details.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+
           </div>
         )}
+
       </div>
       
-      {/* 3. Bottom Graph Footer */}
+      {/* Footer Info */}
       <div 
         style={{
           position: 'absolute',
@@ -833,7 +1272,7 @@ export const MindMapPanel = React.memo(({ session, onNavigateToSource }) => {
         }}
       >
         <Sparkles size={10} style={{ color: '#c084fc' }} />
-        <span>Double-click nodes to expand/collapse branches. Left-click selects a concept showing its cross-resource citations.</span>
+        <span>Double-click nodes or list nodes to focus, select filters to isolate relationships.</span>
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ class AICacheManager {
    * Generates a unique, model-independent and provider-independent fingerprint hash key.
    */
   generateKey(params) {
-    const { messages, systemInstruction, prompt, systemPrompt, temperature = 0.7, jsonMode = false } = params;
+    const { messages, systemInstruction, prompt, systemPrompt, temperature = 0.7, jsonMode = false, provider = '', model = '', version = 'v1' } = params;
 
     // 1. Extract prompt text
     let promptText = prompt || '';
@@ -32,7 +32,7 @@ class AICacheManager {
     const systemHash = crypto.createHash('md5').update(systemText).digest('hex');
 
     // 4. Build fingerprint key
-    return `ai_cache:${promptHash}:${systemHash}:${temperature}:${jsonMode ? 'json' : 'text'}`;
+    return `ai_cache:${version}:${provider}:${model}:${promptHash}:${systemHash}:${temperature}:${jsonMode ? 'json' : 'text'}`;
   }
 
   /**

@@ -29,7 +29,7 @@ export const ChatHeader = React.memo(({
   const badges = useMemo(() => {
     const list = [];
     if (resourceType === 'pdf') {
-      const pageCount = activeResource?.data?.pageCount || 33;
+      const pageCount = activeResource?.data?.pageCount || 0;
       const bytes = activeResource?.data?.fileSize || 3000000;
       const sizeStr = bytes > 1000000 ? `${(bytes / 1000000).toFixed(1)} MB` : `${Math.round(bytes / 1000)} KB`;
       
@@ -46,7 +46,9 @@ export const ChatHeader = React.memo(({
         list.push({ text: 'Indexed', bg: 'rgba(102, 184, 255, 0.1)', border: '1px solid rgba(102, 184, 255, 0.2)', color: '#66b8ff' });
       }
       
-      list.push({ text: `${pageCount} Pages` });
+      if (pageCount > 0) {
+        list.push({ text: `${pageCount} Pages` });
+      }
       list.push({ text: sizeStr });
     } else if (resourceType === 'youtube') {
       list.push({ text: 'Transcript Ready', bg: 'rgba(72, 239, 179, 0.1)', border: '1px solid rgba(72, 239, 179, 0.2)', color: '#48efb3' });

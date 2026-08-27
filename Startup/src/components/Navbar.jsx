@@ -94,10 +94,10 @@ export default function Navbar() {
           </li>
           <li>
             <Link 
-              className={location.pathname === '/about' ? 'active' : ''} 
-              to="/about"
+              className={location.pathname === '/study-rooms' ? 'active' : ''} 
+              to="/study-rooms"
             >
-              Community
+              Study Rooms
             </Link>
           </li>
           <li>
@@ -268,10 +268,10 @@ export default function Navbar() {
           <li>
             <Link 
               onClick={() => setIsMenuOpen(false)} 
-              className={location.pathname === '/about' ? 'active' : ''} 
-              to="/about"
+              className={location.pathname === '/study-rooms' ? 'active' : ''} 
+              to="/study-rooms"
             >
-              Community
+              Study Rooms
             </Link>
           </li>
           <li>

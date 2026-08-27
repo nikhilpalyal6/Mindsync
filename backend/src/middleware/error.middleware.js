@@ -39,6 +39,9 @@ const handleJWTExpiredError = () => ApiError.unauthorized('Token expired');
  * Never exposes stack traces in production.
  */
 export const errorHandler = (err, req, res, _next) => {
+  if (res.headersSent) {
+    return _next(err);
+  }
   let error = err;
 
   if (!(error instanceof ApiError)) {

@@ -306,7 +306,8 @@ class StudyController {
                 'resources.$.data.successfulPages': totalPages,
                 'resources.$.data.failedPages': 0,
                 'resources.$.data.extractionStatus': 'completed',
-                'resources.$.data.processingStatus': 'completed'
+                'resources.$.data.processingStatus': 'completed',
+                'resources.$.data.pages': pages
               };
 
               // If it's the active PDF in metadata, sync it
