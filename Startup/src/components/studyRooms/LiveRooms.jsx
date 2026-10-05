@@ -10,14 +10,6 @@ export default function LiveRooms({ rooms = [], currentUser, onStateChanged, onV
 
   const liveRooms = rooms.filter((r) => r.status === 'LIVE');
 
-  // Static mock images for avatars stack
-  const avatars = [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=64&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=64&q=80',
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=64&q=80',
-    'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=64&q=80'
-  ];
-
   const getElapsedString = (startStr) => {
     if (!startStr) return 'Live study';
     const elapsedMs = Date.now() - new Date(startStr).getTime();
@@ -87,13 +79,26 @@ export default function LiveRooms({ rooms = [], currentUser, onStateChanged, onV
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0' }}>
                   <div className="live-row-avatars-bar">
                     <div className="avatar-stack">
-                      {avatars.slice(0, Math.min(room.participantsCount, 4)).map((src, idx) => (
-                        <img
-                          key={src}
-                          src={src}
+                      {Array.from({ length: Math.min(room.participantsCount || 0, 4) }).map((_, idx) => (
+                        <div
+                          key={idx}
                           className="stack-img"
-                          alt={`Participant ${idx + 1}`}
-                        />
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: '#1e293b',
+                            border: '2px solid #0f172a',
+                            color: '#60a5fa',
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px'
+                          }}
+                        >
+                          👤
+                        </div>
                       ))}
                     </div>
                     {room.participantsCount > 4 && (

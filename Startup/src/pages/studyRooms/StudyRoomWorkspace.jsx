@@ -194,8 +194,10 @@ function StudyRoomWorkspaceContent({ user }) {
           })
           .catch((e) => console.error(e));
 
-        if (cameraActive) {
-          initiateCall(newPart.participantId);
+        if (cameraActive && !isAdmin && user?._id) {
+          if (String(user._id) > String(newPart.participantId)) {
+            initiateCall(newPart.participantId);
+          }
         }
         break;
       }
@@ -215,6 +217,11 @@ function StudyRoomWorkspaceContent({ user }) {
           }
           return p;
         }));
+        if (cameraState === 'CAMERA_ON' && !isAdmin && user?._id) {
+          if (String(user._id) > String(participantId)) {
+            initiateCall(participantId);
+          }
+        }
         break;
       }
 
@@ -396,6 +403,19 @@ function StudyRoomWorkspaceContent({ user }) {
         .catch((err) => console.error('[WORKSPACE] Auto camera startup failed:', err));
     }
   }, [connected, isAdmin, cameraActive, toggleCamera]);
+
+  // Synchronize peer calls with existing active camera participants when local camera turns on
+  useEffect(() => {
+    if (cameraActive && !isAdmin && user?._id) {
+      participants.forEach((p) => {
+        const pId = String(p.user?._id || p.user || p.participantId || '');
+        if (!pId || pId === String(user._id)) return;
+        if (p.cameraState === 'CAMERA_ON' && String(user._id) > pId) {
+          initiateCall(pId);
+        }
+      });
+    }
+  }, [cameraActive, isAdmin, user?._id, participants, initiateCall]);
 
   // --------------------------------------------------
   // REST LOAD & ACTION HANDLERS

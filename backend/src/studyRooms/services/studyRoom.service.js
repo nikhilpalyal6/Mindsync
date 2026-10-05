@@ -617,9 +617,14 @@ class StudyRoomService {
   }
 
   /**
-   * Create Personal Goal
+      * Create Personal Goal
    */
-  async createGoal(roomId, userId, title, description, studyTaskId = null) {
+  async createGoal(roomId, userId, title, description, studyTaskId = null, progress = 0) {
+    const room = await StudyRoom.findById(roomId);
+    if (!room) {
+      throw ApiError.notFound('Study room not found');
+    }
+
     const isParticipant = await StudyRoomParticipant.findOne({
       room: roomId,
       user: userId,
@@ -658,6 +663,7 @@ class StudyRoomService {
       user: userId,
       title,
       description,
+      progress: progress || 0,
       studyTask: studyTaskRef
     });
 
@@ -675,6 +681,14 @@ class StudyRoomService {
    * Get Personal Goals for current user in the room
    */
   async listGoals(roomId, userId) {
+    const room = await StudyRoom.findById(roomId);
+    if (!room) {
+      throw ApiError.notFound('Study room not found');
+    }
+    const participant = await StudyRoomParticipant.findOne({ room: roomId, user: userId });
+    if (!participant) {
+      throw ApiError.forbidden('You do not have access to this study room');
+    }
     return StudyRoomGoal.find({ room: roomId, user: userId }).populate('studyTask');
   }
 
@@ -682,6 +696,11 @@ class StudyRoomService {
    * Update Goal Details (Owner only)
    */
   async updateGoal(roomId, userId, goalId, data) {
+    const room = await StudyRoom.findById(roomId);
+    if (!room) {
+      throw ApiError.notFound('Study room not found');
+    }
+
     const goal = await StudyRoomGoal.findOne({ _id: goalId, room: roomId });
     if (!goal) {
       throw ApiError.notFound('Goal not found');
@@ -691,11 +710,57 @@ class StudyRoomService {
       throw ApiError.forbidden('You can only modify your own goals');
     }
 
-    Object.keys(data).forEach((key) => {
-      if (data[key] !== undefined) {
-        goal[key] = data[key];
+    if (goal.status === 'COMPLETED') {
+      if (data.progress !== undefined && Number(data.progress) !== 100) {
+        throw new ApiError(HTTP_STATUS.BAD_REQUEST, 'Cannot modify progress of a completed goal');
       }
-    });
+      if (data.status !== undefined && data.status !== 'COMPLETED') {
+        throw new ApiError(HTTP_STATUS.BAD_REQUEST, 'Cannot reopen a completed goal');
+      }
+      if (data.studyTaskId !== undefined || data.studyTask !== undefined) {
+        throw new ApiError(HTTP_STATUS.BAD_REQUEST, 'Cannot modify planner link of a completed goal');
+      }
+    }
+
+    if (data.progress !== undefined) {
+      const prog = Number(data.progress);
+      if (isNaN(prog) || prog < 0 || prog > 100) {
+        throw new ApiError(HTTP_STATUS.BAD_REQUEST, 'Progress must be a number between 0 and 100');
+      }
+      goal.progress = prog;
+    }
+
+    if (data.studyTaskId !== undefined) {
+      if (data.studyTaskId === null || data.studyTaskId === '') {
+        goal.studyTask = null;
+      } else {
+        const StudyTask = (await import('../../models/studyTask.model.js')).default;
+        const task = await StudyTask.findOne({ _id: data.studyTaskId, user: userId });
+        if (!task) {
+          throw new ApiError(HTTP_STATUS.NOT_FOUND, 'Study task not found or unauthorized.');
+        }
+        if (task.status === 'COMPLETED') {
+          throw new ApiError(HTTP_STATUS.CONFLICT, 'Task already completed.');
+        }
+        goal.studyTask = task._id;
+      }
+    }
+
+    if (data.title !== undefined) {
+      const trimmedTitle = String(data.title).trim();
+      if (!trimmedTitle) {
+        throw new ApiError(HTTP_STATUS.BAD_REQUEST, 'Goal title cannot be empty');
+      }
+      goal.title = trimmedTitle;
+    }
+
+    if (data.description !== undefined) {
+      goal.description = String(data.description).trim();
+    }
+
+    if (data.status !== undefined && goal.status !== 'COMPLETED') {
+      goal.status = data.status;
+    }
 
     await goal.save();
     return goal;
@@ -705,6 +770,11 @@ class StudyRoomService {
    * Complete Personal Goal (Owner only)
    */
   async completeGoal(roomId, userId, goalId) {
+    const room = await StudyRoom.findById(roomId);
+    if (!room) {
+      throw ApiError.notFound('Study room not found');
+    }
+
     const goal = await StudyRoomGoal.findOne({ _id: goalId, room: roomId });
     if (!goal) {
       throw ApiError.notFound('Goal not found');
@@ -715,19 +785,20 @@ class StudyRoomService {
     }
 
     goal.status = 'COMPLETED';
+    goal.progress = 100;
     await goal.save();
 
     if (goal.studyTask) {
-      try {
-        const StudyTask = (await import('../../models/studyTask.model.js')).default;
-        const task = await StudyTask.findOne({ _id: goal.studyTask, user: userId });
-        if (task) {
-          task.status = 'COMPLETED';
-          task.completedAt = new Date();
-          await task.save();
-        }
-      } catch (err) {
-        console.error('[STUDY ROOM SERVICE] Error synchronizing task completion to planner:', err);
+      const StudyTask = (await import('../../models/studyTask.model.js')).default;
+      const task = await StudyTask.findOne({ _id: goal.studyTask, user: userId });
+      if (!task) {
+        // If studyTask was deleted independently, handle it gracefully
+        goal.studyTask = null;
+        await goal.save();
+      } else {
+        task.status = 'COMPLETED';
+        task.completedAt = new Date();
+        await task.save();
       }
     }
 
@@ -739,6 +810,28 @@ class StudyRoomService {
     });
 
     return goal;
+  }
+
+  /**
+   * Delete Personal Goal (Owner only)
+   */
+  async deleteGoal(roomId, userId, goalId) {
+    const room = await StudyRoom.findById(roomId);
+    if (!room) {
+      throw ApiError.notFound('Study room not found');
+    }
+
+    const goal = await StudyRoomGoal.findOne({ _id: goalId, room: roomId });
+    if (!goal) {
+      throw ApiError.notFound('Goal not found');
+    }
+
+    if (goal.user.toString() !== userId.toString()) {
+      throw ApiError.forbidden('You can only delete your own goals');
+    }
+
+    await StudyRoomGoal.deleteOne({ _id: goalId });
+    return { success: true, message: 'Goal deleted successfully' };
   }
 
   /**

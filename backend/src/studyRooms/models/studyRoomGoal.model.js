@@ -32,6 +32,13 @@ const studyRoomGoalSchema = new mongoose.Schema(
       default: null,
       index: true
     },
+    progress: {
+      type: Number,
+      required: true,
+      min: [0, 'Progress cannot be less than 0'],
+      max: [100, 'Progress cannot exceed 100'],
+      default: 0
+    },
     status: {
       type: String,
       required: true,

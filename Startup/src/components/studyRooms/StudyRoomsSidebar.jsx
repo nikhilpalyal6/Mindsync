@@ -3,7 +3,7 @@ import { Compass, User, Calendar, CheckSquare, History, BarChart2, ChevronDown, 
 import StudyStats from './StudyStats';
 import { showToast } from '../Toast';
 
-export default function StudyRoomsSidebar({ activeView, onViewChanged, isOpen, onClose }) {
+export default function StudyRoomsSidebar({ activeView, onViewChanged, isOpen, onClose, rooms = [] }) {
   const menuItems = [
     { id: 'explore', label: 'Explore Rooms', icon: Compass, hasDropdown: true },
     { id: 'my-rooms', label: 'My Rooms', icon: User },
@@ -41,7 +41,7 @@ export default function StudyRoomsSidebar({ activeView, onViewChanged, isOpen, o
         })}
       </div>
 
-      <StudyStats />
+      <StudyStats rooms={rooms} />
 
       <div className="premium-upgrade-box">
         <div className="premium-crown">

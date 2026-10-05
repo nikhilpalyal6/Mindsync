@@ -150,7 +150,7 @@ export default function useStudyRoomWebRTC(roomId, currentUserId, sendSocketMess
 
       // Trigger renegotiation on state change to caller
       peersRef.current.forEach(async (pc, targetUserId) => {
-        if (currentUserId > targetUserId) {
+        if (String(currentUserId) > String(targetUserId)) {
           try {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
@@ -197,6 +197,12 @@ export default function useStudyRoomWebRTC(roomId, currentUserId, sendSocketMess
 
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.offer));
+          if (pc._pendingCandidates && pc._pendingCandidates.length > 0) {
+            for (const cand of pc._pendingCandidates) {
+              await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(e => console.error(e));
+            }
+            pc._pendingCandidates = [];
+          }
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           sendSocketMessage('WEBRTC_ANSWER', { answer }, fromUserId);
@@ -211,6 +217,12 @@ export default function useStudyRoomWebRTC(roomId, currentUserId, sendSocketMess
         if (pc) {
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(msg.payload.answer));
+            if (pc._pendingCandidates && pc._pendingCandidates.length > 0) {
+              for (const cand of pc._pendingCandidates) {
+                await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(e => console.error(e));
+              }
+              pc._pendingCandidates = [];
+            }
           } catch (err) {
             console.error('[WEBRTC CLIENT] Error handling answer:', err);
           }
@@ -222,7 +234,12 @@ export default function useStudyRoomWebRTC(roomId, currentUserId, sendSocketMess
         const pc = peersRef.current.get(fromUserId);
         if (pc && msg.payload.candidate) {
           try {
-            await pc.addIceCandidate(new RTCIceCandidate(msg.payload.candidate));
+            if (pc.remoteDescription && pc.remoteDescription.type) {
+              await pc.addIceCandidate(new RTCIceCandidate(msg.payload.candidate));
+            } else {
+              if (!pc._pendingCandidates) pc._pendingCandidates = [];
+              pc._pendingCandidates.push(msg.payload.candidate);
+            }
           } catch (err) {
             console.error('[WEBRTC CLIENT] Error adding ICE candidate:', err);
           }

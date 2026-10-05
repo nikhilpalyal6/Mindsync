@@ -8,7 +8,7 @@ const activeRooms = new Map();
  * Broadcast message to all connected clients in a specific room
  */
 export const broadcastToRoom = (roomId, message, skipConnectionId = null) => {
-  const roomConns = activeRooms.get(roomId);
+  const roomConns = activeRooms.get(String(roomId));
   if (!roomConns) return;
 
   const dataStr = JSON.stringify(message);
@@ -24,7 +24,7 @@ export const broadcastToRoom = (roomId, message, skipConnectionId = null) => {
  * Send direct message to the sender and recipient connections only
  */
 export const sendDirectMessage = (roomId, senderId, recipientId, message) => {
-  const roomConns = activeRooms.get(roomId);
+  const roomConns = activeRooms.get(String(roomId));
   if (!roomConns) return;
 
   const dataStr = JSON.stringify(message);
@@ -321,6 +321,26 @@ export const initStudyRoomRealtime = (server) => {
 
           case 'TOGGLE_MIC': {
             const micState = message.payload?.micState || 'MIC_OFF';
+            const roomMeta = activeRooms.get(roomId);
+            const isUserMutedByPolicy = roomMeta && roomMeta.isMutedAll && !roomMeta.allowParticipantUnmute;
+            const isUserIndividuallyMuted = roomMeta && roomMeta.mutedUserIds && roomMeta.mutedUserIds.has(String(connInfo.userId));
+
+            if (!isAdmin && !isHost && micState === 'MIC_ON' && (isUserMutedByPolicy || isUserIndividuallyMuted)) {
+              connInfo.micState = 'MIC_OFF';
+              ws.send(JSON.stringify({
+                type: 'ERROR',
+                payload: { message: 'You have been muted by the host and cannot unmute yourself.' }
+              }));
+              broadcastToRoom(roomId, {
+                type: 'PARTICIPANT_MIC_CHANGED',
+                payload: {
+                  participantId: connInfo.userId,
+                  micState: 'MIC_OFF'
+                }
+              });
+              break;
+            }
+
             connInfo.micState = micState;
             broadcastToRoom(roomId, {
               type: 'PARTICIPANT_MIC_CHANGED',
@@ -482,6 +502,11 @@ export const initStudyRoomRealtime = (server) => {
             if (roomMeta) {
               roomMeta.allowParticipantUnmute = allowUnmute;
               roomMeta.isMutedAll = true;
+              for (const c of roomMeta.values()) {
+                if (c.role !== 'ADMIN' && c.role !== 'SUPER_ADMIN') {
+                  c.micState = 'MIC_OFF';
+                }
+              }
             }
             broadcastToRoom(roomId, {
               type: 'MUTE_ALL_TRIGGERED',
@@ -501,6 +526,9 @@ export const initStudyRoomRealtime = (server) => {
             if (roomMeta) {
               roomMeta.allowParticipantUnmute = true;
               roomMeta.isMutedAll = false;
+              if (roomMeta.mutedUserIds) {
+                roomMeta.mutedUserIds.clear();
+              }
             }
             broadcastToRoom(roomId, {
               type: 'ALLOW_UNMUTE_TRIGGERED',
@@ -516,6 +544,17 @@ export const initStudyRoomRealtime = (server) => {
             }
             const targetUserId = message.payload?.targetUserId;
             if (!targetUserId) break;
+
+            const roomMeta = activeRooms.get(roomId);
+            if (roomMeta) {
+              if (!roomMeta.mutedUserIds) roomMeta.mutedUserIds = new Set();
+              roomMeta.mutedUserIds.add(String(targetUserId));
+              for (const c of roomMeta.values()) {
+                if (String(c.userId) === String(targetUserId)) {
+                  c.micState = 'MIC_OFF';
+                }
+              }
+            }
 
             broadcastToRoom(roomId, {
               type: 'PARTICIPANT_MUTED_TRIGGERED',
@@ -533,6 +572,11 @@ export const initStudyRoomRealtime = (server) => {
             }
             const targetUserId = message.payload?.targetUserId;
             if (!targetUserId) break;
+
+            const roomMeta = activeRooms.get(roomId);
+            if (roomMeta && roomMeta.mutedUserIds) {
+              roomMeta.mutedUserIds.delete(String(targetUserId));
+            }
 
             broadcastToRoom(roomId, {
               type: 'PARTICIPANT_UNMUTED_TRIGGERED',

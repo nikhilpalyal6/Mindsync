@@ -75,7 +75,8 @@ router.route('/:roomId/goals')
   .get(validate(roomIdParamValidator), studyRoomController.listGoals);
 
 router.route('/:roomId/goals/:goalId')
-  .patch(validate(goalUpdateValidator), studyRoomController.updateGoal);
+  .patch(validate(goalUpdateValidator), studyRoomController.updateGoal)
+  .delete(validate(goalUpdateValidator), studyRoomController.deleteGoal);
 
 router.route('/:roomId/goals/:goalId/complete')
   .post(validate(goalUpdateValidator), studyRoomController.completeGoal);

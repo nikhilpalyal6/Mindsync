@@ -8,7 +8,10 @@ export default function useStudyRoomSocket(roomId, onMessageCallback, token) {
   const [connectionState, setConnectionState] = useState('CONNECTING');
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
-  const isIntentionalCloseRef = useRef(false);
+  const onMessageCallbackRef = useRef(onMessageCallback);
+  useEffect(() => {
+    onMessageCallbackRef.current = onMessageCallback;
+  }, [onMessageCallback]);
 
   const connect = useCallback(() => {
     if (!roomId || !token) {
@@ -50,8 +53,8 @@ export default function useStudyRoomSocket(roomId, onMessageCallback, token) {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (onMessageCallback) {
-          onMessageCallback(msg);
+        if (onMessageCallbackRef.current) {
+          onMessageCallbackRef.current(msg);
         }
       } catch (err) {
         console.error('[SOCKET CLIENT] Failed to parse message frame:', err);
@@ -99,7 +102,7 @@ export default function useStudyRoomSocket(roomId, onMessageCallback, token) {
     ws.onerror = (err) => {
       console.error('[SOCKET CLIENT] WebSocket error observed:', err);
     };
-  }, [roomId, onMessageCallback, token]);
+  }, [roomId, token]);
 
   useEffect(() => {
     connect();

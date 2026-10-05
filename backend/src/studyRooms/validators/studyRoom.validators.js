@@ -112,6 +112,10 @@ export const goalCreateValidator = [
   body('description')
     .optional()
     .trim(),
+  body('progress')
+    .optional()
+    .isInt({ min: 0, max: 100 })
+    .withMessage('Progress must be an integer between 0 and 100'),
   body('studyTaskId')
     .optional({ nullable: true, checkFalsy: true })
     .isMongoId()
@@ -131,6 +135,14 @@ export const goalUpdateValidator = [
   body('description')
     .optional()
     .trim(),
+  body('progress')
+    .optional()
+    .isInt({ min: 0, max: 100 })
+    .withMessage('Progress must be an integer between 0 and 100'),
+  body('studyTaskId')
+    .optional({ nullable: true, checkFalsy: true })
+    .isMongoId()
+    .withMessage('Invalid study task ID'),
   body('status')
     .optional()
     .isIn(['ACTIVE', 'COMPLETED', 'ABANDONED'])

@@ -854,6 +854,10 @@ export const completeRoomGoal = async (roomId, goalId) => {
   return await api.post(`/study-rooms/${roomId}/goals/${goalId}/complete`, {});
 };
 
+export const deleteRoomGoal = async (roomId, goalId) => {
+  return await api.delete(`/study-rooms/${roomId}/goals/${goalId}`);
+};
+
 export const getStudyRoomChat = async (roomId) => {
   return await api.get(`/study-rooms/${roomId}/chat`);
 };

@@ -218,6 +218,14 @@ class StudyRoomController {
     );
   });
 
+  deleteGoal = asyncHandler(async (req, res) => {
+    this.validateRequest(req);
+    await studyRoomService.deleteGoal(req.params.roomId, req.user._id, req.params.goalId);
+    return res.status(HTTP_STATUS.OK).json(
+      ApiResponse.success(null, 'Personal goal deleted successfully')
+    );
+  });
+
   getActivityTimeline = asyncHandler(async (req, res) => {
     this.validateRequest(req);
     const timeline = await studyRoomService.getActivityTimeline(req.params.roomId);
@@ -248,7 +256,21 @@ class StudyRoomController {
     }
 
     const StudyRoomChat = (await import('../models/studyRoomChat.model.js')).default;
-    const messages = await StudyRoomChat.find({ room: roomId, isDeleted: false })
+    const query = {
+      room: roomId,
+      isDeleted: false
+    };
+
+    if (!isHost && !isAdmin) {
+      query.$or = [
+        { recipient: null },
+        { recipient: { $exists: false } },
+        { sender: userId },
+        { recipient: userId }
+      ];
+    }
+
+    const messages = await StudyRoomChat.find(query)
       .sort({ timestamp: 1 })
       .populate('sender', 'name username profileImage avatar role');
 

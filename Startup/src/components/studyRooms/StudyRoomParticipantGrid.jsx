@@ -61,7 +61,7 @@ export default function StudyRoomParticipantGrid({
           let micOn = false;
 
           if (!slot.isEmpty) {
-            const uId = slot.participant.user?._id || slot.participant.user || slot.participant.participantId;
+            const uId = String(slot.participant.user?._id || slot.participant.user || slot.participant.participantId || '');
             if (slot.isCurrentUser) {
               stream = localStream;
               cameraOn = localCameraActive;

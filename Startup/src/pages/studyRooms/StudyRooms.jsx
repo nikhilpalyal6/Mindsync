@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Menu } from 'lucide-react';
-import { getStudyRooms } from '../../services/api';
+import { getStudyRooms, getPendingTasks } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { showToast } from '../../components/Toast';
 
@@ -37,13 +37,9 @@ export default function StudyRooms() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  // Goals List State
-  const [goalsList, setGoalsList] = useState([
-    { id: 1, title: 'Complete DSA Heap tree exercises', tag: 'DSA', done: true },
-    { id: 2, title: 'Read OS process scheduling chapter', tag: 'Operating Systems', done: false },
-    { id: 3, title: 'Write Database normalization quiz', tag: 'DBMS', done: false },
-    { id: 4, title: 'Complete Java inheritance labs', tag: 'Java', done: true }
-  ]);
+  // Dynamic Goals List State
+  const [goalsList, setGoalsList] = useState([]);
+  const [loadingGoals, setLoadingGoals] = useState(false);
 
   const fetchRooms = () => {
     setLoading(true);
@@ -69,6 +65,29 @@ export default function StudyRooms() {
     fetchRooms();
   }, []);
 
+  useEffect(() => {
+    if (activeView === 'goals') {
+      setLoadingGoals(true);
+      getPendingTasks()
+        .then((res) => {
+          if (res && res.tasks) {
+            setGoalsList(res.tasks);
+          } else if (Array.isArray(res)) {
+            setGoalsList(res);
+          } else {
+            setGoalsList([]);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to load pending goals:', err);
+          setGoalsList([]);
+        })
+        .finally(() => {
+          setLoadingGoals(false);
+        });
+    }
+  }, [activeView]);
+
   const handleRoomCreated = () => {
     fetchRooms();
     setActiveView('explore');
@@ -78,13 +97,6 @@ export default function StudyRooms() {
     setSearchQuery(topic);
     setSubjectFilter(topic);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const toggleGoal = (id) => {
-    setGoalsList(
-      goalsList.map((g) => (g.id === id ? { ...g, done: !g.done } : g))
-    );
-    showToast('Goal updated', 'success');
   };
 
   // Filter Logic based on toolbar search/filters
@@ -298,11 +310,17 @@ export default function StudyRooms() {
           </div>
         );
 
-      case 'calendar':
+      case 'calendar': {
+        const currentDate = new Date();
+        const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+        const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+        const currentDay = currentDate.getDate();
+        const scheduledRooms = rooms.filter((r) => r.status === 'SCHEDULED' && r.scheduledStart);
+
         return (
           <div className="calendar-view">
             <div className="calendar-header">
-              <div className="calendar-title">August 2026</div>
+              <div className="calendar-title">{monthName}</div>
             </div>
             <div className="calendar-grid">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
@@ -310,107 +328,144 @@ export default function StudyRooms() {
                   {d}
                 </div>
               ))}
-              {Array.from({ length: 31 }, (_, idx) => {
+              {Array.from({ length: daysInMonth }, (_, idx) => {
                 const day = idx + 1;
-                const isToday = day === 26;
+                const isToday = day === currentDay;
+                const roomsOnDay = scheduledRooms.filter((r) => {
+                  const sDate = new Date(r.scheduledStart);
+                  return (
+                    sDate.getFullYear() === currentDate.getFullYear() &&
+                    sDate.getMonth() === currentDate.getMonth() &&
+                    sDate.getDate() === day
+                  );
+                });
+
                 return (
                   <div key={day} className={`calendar-day ${isToday ? 'today' : ''}`}>
                     <span className="calendar-day-num">{day}</span>
-                    {day === 26 && <div className="calendar-event-tag">DSA Live</div>}
-                    {day === 27 && <div className="calendar-event-tag">OS Evening</div>}
+                    {roomsOnDay.map((r) => (
+                      <div key={r._id} className="calendar-event-tag" title={r.title}>
+                        {r.title.length > 12 ? `${r.title.substring(0, 10)}...` : r.title}
+                      </div>
+                    ))}
                   </div>
                 );
               })}
             </div>
           </div>
         );
+      }
 
       case 'goals':
         return (
           <div className="goals-view">
             <div className="section-header">
-              <h2>Your Study Goals</h2>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => showToast('Create goal placeholder triggered', 'info')}
-                style={{ padding: '8px 14px', fontSize: '0.88rem' }}
+              <h2>Your Study Goals & Planner Tasks</h2>
+            </div>
+            {loadingGoals ? (
+              <div style={{ textAlign: 'center', padding: '30px', color: 'var(--admin-text-muted)' }}>
+                Loading goals from Study Planner...
+              </div>
+            ) : goalsList.length === 0 ? (
+              <div
+                className="empty-state"
+                style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--admin-text-muted)' }}
               >
-                Add Goal
-              </button>
-            </div>
-            <div className="goals-list">
-              {goalsList.map((g) => (
-                <div key={g.id} className="goal-item-row">
-                  <div className="goal-item-content">
-                    <input
-                      type="checkbox"
-                      className="goal-checkbox"
-                      checked={g.done}
-                      onChange={() => toggleGoal(g.id)}
-                    />
-                    <span className={`goal-title-text ${g.done ? 'completed' : ''}`}>
-                      {g.title}
-                    </span>
+                <p>No active study tasks in Study Planner. Create study tasks in the planner or inside study rooms.</p>
+              </div>
+            ) : (
+              <div className="goals-list">
+                {goalsList.map((g) => (
+                  <div key={g._id || g.id} className="goal-item-row">
+                    <div className="goal-item-content">
+                      <span className={`goal-title-text ${g.status === 'COMPLETED' ? 'completed' : ''}`}>
+                        {g.title}
+                      </span>
+                    </div>
+                    <span className="goal-tag">{g.status || 'ACTIVE'}</span>
                   </div>
-                  <span className="goal-tag">{g.tag}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         );
 
-      case 'history':
+      case 'history': {
+        const userJoinedHistory = rooms.filter((r) => r.isCurrentUserParticipant);
+
         return (
           <div className="dashboard-section">
             <div className="section-header">
               <h2>Study Session History</h2>
             </div>
-            <div className="history-timeline">
-              <div className="history-item">
-                <div className="history-dot">🚀</div>
-                <div className="history-card">
-                  <div className="history-card-header">
-                    <span className="history-card-title">Algorithms Evening Focus</span>
-                    <span className="history-card-time">Aug 25, 2026</span>
-                  </div>
-                  <div className="history-card-meta">Focused for 45 mins • 2 Goals completed</div>
-                </div>
+            {userJoinedHistory.length === 0 ? (
+              <div
+                className="empty-state"
+                style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--admin-text-muted)' }}
+              >
+                <p>No study sessions attended yet. Join a live study room to build your history.</p>
               </div>
-              <div className="history-item">
-                <div className="history-dot">📚</div>
-                <div className="history-card">
-                  <div className="history-card-header">
-                    <span className="history-card-title">Database Systems Focus</span>
-                    <span className="history-card-time">Aug 22, 2026</span>
-                  </div>
-                  <div className="history-card-meta">Focused for 60 mins • 1 Goal completed</div>
-                </div>
+            ) : (
+              <div className="history-timeline">
+                {userJoinedHistory.map((room) => {
+                  const startTimeStr = room.actualStart || room.createdAt;
+                  const dateFormatted = startTimeStr
+                    ? new Date(startTimeStr).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })
+                    : '';
+                  return (
+                    <div key={room._id} className="history-item">
+                      <div className="history-dot">📚</div>
+                      <div className="history-card">
+                        <div className="history-card-header">
+                          <span className="history-card-title">{room.title}</span>
+                          <span className="history-card-time">{dateFormatted}</span>
+                        </div>
+                        <div className="history-card-meta">
+                          Status: {room.status} • Capacity: {room.capacity}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            )}
           </div>
         );
+      }
 
-      case 'analytics':
+      case 'analytics': {
+        const userRooms = rooms.filter((r) => r.isCurrentUserParticipant);
+        let totalMinutes = 0;
+        for (const r of userRooms) {
+          if (r.actualStart && r.actualEnd) {
+            totalMinutes += Math.max(0, Math.round((new Date(r.actualEnd) - new Date(r.actualStart)) / 60000));
+          } else if (r.status === 'LIVE' && r.actualStart) {
+            totalMinutes += Math.max(0, Math.round((Date.now() - new Date(r.actualStart)) / 60000));
+          }
+        }
+        const avgMinutes = userRooms.length > 0 ? Math.round(totalMinutes / userRooms.length) : 0;
+
         return (
           <div className="analytics-grid">
             <div className="analytics-card">
-              <h3>Focused Hours (Weekly)</h3>
+              <h3>Sessions Attended</h3>
               <div className="chart-placeholder">
-                {[
-                  { label: 'Mon', h: '60px' },
-                  { label: 'Tue', h: '90px' },
-                  { label: 'Wed', h: '120px' },
-                  { label: 'Thu', h: '50px' },
-                  { label: 'Fri', h: '140px' },
-                  { label: 'Sat', h: '80px' },
-                  { label: 'Sun', h: '160px' }
-                ].map((bar) => (
-                  <div key={bar.label} className="chart-bar-wrapper">
-                    <div className="chart-bar-fill" style={{ height: bar.h }} />
-                    <span className="chart-bar-label">{bar.label}</span>
+                {userRooms.length === 0 ? (
+                  <div style={{ color: 'var(--admin-text-muted)', fontSize: '0.85rem', margin: 'auto' }}>
+                    No sessions recorded yet
                   </div>
-                ))}
+                ) : (
+                  userRooms.slice(0, 7).map((r, idx) => (
+                    <div key={r._id || idx} className="chart-bar-wrapper">
+                      <div className="chart-bar-fill" style={{ height: '60px' }} />
+                      <span className="chart-bar-label">S{idx + 1}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -420,26 +475,19 @@ export default function StudyRooms() {
                 <div style={{ margin: '16px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div>
-                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem' }}>COMPLETED WORKSHOPS</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>8 Sessions</div>
+                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem' }}>SESSIONS ATTENDED</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{userRooms.length} Sessions</div>
                   </div>
                   <div>
                     <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem' }}>AVERAGE DURATION</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>52 mins</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{avgMinutes} mins</div>
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => showToast('Exporting analytics report...', 'info')}
-                style={{ marginTop: '24px' }}
-              >
-                Export Report
-              </button>
             </div>
           </div>
         );
+      }
 
       default:
         return null;
@@ -494,6 +542,7 @@ export default function StudyRooms() {
         onViewChanged={setActiveView}
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
+        rooms={rooms}
       />
 
       {/* Main Content Area */}
