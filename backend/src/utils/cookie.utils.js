@@ -14,7 +14,7 @@ export const setAuthCookies = (res, tokens) => {
     secure: config.cookie.secure,
     sameSite: config.cookie.sameSite,
     maxAge: config.cookie.maxAge.refresh,
-    path: '/api/v1/auth/refresh-token',
+    path: '/',
   });
 };
 
@@ -23,13 +23,14 @@ export const clearAuthCookies = (res) => {
     httpOnly: config.cookie.httpOnly,
     secure: config.cookie.secure,
     sameSite: config.cookie.sameSite,
+    path: '/',
   });
 
   res.clearCookie(COOKIE_NAMES.REFRESH_TOKEN, {
     httpOnly: config.cookie.httpOnly,
     secure: config.cookie.secure,
     sameSite: config.cookie.sameSite,
-    path: '/api/v1/auth/refresh-token',
+    path: '/',
   });
 };
 

@@ -12,6 +12,7 @@ import './config/cloudinary.js';
 import './config/email.js';
 
 import apiRoutes from './routes/index.js';
+import v1Routes from './routes/v1/index.js';
 import { API_VERSION } from './constants/index.js';
 import { globalRateLimiter } from './middleware/rateLimiter.middleware.js';
 import { notFoundHandler } from './middleware/notFound.middleware.js';
@@ -85,6 +86,8 @@ app.get('/', (_req, res) => {
 
 app.use(auditLogMiddleware);
 app.use('/api', requestTimeout(15000), apiRoutes);
+app.use('/api', requestTimeout(15000), v1Routes);
+app.use(requestTimeout(15000), v1Routes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
