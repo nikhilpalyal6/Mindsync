@@ -2,7 +2,7 @@ import { useTheme } from '../contexts/ThemeContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import './themeToggle.css'
 
-export default function ThemeToggle({ className = '', showLabel = true }) {
+export default function ThemeToggle({ className = '' }) {
   const { theme, setTheme } = useTheme()
 
   // Determine current active mode
@@ -17,7 +17,7 @@ export default function ThemeToggle({ className = '', showLabel = true }) {
   return (
     <button
       type="button"
-      className={`theme-toggle-btn ${isLight ? 'is-light' : 'is-dark'} ${showLabel ? 'has-label' : ''} ${className}`}
+      className={`theme-toggle-btn ${isLight ? 'is-light' : 'is-dark'} ${className}`}
       onClick={toggleTheme}
       aria-label={`Switch to ${isLight ? 'dark' : 'light'} theme`}
       title={`Switch to ${isLight ? 'dark' : 'light'} theme`}
@@ -61,11 +61,6 @@ export default function ThemeToggle({ className = '', showLabel = true }) {
           )}
         </AnimatePresence>
       </div>
-      {showLabel && (
-        <span className="theme-toggle-label">
-          {isLight ? 'Light Mode' : 'Dark Mode'}
-        </span>
-      )}
     </button>
   )
 }

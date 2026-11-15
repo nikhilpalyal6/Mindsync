@@ -309,7 +309,7 @@ export default function Navbar() {
           </li>
         </ul>
         <div className="nav-actions">
-          <ThemeToggle showLabel={true} />
+          <ThemeToggle />
           {user ? (
             <>
               <Link onClick={() => setIsMenuOpen(false)} className="login" to="/profile">{user.name || user.username}</Link>
