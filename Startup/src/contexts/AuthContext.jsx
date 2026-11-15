@@ -6,8 +6,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 
 const fetchCurrentUser = async () => {
   console.log('[AUTH CONTEXT] fetchCurrentUser triggered...');
+  const token = localStorage.getItem('mindsync_token');
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     credentials: 'include',
+    headers,
   })
   console.log('[AUTH CONTEXT] fetchCurrentUser status:', response.status);
   if (!response.ok) {
@@ -65,23 +68,29 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     try {
+      const token = localStorage.getItem('mindsync_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
+        headers,
       })
     } finally {
+      localStorage.removeItem('mindsync_token');
       setUser(null)
     }
   }
 
-  const loginComplete = async () => {
+  const loginComplete = async (fallbackUser = null) => {
     try {
       const currentUser = await fetchCurrentUser()
       setUser(currentUser)
       return currentUser
     } catch {
-      // Don't set user to null - keep existing session if fetch fails
-      // This prevents logging out the user during verification
+      if (fallbackUser) {
+        setUser(fallbackUser)
+        return fallbackUser
+      }
       return null
     }
   }

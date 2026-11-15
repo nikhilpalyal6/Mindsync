@@ -96,10 +96,14 @@ const apiRequestInternal = async (endpoint, options = {}) => {
     }, timeout)
 
     console.log(`[API REQUEST] Fetching ${API_BASE_URL}${endpoint}...`);
+    const token = localStorage.getItem('mindsync_token');
+    const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       credentials: 'include',
       headers: {
         ...(fetchOptions.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...authHeaders,
         ...fetchOptions.headers,
       },
       signal: controller.signal,
@@ -184,24 +188,36 @@ const apiRequestInternal = async (endpoint, options = {}) => {
 
 // Authentication endpoints
 export const login = async (identifier, password) => {
-  return await apiRequest('/auth/login', {
+  const data = await apiRequest('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ identifier, password }),
   })
+  if (data?.accessToken) {
+    localStorage.setItem('mindsync_token', data.accessToken)
+  }
+  return data
 }
 
 export const register = async (name, username, email, password) => {
-  return await apiRequest('/auth/register', {
+  const data = await apiRequest('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ name, username, email, password }),
   })
+  if (data?.accessToken) {
+    localStorage.setItem('mindsync_token', data.accessToken)
+  }
+  return data
 }
 
 export const googleLogin = async (idToken) => {
-  return await apiRequest('/auth/google', {
+  const data = await apiRequest('/auth/google', {
     method: 'POST',
     body: JSON.stringify({ idToken }),
   })
+  if (data?.accessToken) {
+    localStorage.setItem('mindsync_token', data.accessToken)
+  }
+  return data
 }
 
 export const forgotPassword = async (email) => {

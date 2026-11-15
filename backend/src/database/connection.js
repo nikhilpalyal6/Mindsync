@@ -11,12 +11,13 @@ const RECONNECT_DELAY_MS = 5000;
 mongoose.set('strictQuery', true);
 mongoose.set('bufferCommands', false);
 
+let handlersRegistered = false;
+
 const connectionOptions = {
   maxPoolSize: 10,
   minPoolSize: 2,
-  serverSelectionTimeoutMS: 5000, // Fail fast on server selection during outage
+  serverSelectionTimeoutMS: 30000,
   socketTimeoutMS: 45000,
-  family: 4,
 };
 
 const handleConnectionError = (error) => {
@@ -76,7 +77,10 @@ export const connectDB = async () => {
   }
 
   try {
-    registerEventHandlers();
+    if (!handlersRegistered) {
+      registerEventHandlers();
+      handlersRegistered = true;
+    }
     await mongoose.connect(config.mongodb.uri, connectionOptions);
     return mongoose.connection;
   } catch (error) {

@@ -87,10 +87,11 @@ export default function Auth() {
     setValidationErrors({})
 
     try {
+      let authResponse;
       if (isSignup) {
-        await register(formData.name, formData.username, formData.email, formData.password)
+        authResponse = await register(formData.name, formData.username, formData.email, formData.password)
       } else {
-        await login(formData.email, formData.password)
+        authResponse = await login(formData.email, formData.password)
         if (rememberMe) {
           localStorage.setItem('mindsync_remember_email', formData.email)
         } else {
@@ -98,7 +99,7 @@ export default function Auth() {
         }
       }
 
-      const currentUser = await loginComplete()
+      const currentUser = await loginComplete(authResponse?.user)
       const userRoleLevel = ROLE_HIERARCHY[currentUser?.role] || 0;
       const adminLevel = ROLE_HIERARCHY[ROLES.ADMIN];
       if (userRoleLevel >= adminLevel) {
@@ -155,8 +156,8 @@ export default function Auth() {
       setError('')
       setValidationErrors({})
 
-      await googleLogin(credential)
-      const currentUser = await loginComplete()
+      const authResponse = await googleLogin(credential)
+      const currentUser = await loginComplete(authResponse?.user)
       const userRoleLevel = ROLE_HIERARCHY[currentUser?.role] || 0;
       const adminLevel = ROLE_HIERARCHY[ROLES.ADMIN];
       if (userRoleLevel >= adminLevel) {

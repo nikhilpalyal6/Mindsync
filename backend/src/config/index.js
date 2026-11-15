@@ -73,8 +73,8 @@ const config = Object.freeze({
 
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production' || process.env.CLIENT_URL?.includes('https://'),
+    sameSite: (process.env.NODE_ENV === 'production' || process.env.CLIENT_URL?.includes('https://')) ? 'none' : 'lax',
     maxAge: {
       access: 15 * 60 * 1000,
       refresh: 7 * 24 * 60 * 60 * 1000,
