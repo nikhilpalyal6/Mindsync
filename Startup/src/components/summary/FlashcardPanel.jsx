@@ -336,7 +336,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
           width: 32px;
           height: 32px;
           border: 2px solid rgba(255, 255, 255, 0.1);
-          border-top-color: #66b8ff;
+          border-top-color: #00ff88;
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
@@ -358,7 +358,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
         justifyContent: 'space-between'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Layers size={16} style={{ color: '#66b8ff' }} />
+          <Layers size={16} style={{ color: '#00ff88' }} />
           <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.9)' }}>
             AI Flashcards
           </span>
@@ -369,7 +369,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
             <span style={{
               fontSize: '0.65rem',
               fontWeight: 600,
-              color: isCached ? '#34d399' : '#66b8ff',
+              color: isCached ? '#34d399' : '#00ff88',
               backgroundColor: isCached ? 'rgba(52, 211, 153, 0.1)' : 'rgba(102, 184, 255, 0.1)',
               border: `1px solid ${isCached ? 'rgba(52, 211, 153, 0.25)' : 'rgba(102, 184, 255, 0.25)'}`,
               padding: '2px 6px',
@@ -461,13 +461,13 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)' }}>
                 <span>Card {currentIndex + 1} of {totalCards}</span>
-                {isShuffled && <span style={{ color: '#66b8ff', fontWeight: 600 }}>Shuffled</span>}
+                {isShuffled && <span style={{ color: '#00ff88', fontWeight: 600 }}>Shuffled</span>}
               </div>
               <div style={{ width: '100%', height: '4px', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '2px', overflow: 'hidden' }}>
                 <div style={{ 
                   width: `${((currentIndex + 1) / totalCards) * 100}%`, 
                   height: '100%', 
-                  background: 'linear-gradient(90deg, #66b8ff, #3b82f6)', 
+                  background: 'linear-gradient(90deg, #00ff88, #3b82f6)', 
                   transition: 'width 0.3s ease' 
                 }} />
               </div>
@@ -528,7 +528,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={16} style={{ color: '#66b8ff' }} />
+                    <Sparkles size={16} style={{ color: '#00ff88' }} />
                     <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       AI Concept Explanation
                     </span>
@@ -555,7 +555,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, fontSize: '0.8rem', lineHeight: '1.5' }}>
                   
                   {/* Title */}
-                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#66b8ff', margin: '0 0 4px 0' }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#00ff88', margin: '0 0 4px 0' }}>
                     {activeExplanation.title || `${activeExplanation.concept} Explained`}
                   </h3>
 
@@ -593,7 +593,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
                   {/* Key Points */}
                   {Array.isArray(activeExplanation.keyPoints) && activeExplanation.keyPoints.length > 0 && (
                     <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '8px', padding: '12px' }}>
-                      <h4 style={{ color: '#66b8ff', fontWeight: 700, margin: '0 0 6px 0', fontSize: '0.85rem' }}>📌 Key Points</h4>
+                      <h4 style={{ color: '#00ff88', fontWeight: 700, margin: '0 0 6px 0', fontSize: '0.85rem' }}>📌 Key Points</h4>
                       <ul style={{ margin: 0, paddingLeft: '18px', color: 'rgba(255,255,255,0.8)' }}>
                         {activeExplanation.keyPoints.map((point, idx) => (
                           <li key={idx} style={{ marginBottom: '4px' }}>{point}</li>
@@ -605,7 +605,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
                   {/* Remember */}
                   {activeExplanation.remember && (
                     <div style={{ background: 'rgba(102,184,255,0.05)', border: '1px solid rgba(102,184,255,0.15)', borderRadius: '8px', padding: '12px' }}>
-                      <h4 style={{ color: '#66b8ff', fontWeight: 700, margin: '0 0 4px 0', fontSize: '0.85rem' }}>🧠 Remember</h4>
+                      <h4 style={{ color: '#00ff88', fontWeight: 700, margin: '0 0 4px 0', fontSize: '0.85rem' }}>🧠 Remember</h4>
                       <p style={{ color: 'rgba(255,255,255,0.9)', margin: 0, fontWeight: 500 }}>{activeExplanation.remember}</p>
                     </div>
                   )}
@@ -917,7 +917,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
                       <Sparkles 
                         size={12} 
                         className={generatingExplain ? "spin-icon" : ""}
-                        style={{ color: '#66b8ff' }} 
+                        style={{ color: '#00ff88' }} 
                       />
                       <span>{generatingExplain ? 'Generating...' : 'Explain Concept'}</span>
                       
@@ -989,7 +989,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
                   gap: '6px',
                   background: flipped ? 'rgba(255, 255, 255, 0.04)' : 'rgba(102, 184, 255, 0.15)',
                   border: flipped ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(102, 184, 255, 0.3)',
-                  color: flipped ? '#ffffff' : '#66b8ff',
+                  color: flipped ? '#ffffff' : '#00ff88',
                   padding: '10px',
                   borderRadius: '8px',
                   fontSize: '0.8rem',
@@ -1034,7 +1034,7 @@ export const FlashcardPanel = React.memo(({ session, resourceId, resourceType })
                   gap: '6px',
                   background: isShuffled ? 'rgba(102, 184, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
                   border: `1px solid ${isShuffled ? 'rgba(102, 184, 255, 0.3)' : 'rgba(255, 255, 255, 0.06)'}`,
-                  color: isShuffled ? '#66b8ff' : 'rgba(255, 255, 255, 0.5)',
+                  color: isShuffled ? '#00ff88' : 'rgba(255, 255, 255, 0.5)',
                   padding: '6px 12px',
                   borderRadius: '6px',
                   fontSize: '0.725rem',

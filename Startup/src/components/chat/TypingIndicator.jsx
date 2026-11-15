@@ -34,9 +34,9 @@ export const TypingIndicator = React.memo(() => {
         alignItems: 'center',
         gap: '6px'
       }}>
-        <span className="typing-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#66b8ff', animation: 'bounce 1.4s infinite ease-in-out' }} />
-        <span className="typing-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#66b8ff', animation: 'bounce 1.4s infinite ease-in-out 0.2s' }} />
-        <span className="typing-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#66b8ff', animation: 'bounce 1.4s infinite ease-in-out 0.4s' }} />
+        <span className="typing-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#00ff88', animation: 'bounce 1.4s infinite ease-in-out' }} />
+        <span className="typing-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#00ff88', animation: 'bounce 1.4s infinite ease-in-out 0.2s' }} />
+        <span className="typing-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#00ff88', animation: 'bounce 1.4s infinite ease-in-out 0.4s' }} />
       </div>
     </div>
   );

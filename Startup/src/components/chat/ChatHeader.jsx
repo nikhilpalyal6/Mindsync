@@ -35,15 +35,15 @@ export const ChatHeader = React.memo(({
       
       const extractionStatus = activeResource?.data?.extractionStatus || 'completed';
       if (extractionStatus === 'completed') {
-        list.push({ text: 'Indexed', bg: 'rgba(72, 239, 179, 0.1)', border: '1px solid rgba(72, 239, 179, 0.2)', color: '#48efb3' });
+        list.push({ text: 'Indexed', bg: 'rgba(0, 255, 136, 0.1)', border: '1px solid rgba(0, 255, 136, 0.28)', color: '#00ff88' });
       } else if (extractionStatus === 'partial') {
         list.push({ text: 'Partially Indexed', bg: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.2)', color: '#fbbf24' });
       } else if (extractionStatus === 'failed') {
         list.push({ text: 'Failed Indexing', bg: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' });
       } else if (extractionStatus === 'processing') {
-        list.push({ text: 'Indexing...', bg: 'rgba(102, 184, 255, 0.1)', border: '1px solid rgba(102, 184, 255, 0.2)', color: '#66b8ff' });
+        list.push({ text: 'Indexing...', bg: 'rgba(0, 255, 136, 0.1)', border: '1px solid rgba(0, 255, 136, 0.28)', color: '#00ff88' });
       } else {
-        list.push({ text: 'Indexed', bg: 'rgba(102, 184, 255, 0.1)', border: '1px solid rgba(102, 184, 255, 0.2)', color: '#66b8ff' });
+        list.push({ text: 'Indexed', bg: 'rgba(0, 255, 136, 0.1)', border: '1px solid rgba(0, 255, 136, 0.28)', color: '#00ff88' });
       }
       
       if (pageCount > 0) {
@@ -51,10 +51,10 @@ export const ChatHeader = React.memo(({
       }
       list.push({ text: sizeStr });
     } else if (resourceType === 'youtube') {
-      list.push({ text: 'Transcript Ready', bg: 'rgba(72, 239, 179, 0.1)', border: '1px solid rgba(72, 239, 179, 0.2)', color: '#48efb3' });
+      list.push({ text: 'Transcript Ready', bg: 'rgba(0, 255, 136, 0.1)', border: '1px solid rgba(0, 255, 136, 0.28)', color: '#00ff88' });
       list.push({ text: 'AI Ready' });
     } else if (resourceType === 'notes') {
-      list.push({ text: 'Indexed', bg: 'rgba(102, 184, 255, 0.1)', border: '1px solid rgba(102, 184, 255, 0.2)', color: '#66b8ff' });
+      list.push({ text: 'Indexed', bg: 'rgba(0, 255, 136, 0.1)', border: '1px solid rgba(0, 255, 136, 0.28)', color: '#00ff88' });
       list.push({ text: 'Markdown' });
     }
     return list;
@@ -87,12 +87,12 @@ export const ChatHeader = React.memo(({
             width: '30px',
             height: '30px',
             borderRadius: '8px',
-            background: 'linear-gradient(135deg, rgba(102, 184, 255, 0.15), rgba(167, 139, 250, 0.15))',
-            border: '1px solid rgba(102, 184, 255, 0.2)',
+            background: 'rgba(0, 255, 136, 0.1)',
+            border: '1px solid rgba(0, 255, 136, 0.25)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#66b8ff',
+            color: '#00ff88',
             flexShrink: 0
           }}>
             <Bot size={15} />

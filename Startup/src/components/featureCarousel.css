@@ -13,17 +13,16 @@
   border-radius:24px; 
   padding:28px; 
   box-sizing:border-box;
-  background: linear-gradient(165deg, rgba(8,28,38,0.92), rgba(2,12,18,0.98));
-  border: 1px solid rgba(0,255,230,0.08);
+  background: #121216;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(16px);
-  box-shadow: 0 60px 160px rgba(2,12,16,0.85),
-              inset 0 1px 1px rgba(255,255,255,0.06),
-              0 5px 15px rgba(0,255,220,0.05);
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.7),
+              inset 0 1px 1px rgba(255,255,255,0.06);
   transition: all 600ms cubic-bezier(.2,.9,.3,1.1);
   display:flex; 
   gap:24px; 
   align-items:flex-start; 
-  color:#dff; 
+  color:#ffffff; 
   overflow:hidden;
   transform: translate(-50%,-50%) 
              translateX(calc(var(--offset) * 140px)) 
@@ -186,7 +185,8 @@
 }
 
 /* arrow buttons */
-.fc-arrow{ position:absolute; top:50%; transform:translateY(-50%); width:76px; height:76px; border-radius:999px; background:linear-gradient(180deg, rgba(0,0,0,0.45), rgba(255,255,255,0.02)); color:#0ff; border:1px solid rgba(0,255,230,0.08); display:flex; align-items:center; justify-content:center; font-size:36px; cursor:pointer; z-index:600; }
+.fc-arrow{ position:absolute; top:50%; transform:translateY(-50%); width:56px; height:56px; border-radius:999px; background:#121216; color:#00ff88; border:1px solid rgba(0,255,136,0.3); display:flex; align-items:center; justify-content:center; font-size:24px; cursor:pointer; z-index:600; transition:all 0.2s ease; }
+.fc-arrow:hover{ background:rgba(0,255,136,0.12); border-color:#00ff88; transform:translateY(-50%) scale(1.05); }
 .fc-prev{ left:18px }
 .fc-next{ right:18px }
 .fc-arrow:focus{ box-shadow:0 10px 40px rgba(0,255,220,0.09); outline:none }

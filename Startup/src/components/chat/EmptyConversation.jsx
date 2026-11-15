@@ -37,13 +37,13 @@ export const EmptyConversation = React.memo(({ onSelectPrompt, prompts, resource
         width: '56px',
         height: '56px',
         borderRadius: '16px',
-        background: 'linear-gradient(135deg, rgba(102, 184, 255, 0.15), rgba(167, 139, 250, 0.15))',
-        border: '1px solid rgba(102, 184, 255, 0.25)',
+        background: 'rgba(0, 255, 136, 0.1)',
+        border: '1px solid rgba(0, 255, 136, 0.28)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#66b8ff',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
+        color: '#00ff88',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.3)'
       }}>
         <Sparkles size={24} />
       </div>
@@ -88,7 +88,7 @@ export const EmptyConversation = React.memo(({ onSelectPrompt, prompts, resource
               }}
               className="prompt-chip-btn"
             >
-              <Icon size={13} style={{ color: '#66b8ff', flexShrink: 0 }} />
+              <Icon size={13} style={{ color: '#00ff88', flexShrink: 0 }} />
               <span>{p.label}</span>
             </button>
           );

@@ -33,7 +33,7 @@
   height: 600px;
   left: -10%;
   top: 20%;
-  background: radial-gradient(circle at 30% 30%, rgba(72, 200, 147, 0.4), transparent 50%);
+  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 136, 0.2), transparent 60%);
   animation: floaty 15s ease-in-out infinite;
 }
 
@@ -42,7 +42,7 @@
   height: 500px;
   right: -5%;
   top: 10%;
-  background: radial-gradient(circle at 30% 30%, rgba(102, 184, 255, 0.4), transparent 50%);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.08), transparent 60%);
   animation: floaty 18s ease-in-out infinite;
   animation-delay: 2s;
 }
@@ -52,7 +52,7 @@
   height: 400px;
   left: 50%;
   bottom: -10%;
-  background: radial-gradient(circle at 30% 30%, rgba(160, 120, 220, 0.3), transparent 50%);
+  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 136, 0.15), transparent 60%);
   animation: floaty 12s ease-in-out infinite;
   animation-delay: 1s;
 }
@@ -206,9 +206,9 @@
 
 .image-badge {
   display: inline-block;
-  background: linear-gradient(90deg, rgba(102, 184, 255, 0.2), rgba(72, 200, 147, 0.2));
-  border: 1px solid rgba(102, 184, 255, 0.3);
-  color: var(--accent);
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  color: #00ff88;
   padding: 10px 24px;
   border-radius: 50px;
   font-size: 14px;
@@ -229,7 +229,7 @@
 }
 
 .gradient-text {
-  background: linear-gradient(90deg, #66b8ff, #48efb3);
+  background: linear-gradient(135deg, #ffffff 35%, #00ff88 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -950,24 +950,28 @@
 .submit-btn {
   width: 100%;
   padding: 16px 24px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent));
-  background-size: 200% 100%;
-  color: var(--cta-text);
+  background: var(--neon);
+  color: #040906;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-  animation: gradientPosition 8s linear infinite;
-  box-shadow: 0 4px 20px rgba(102, 184, 255, 0.3);
+  box-shadow: 0 4px 18px rgba(0, 255, 136, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   margin-top: 8px;
+}
+
+.submit-btn:hover {
+  background: var(--neon-bright);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(0, 255, 136, 0.4);
 }
 
 .status-card {

@@ -1,13 +1,12 @@
 :root {
-  --vl-bg-primary: #0f1115;
-  --vl-bg-secondary: #181a20;
-  --vl-bg-tertiary: #23262f;
+  --vl-bg-primary: #0a0a0c;
+  --vl-bg-secondary: #121216;
+  --vl-bg-tertiary: #18191f;
   --vl-text-primary: #ffffff;
   --vl-text-secondary: #9ca3af;
-  --vl-accent: #22c55e;
-  /* Green accent */
-  --vl-border: #2d3139;
-  --vl-hover: #2d3139;
+  --vl-accent: #00ff88;
+  --vl-border: rgba(255, 255, 255, 0.08);
+  --vl-hover: #22232b;
 }
 
 .video-learning-page {

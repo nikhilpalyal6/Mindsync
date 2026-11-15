@@ -1,14 +1,14 @@
 :root {
   --nav-height: 80px;
   --nav-height-scrolled: 70px;
-  --accent-1: #00E5FF;
-  --accent-2: #6F6BFF;
-  --nav-bg: rgba(6, 11, 18, 0.8);
-  --nav-bg-scrolled: rgba(6, 11, 18, 0.95);
+  --accent-1: #00ff88;
+  --accent-2: #ffffff;
+  --nav-bg: rgba(10, 10, 12, 0.82);
+  --nav-bg-scrolled: rgba(10, 10, 12, 0.96);
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.75);
-  --text-muted: rgba(255, 255, 255, 0.6);
-  --transition-speed: 0.3s;
+  --text-muted: rgba(255, 255, 255, 0.5);
+  --transition-speed: 0.25s;
   --border-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -20,12 +20,10 @@
 
 @keyframes glow-pulse {
   0%, 100% { 
-    box-shadow: 0 0 20px rgba(0, 229, 255, 0.3),
-                0 0 40px rgba(111, 107, 255, 0.15);
+    box-shadow: 0 0 16px rgba(0, 255, 136, 0.25);
   }
   50% { 
-    box-shadow: 0 0 30px rgba(0, 229, 255, 0.5),
-                0 0 60px rgba(111, 107, 255, 0.25);
+    box-shadow: 0 0 24px rgba(0, 255, 136, 0.4);
   }
 }
 
@@ -51,7 +49,7 @@
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
   transition: all var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
-  animation: slide-down 0.5s ease-out;
+  animation: slide-down 0.4s ease-out;
 }
 
 .site-navbar::before {
@@ -59,20 +57,19 @@
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, 
-    rgba(0, 229, 255, 0.02), 
-    rgba(111, 107, 255, 0.02),
-    rgba(0, 229, 255, 0.02));
+    rgba(0, 255, 136, 0.02), 
+    transparent 50%,
+    rgba(0, 255, 136, 0.02));
   background-size: 200% 100%;
-  animation: gradient-shift 8s ease infinite;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .site-navbar.scrolled {
   height: var(--nav-height-scrolled);
   background: var(--nav-bg-scrolled);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12),
-              0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4),
+              0 0 0 1px rgba(255, 255, 255, 0.06);
   border-bottom-color: var(--border-color);
 }
 
@@ -158,7 +155,7 @@
 }
 
 .brand-right {
-  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  background: linear-gradient(135deg, #ffffff 20%, #00ff88 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -225,8 +222,8 @@
 
 .nav-links a.active::before {
   transform: scaleX(1);
-  box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
-  animation: glow-pulse 3s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+  background: var(--neon);
 }
 
 /* Navigation Actions */
@@ -370,12 +367,12 @@
   align-items: center;
   justify-content: center;
   padding: 4px 10px;
-  background: rgba(0, 229, 255, 0.12);
-  border: 1px solid rgba(0, 229, 255, 0.3);
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #00e5ff;
+  color: #00ff88;
   margin-bottom: 12px;
 }
 
@@ -465,15 +462,14 @@
 }
 
 .cta {
-  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  background: var(--neon);
   padding: 0.625rem 1.5rem;
-  border-radius: 10px;
-  color: var(--text-primary);
+  border-radius: 8px;
+  color: #040906;
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.9375rem;
-  box-shadow: 0 4px 16px rgba(0, 229, 255, 0.25),
-              0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  box-shadow: 0 2px 14px rgba(0, 255, 136, 0.25);
   transition: all var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   z-index: 1;
@@ -481,23 +477,11 @@
   letter-spacing: -0.01em;
 }
 
-.cta::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, var(--accent-2), var(--accent-1));
-  opacity: 0;
-  transition: opacity var(--transition-speed) ease;
-}
-
 .cta:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(0, 229, 255, 0.35),
-              0 0 0 1px rgba(255, 255, 255, 0.15) inset;
-}
-
-.cta:hover::before {
-  opacity: 1;
+  background: var(--neon-bright);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 255, 136, 0.38);
+  color: #040906;
 }
 
 /* Mobile Menu Button */

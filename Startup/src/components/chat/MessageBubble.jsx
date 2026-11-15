@@ -173,12 +173,12 @@ const renderMarkdown = (text = '', citationsMap, onCitationClick) => {
     if (line.startsWith('> ')) {
       elements.push(
         <blockquote key={idx} style={{
-          borderLeft: '2px solid #66b8ff',
-          backgroundColor: 'rgba(102, 184, 255, 0.03)',
+          borderLeft: '2px solid #00ff88',
+          backgroundColor: 'rgba(0, 255, 136, 0.04)',
           padding: '6px 12px',
           borderRadius: '0 6px 6px 0',
           margin: '10px 0',
-          color: 'rgba(255, 255, 255, 0.8)',
+          color: 'rgba(255, 255, 255, 0.85)',
           fontStyle: 'italic',
           fontSize: '0.85rem'
         }}>
@@ -203,7 +203,7 @@ const renderMarkdown = (text = '', citationsMap, onCitationClick) => {
     if (matchOrdered) {
       elements.push(
         <div key={idx} style={{ display: 'flex', gap: '6px', marginLeft: '8px', margin: '3px 0', lineHeight: '1.6', color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.875rem' }}>
-          <span style={{ fontWeight: 600, color: '#66b8ff', minWidth: '16px' }}>{matchOrdered[1]}.</span>
+          <span style={{ fontWeight: 600, color: '#00ff88', minWidth: '16px' }}>{matchOrdered[1]}.</span>
           <span>{parseInline(matchOrdered[2], citationsMap, onCitationClick)}</span>
         </div>
       );
@@ -290,7 +290,7 @@ export const MessageBubble = React.memo(({ message, onCitationClick }) => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: isUser ? '#66b8ff' : '#a78bfa',
+          color: isUser ? '#ffffff' : '#00ff88',
           flexShrink: 0,
           fontSize: '0.75rem',
           fontWeight: 600
@@ -300,19 +300,19 @@ export const MessageBubble = React.memo(({ message, onCitationClick }) => {
 
         {/* Message Bubble Body */}
         <div style={{
-          backgroundColor: isUser ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
-          border: isUser ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
-          borderRadius: '16px',
+          backgroundColor: isUser ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+          border: isUser ? '1px solid rgba(255, 255, 255, 0.08)' : 'none',
+          borderRadius: '14px',
           padding: isUser ? '10px 14px' : '0 6px 10px 6px',
           color: '#ffffff',
           fontSize: '0.875rem',
           lineHeight: '1.6',
-          boxShadow: isUser ? '0 4px 16px rgba(0, 0, 0, 0.25)' : 'none',
+          boxShadow: isUser ? '0 4px 16px rgba(0, 0, 0, 0.3)' : 'none',
           position: 'relative'
         }}>
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px', gap: '14px' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: isUser ? '#66b8ff' : '#a78bfa' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: isUser ? '#ffffff' : '#00ff88' }}>
               {isUser ? 'You' : 'MindSync AI'}
             </span>
             <span style={{ fontSize: '0.6rem', color: 'rgba(255, 255, 255, 0.35)' }}>

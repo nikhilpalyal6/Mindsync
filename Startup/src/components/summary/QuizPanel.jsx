@@ -560,7 +560,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '24px',
-        color: '#66b8ff',
+        color: '#00ff88',
         gap: '12px'
       }}>
         <RefreshCw size={28} className="animate-spin" />
@@ -646,7 +646,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.35)'; }}
                 onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.15)'; }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#66b8ff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', fontWeight: 700, color: '#00ff88' }}>
                   <TrendingUp size={11} />
                   <span>Adaptive Quiz</span>
                 </div>
@@ -816,15 +816,15 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                   onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: isSelected ? '#66b8ff' : '#ffffff' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: isSelected ? '#00ff88' : '#ffffff' }}>
                       {g.title}
                     </span>
                     <div style={{
                       width: '12px',
                       height: '12px',
                       borderRadius: '50%',
-                      border: '1px solid ' + (isSelected ? '#66b8ff' : 'rgba(255,255,255,0.2)'),
-                      backgroundColor: isSelected ? '#66b8ff' : 'transparent',
+                      border: '1px solid ' + (isSelected ? '#00ff88' : 'rgba(255,255,255,0.2)'),
+                      backgroundColor: isSelected ? '#00ff88' : 'transparent',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
@@ -876,15 +876,15 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                   onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: isSelected ? '#66b8ff' : '#ffffff' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: isSelected ? '#00ff88' : '#ffffff' }}>
                       {t.title}
                     </span>
                     <div style={{
                       width: '12px',
                       height: '12px',
                       borderRadius: '50%',
-                      border: '1px solid ' + (isSelected ? '#66b8ff' : 'rgba(255,255,255,0.2)'),
-                      backgroundColor: isSelected ? '#66b8ff' : 'transparent',
+                      border: '1px solid ' + (isSelected ? '#00ff88' : 'rgba(255,255,255,0.2)'),
+                      backgroundColor: isSelected ? '#00ff88' : 'transparent',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
@@ -927,7 +927,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                     fontSize: '0.75rem',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    color: isSelected ? '#66b8ff' : 'rgba(255,255,255,0.5)',
+                    color: isSelected ? '#00ff88' : 'rgba(255,255,255,0.5)',
                     backgroundColor: isSelected ? 'rgba(102, 184, 255, 0.12)' : 'transparent',
                     transition: 'all 0.2s ease'
                   }}
@@ -956,7 +956,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                     borderRadius: '6px',
                     border: isSelected ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid rgba(255,255,255,0.05)',
                     background: isSelected ? 'rgba(102, 184, 255, 0.08)' : 'rgba(255,255,255,0.01)',
-                    color: isSelected ? '#66b8ff' : 'rgba(255,255,255,0.7)',
+                    color: isSelected ? '#00ff88' : 'rgba(255,255,255,0.7)',
                     fontSize: '0.75rem',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -1029,15 +1029,15 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: isSelected ? '#66b8ff' : '#ffffff' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: isSelected ? '#00ff88' : '#ffffff' }}>
                       {m.title}
                     </span>
                     <div style={{
                       width: '12px',
                       height: '12px',
                       borderRadius: '50%',
-                      border: '1px solid ' + (isSelected ? '#66b8ff' : 'rgba(255,255,255,0.2)'),
-                      backgroundColor: isSelected ? '#66b8ff' : 'transparent',
+                      border: '1px solid ' + (isSelected ? '#00ff88' : 'rgba(255,255,255,0.2)'),
+                      backgroundColor: isSelected ? '#00ff88' : 'transparent',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
@@ -1087,14 +1087,14 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                 e.currentTarget.style.borderColor = 'rgba(102, 184, 255, 0.25)';
               }}
             >
-              <Sparkles size={12} style={{ color: '#66b8ff' }} />
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#66b8ff' }}>
+              <Sparkles size={12} style={{ color: '#00ff88' }} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#00ff88' }}>
                 Explain Mode
               </span>
               <span style={{
                 fontSize: '0.55rem',
                 fontWeight: 700,
-                color: '#66b8ff',
+                color: '#00ff88',
                 backgroundColor: 'rgba(102, 184, 255, 0.15)',
                 padding: '1px 4px',
                 borderRadius: '3px',
@@ -1149,7 +1149,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
           onClick={() => handleGenerate(false)}
           disabled={loading}
           style={{
-            backgroundColor: loading ? 'rgba(102, 184, 255, 0.3)' : '#66b8ff',
+            backgroundColor: loading ? 'rgba(102, 184, 255, 0.3)' : '#00ff88',
             color: loading ? 'rgba(255,255,255,0.4)' : '#0f121a',
             border: 'none',
             padding: '12px 24px',
@@ -1201,10 +1201,10 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
             transform: 'translateX(-50%)',
             width: '100px',
             height: '4px',
-            backgroundColor: attemptAnalytics.percentage >= 80 ? '#34d399' : attemptAnalytics.percentage >= 60 ? '#66b8ff' : '#f87171'
+            backgroundColor: attemptAnalytics.percentage >= 80 ? '#34d399' : attemptAnalytics.percentage >= 60 ? '#00ff88' : '#f87171'
           }}></div>
           <Award size={36} style={{ 
-            color: attemptAnalytics.percentage >= 80 ? '#34d399' : attemptAnalytics.percentage >= 60 ? '#66b8ff' : '#f87171',
+            color: attemptAnalytics.percentage >= 80 ? '#34d399' : attemptAnalytics.percentage >= 60 ? '#00ff88' : '#f87171',
             margin: '0 auto 8px auto'
           }} />
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', margin: '0 0 2px 0' }}>
@@ -1395,7 +1395,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                     <Sparkles 
                       size={10} 
                       className={generatingExplain ? "spin-icon" : ""}
-                      style={{ color: '#66b8ff' }} 
+                      style={{ color: '#00ff88' }} 
                     />
                     <span>{generatingExplain ? 'Generating...' : 'Explain'}</span>
 
@@ -1448,7 +1448,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
             disabled={loading}
             style={{
               flex: 1,
-              backgroundColor: loading ? 'rgba(102, 184, 255, 0.3)' : '#66b8ff',
+              backgroundColor: loading ? 'rgba(102, 184, 255, 0.3)' : '#00ff88',
               color: loading ? 'rgba(255,255,255,0.4)' : '#0f121a',
               border: 'none',
               padding: '10px',
@@ -1497,7 +1497,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
         borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <HelpCircle size={14} style={{ color: '#66b8ff' }} />
+          <HelpCircle size={14} style={{ color: '#00ff88' }} />
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#fff' }}>
             Question {currentIndex + 1} of {questions.length}
           </span>
@@ -1536,7 +1536,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
         <div style={{
           height: '100%',
           width: `${((currentIndex + 1) / questions.length) * 100}%`,
-          backgroundColor: '#66b8ff',
+          backgroundColor: '#00ff88',
           transition: 'width 0.3s ease'
         }}></div>
       </div>
@@ -1636,7 +1636,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
               } else if (isSelected) {
                 borderStyle = '1px solid rgba(102, 184, 255, 0.3)';
                 backgroundStyle = 'rgba(102, 184, 255, 0.08)';
-                colorStyle = '#66b8ff';
+                colorStyle = '#00ff88';
               }
 
               return (
@@ -1805,7 +1805,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                 <Sparkles 
                   size={12} 
                   className={isExplanationLoading ? "spin-icon" : ""}
-                  style={{ color: '#66b8ff' }} 
+                  style={{ color: '#00ff88' }} 
                 />
                 <span>{isExplanationLoading ? 'Generating...' : 'Explain Answer'}</span>
 
@@ -1841,7 +1841,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                 justifyContent: 'center',
                 gap: '8px'
               }}>
-                <Sparkles size={14} className="spin-icon" style={{ color: '#66b8ff' }} />
+                <Sparkles size={14} className="spin-icon" style={{ color: '#00ff88' }} />
                 <span>Generating explanation...</span>
               </div>
             )}
@@ -1892,8 +1892,8 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                 gap: '12px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Info size={12} style={{ color: '#66b8ff' }} />
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#66b8ff', textTransform: 'uppercase' }}>Explanation Details</span>
+                  <Info size={12} style={{ color: '#00ff88' }} />
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#00ff88', textTransform: 'uppercase' }}>Explanation Details</span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.75rem', lineHeight: '1.4' }}>
@@ -1924,7 +1924,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
                   )}
 
                   {explanation.remember && (
-                    <div style={{ color: '#66b8ff', fontWeight: 500 }}>
+                    <div style={{ color: '#00ff88', fontWeight: 500 }}>
                       Takeaway: {explanation.remember}
                     </div>
                   )}
@@ -1967,7 +1967,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
               disabled={!selectedAnswer.trim()}
               style={{
                 flex: 1,
-                backgroundColor: selectedAnswer.trim() ? '#66b8ff' : 'rgba(255, 255, 255, 0.04)',
+                backgroundColor: selectedAnswer.trim() ? '#00ff88' : 'rgba(255, 255, 255, 0.04)',
                 border: 'none',
                 color: selectedAnswer.trim() ? '#0f121a' : 'rgba(255,255,255,0.25)',
                 fontWeight: 700,
@@ -2020,7 +2020,7 @@ export const QuizPanel = React.memo(({ session, resourceId, resourceType }) => {
               flex: 1,
               background: 'none',
               border: 'none',
-              color: isShuffled ? '#66b8ff' : 'rgba(255, 255, 255, 0.35)',
+              color: isShuffled ? '#00ff88' : 'rgba(255, 255, 255, 0.35)',
               fontSize: '0.675rem',
               fontWeight: 600,
               cursor: 'pointer',

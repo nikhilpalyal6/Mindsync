@@ -302,7 +302,7 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
         zIndex: 20
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Sparkles size={16} style={{ color: '#66b8ff' }} />
+          <Sparkles size={16} style={{ color: '#00ff88' }} />
           <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Explain Mode
           </span>
@@ -430,7 +430,7 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
                   fontWeight: 800,
                   backgroundColor: 'rgba(102, 184, 255, 0.15)',
                   border: '1px solid rgba(102, 184, 255, 0.3)',
-                  color: '#66b8ff',
+                  color: '#00ff88',
                   padding: '2px 8px',
                   borderRadius: '4px',
                   textTransform: 'uppercase'
@@ -507,7 +507,7 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
                 <div style={{ padding: '12px', borderTop: '1px solid rgba(255,255,0.04)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {Array.isArray(currentExplanation.stepByStep) && currentExplanation.stepByStep.map((step, idx) => (
                     <div key={idx} style={{ display: 'flex', gap: '8px', fontSize: '0.775rem', lineHeight: '1.4' }}>
-                      <span style={{ color: '#66b8ff', fontWeight: 800 }}>{idx + 1}.</span>
+                      <span style={{ color: '#00ff88', fontWeight: 800 }}>{idx + 1}.</span>
                       <span style={{ color: 'rgba(255,255,255,0.75)' }}>{step}</span>
                     </div>
                   ))}
@@ -597,7 +597,7 @@ export default function ExplainPanel({ session, resourceId, resourceType }) {
                         borderRadius: '6px',
                         padding: '4px 8px',
                         fontSize: '0.7rem',
-                        color: '#66b8ff',
+                        color: '#00ff88',
                         fontWeight: 600,
                         cursor: 'pointer'
                       }}

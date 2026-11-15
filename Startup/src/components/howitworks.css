@@ -1,19 +1,19 @@
 :root{
   --hiw-card-w: 360px;
   --hiw-card-h: 320px;
-  --hiw-radius: 28px;
-  --hiw-surface: rgba(255,255,255,0.06);
-  --hiw-stroke: rgba(255,255,255,0.28);
-  --hiw-stroke-outer: rgba(180,220,255,0.35);
-  --hiw-shadow: 0 20px 60px rgba(0,0,0,.55), 0 6px 18px rgba(0,0,0,.35);
-  --hiw-cyan: #64d2ff;
-  --hiw-cyan-strong: #37b7ff;
+  --hiw-radius: 20px;
+  --hiw-surface: #121216;
+  --hiw-stroke: rgba(255,255,255,0.08);
+  --hiw-stroke-outer: rgba(0,255,136,0.3);
+  --hiw-shadow: 0 20px 40px rgba(0,0,0,.6);
+  --hiw-cyan: #00ff88;
+  --hiw-cyan-strong: #39ff9e;
   --hiw-ease: cubic-bezier(.2,.8,.2,1);
 }
 
 .hiw-root{
   padding: 56px 20px 80px;
-  background: radial-gradient(1200px 400px at 50% 100%, rgba(100,210,255,.15), rgba(0,0,0,0) 60%), linear-gradient(180deg, #0c1116 0%, #06090f 100%);
+  background: #0a0a0c;
 }
 
 .hiw-stage{
@@ -31,7 +31,7 @@
   inset: auto 0 0 0;
   height: 120px;
   border-radius: 16px;
-  background: radial-gradient(60% 120px at 50% 100%, rgba(100,210,255,.25), rgba(0,0,0,0) 70%);
+  background: radial-gradient(60% 120px at 50% 100%, rgba(0,255,136,.12), rgba(0,0,0,0) 70%);
   filter: blur(6px);
   pointer-events: none;
 }
@@ -40,14 +40,14 @@
   width: var(--hiw-card-w);
   height: var(--hiw-card-h);
   border-radius: var(--hiw-radius);
-  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
+  background: #121216;
   box-shadow: var(--hiw-shadow);
   position: relative;
   transform-style: preserve-3d;
   isolation: isolate;
   -webkit-backdrop-filter: blur(12px) saturate(120%);
   backdrop-filter: blur(12px) saturate(120%);
-  border: 1px solid rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.08);
   /* animation base */
   --rx: 0deg; /* interactive tilt X */
   --ry: 0deg; /* interactive tilt Y */

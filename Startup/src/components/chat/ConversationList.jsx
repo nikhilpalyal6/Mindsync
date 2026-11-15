@@ -46,7 +46,7 @@ export const ConversationList = React.memo(({
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fff' }}>
-            <MessageSquare size={18} style={{ color: '#66b8ff' }} />
+            <MessageSquare size={18} style={{ color: '#00ff88' }} />
             <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>Conversation Threads</h3>
           </div>
           <button 
@@ -118,7 +118,7 @@ export const ConversationList = React.memo(({
                 ) : (
                   <>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: isActive ? '#66b8ff' : '#fff' }}>
+                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: isActive ? '#00ff88' : '#fff' }}>
                         {conv.title}
                       </span>
                       <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>

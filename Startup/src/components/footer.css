@@ -1,17 +1,18 @@
 :root{
   --footer-padding: 12px;
-  --footer-bg-1: rgba(6,12,18,0.96);
-  --footer-bg-2: rgba(12,22,30,0.96);
-  --footer-accent: linear-gradient(90deg,#66b8ff,#48efb3);
-  --footer-text: rgba(230, 247, 255, 0.9);
-  --footer-muted: rgba(184, 223, 240, 0.8);
+  --footer-bg-1: #0a0a0c;
+  --footer-bg-2: #0e0e12;
+  --footer-accent: #00ff88;
+  --footer-text: #ffffff;
+  --footer-muted: rgba(255, 255, 255, 0.55);
 }
 
 .site-footer{
-  background: linear-gradient(180deg,var(--footer-bg-1), var(--footer-bg-2));
-  color:var(--footer-text);
-  padding:var(--footer-padding) 1rem 0;
-  font-size:0.9rem;
+  background: #0a0a0c;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--footer-text);
+  padding: var(--footer-padding) 1rem 0;
+  font-size: 0.9rem;
   margin-top: 3rem;
 }
 
@@ -56,14 +57,14 @@
 }
 
 .logo-accent {
-  background: linear-gradient(135deg, #66b8ff 0%, #48efb3 100%);
+  background: linear-gradient(135deg, #ffffff 20%, #00ff88 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .logo-dot{
-  color:#48efb3;
+  color: #00ff88;
   margin-left:2px;
 }
 

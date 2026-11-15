@@ -1,6 +1,6 @@
 .study-viewer-page {
   min-height: 100vh;
-  background: #060b12;
+  background: #0a0a0c;
   color: rgba(255, 255, 255, 0.92);
   display: flex;
   flex-direction: column;
@@ -38,7 +38,7 @@
 
 .back-button:hover {
   border-color: rgba(0, 229, 255, 0.6);
-  color: #00e5ff;
+  color: #00ff88;
 }
 
 .viewer-title-group {
@@ -93,7 +93,7 @@
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, #00e5ff 0%, #6f6bff 50%, #48efb3 100%);
+  background: linear-gradient(135deg, #00ff88 0%, #00ff88 50%, #39ff9e 100%);
   border: none;
   color: #07111a;
   box-shadow: 0 6px 18px rgba(0, 229, 255, 0.2);
@@ -163,7 +163,7 @@
 
 .toolbar-btn:hover {
   border-color: rgba(0, 229, 255, 0.5);
-  color: #00e5ff;
+  color: #00ff88;
 }
 
 .page-indicator {
@@ -264,7 +264,7 @@
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #00e5ff, #6f6bff);
+  background: linear-gradient(135deg, #00ff88, #00ff88);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -323,7 +323,7 @@
   height: 42px;
   border-radius: 50%;
   border: none;
-  background: linear-gradient(135deg, #00e5ff, #48efb3);
+  background: linear-gradient(135deg, #00ff88, #39ff9e);
   color: #07111a;
   display: flex;
   align-items: center;

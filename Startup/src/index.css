@@ -1,20 +1,82 @@
-:root{
-  --bg: #0b1116;
-  --text: rgba(255,255,255,0.92);
-  --muted: rgba(255,255,255,0.62);
-  --accent: #64b6ff;
-  --accent-1: #47b6ff;
-  --accent-2: #4ef2c9;
-  --nav-bg: linear-gradient(180deg, rgba(12,18,22,0.6), rgba(12,18,22,0.25));
-  --nav-border: rgba(255,255,255,0.03);
-  --nav-text: rgba(255,255,255,0.9);
-  --nav-muted: rgba(255,255,255,0.6);
-  --cta-text: #07111a;
-  --cta-shadow: 0 6px 18px rgba(44,120,200,0.14);
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+:root {
+  /* ==========================================================================
+     MindSync High-Performance Theme: Obsidian, Pure White & Electric Cyber Emerald
+     Non-vibecoded: Crisp typography, razor-sharp hairline borders, high contrast
+     ========================================================================== */
+
+  /* Foundations (Deep Obsidian Charcoal) */
+  --bg: #0a0a0c;
+  --bg-base: #0a0a0c;
+  --bg-surface: #121216;
+  --bg-surface-elevated: #18191f;
+  --bg-surface-hover: #22232b;
+  --bg-surface-active: #2a2c37;
+  --bg-card: #121216;
+  --bg-card-hover: #18191f;
+
+  /* Typography (Pure White & Monochromatic Scale) */
+  --text: #ffffff;
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.76);
+  --text-muted: rgba(255, 255, 255, 0.48);
+  --text-disabled: rgba(255, 255, 255, 0.28);
+  --muted: rgba(255, 255, 255, 0.48);
+
+  /* Curated Neon Accents (Electric Cyber Emerald) */
+  --neon: #00ff88;
+  --neon-bright: #39ff9e;
+  --neon-dim: #00d672;
+  --neon-tint: rgba(0, 255, 136, 0.1);
+  --neon-tint-subtle: rgba(0, 255, 136, 0.05);
+  --neon-border: rgba(0, 255, 136, 0.32);
+  --neon-border-subtle: rgba(0, 255, 136, 0.18);
+  --neon-glow: 0 0 20px rgba(0, 255, 136, 0.25);
+  --neon-glow-lg: 0 0 35px rgba(0, 255, 136, 0.35);
+
+  /* Primary Accent Aliases */
+  --accent: #00ff88;
+  --accent-1: #00ff88;
+  --accent-2: #ffffff;
+  --primary: #00ff88;
+  --primary-hover: #39ff9e;
+  --primary-contrast: #040906;
+
+  /* Borders & Dividers */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-neon: rgba(0, 255, 136, 0.32);
+
+  /* Navigation */
+  --nav-bg: rgba(10, 10, 12, 0.88);
+  --nav-bg-scrolled: rgba(10, 10, 12, 0.96);
+  --nav-border: rgba(255, 255, 255, 0.08);
+  --nav-text: #ffffff;
+  --nav-muted: rgba(255, 255, 255, 0.65);
+
+  /* Action Buttons & Badges */
+  --cta-bg: #00ff88;
+  --cta-text: #040906;
+  --cta-hover: #39ff9e;
+  --cta-shadow: 0 4px 20px rgba(0, 255, 136, 0.24);
+
+  /* Admin & System Integration */
+  --admin-primary: #00ff88;
+  --admin-primary-glow: rgba(0, 255, 136, 0.18);
+  --admin-bg: #0a0a0c;
+  --admin-card-bg: #121216;
+  --admin-card-bg-hover: #18191f;
+  --admin-border: rgba(255, 255, 255, 0.08);
+  --admin-text-main: #ffffff;
+  --admin-text-muted: rgba(255, 255, 255, 0.52);
+  --admin-success: #00ff88;
+  --admin-warning: #f59e0b;
+  --admin-error: #ef4444;
+
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color-scheme: light dark;
+  color-scheme: dark;
   background-color: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -22,34 +84,74 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* theme override via data-theme attribute */
-[data-theme="light"]{
+/* Light Theme Mode override with stark monochrome & sharp neon punch */
+[data-theme="light"] {
   --bg: #ffffff;
-  --text: #102027;
-  --muted: rgba(16,32,39,0.6);
-  --accent: #5366ff;
-  --accent-1: #2f7bff;
-  --accent-2: #45d6a8;
-  --nav-bg: rgba(255,255,255,0.95);
-  --nav-border: rgba(16,32,39,0.06);
-  --nav-text: #213547;
-  --nav-muted: rgba(33,53,71,0.65);
-  --cta-text: #07111a;
-  --cta-shadow: 0 8px 26px rgba(60,120,160,0.06);
+  --bg-base: #ffffff;
+  --bg-surface: #f4f5f7;
+  --bg-surface-elevated: #ffffff;
+  --bg-surface-hover: #ebeef2;
+  --bg-surface-active: #e2e6eb;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f9fafb;
+
+  --text: #0a0a0c;
+  --text-primary: #0a0a0c;
+  --text-secondary: rgba(10, 10, 12, 0.72);
+  --text-muted: rgba(10, 10, 12, 0.45);
+  --text-disabled: rgba(10, 10, 12, 0.25);
+  --muted: rgba(10, 10, 12, 0.45);
+
+  --neon: #00b862;
+  --neon-bright: #00c96c;
+  --neon-dim: #009951;
+  --neon-tint: rgba(0, 184, 98, 0.1);
+  --neon-tint-subtle: rgba(0, 184, 98, 0.05);
+  --neon-border: rgba(0, 184, 98, 0.35);
+  --neon-glow: 0 0 20px rgba(0, 184, 98, 0.2);
+
+  --accent: #00b862;
+  --accent-1: #00b862;
+  --accent-2: #0a0a0c;
+  --primary: #00b862;
+  --primary-hover: #00c96c;
+  --primary-contrast: #ffffff;
+
+  --border: rgba(10, 10, 12, 0.08);
+  --border-subtle: rgba(10, 10, 12, 0.05);
+  --border-strong: rgba(10, 10, 12, 0.16);
+
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --nav-bg-scrolled: rgba(255, 255, 255, 0.98);
+  --nav-border: rgba(10, 10, 12, 0.08);
+  --nav-text: #0a0a0c;
+  --nav-muted: rgba(10, 10, 12, 0.65);
+
+  --cta-bg: #0a0a0c;
+  --cta-text: #ffffff;
+  --cta-hover: #1f2024;
+  --cta-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+  --admin-primary: #00b862;
+  --admin-bg: #f8fafc;
+  --admin-card-bg: #ffffff;
+  --admin-card-bg-hover: #f1f5f9;
+  --admin-border: rgba(10, 10, 12, 0.08);
+  --admin-text-main: #0a0a0c;
+  --admin-text-muted: rgba(10, 10, 12, 0.55);
 }
 
-a{font-weight:500;color:var(--accent);text-decoration:inherit}
-a:hover{opacity:0.9}
-
+/* Global Reset & Base Styling */
 html {
   height: auto;
+  background-color: var(--bg);
 }
 
-body{
-  margin:0;
-  min-width:320px;
-  background-color:var(--bg);
-  color:var(--text);
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: var(--bg);
+  color: var(--text);
   overflow-x: hidden;
   overflow-y: auto;
   box-sizing: border-box;
@@ -58,10 +160,118 @@ body{
 
 #root {
   height: auto;
+  background-color: var(--bg);
 }
 
-h1{font-size:3.2em;line-height:1.1}
+/* Links */
+a {
+  font-weight: 500;
+  color: var(--text);
+  text-decoration: none;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
 
-button{border-radius:8px;border:1px solid transparent;padding:0.6em 1.2em;font-size:1em;font-weight:500;font-family:inherit;background-color:transparent;cursor:pointer;transition:all 0.2s}
-button:hover{opacity:0.95}
-button:focus,button:focus-visible{outline:4px auto -webkit-focus-ring-color}
+a:hover {
+  color: var(--neon);
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
+/* Global Button Archetypes */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Primary High-Impact Button (Neon on Dark) */
+.btn-primary,
+button.btn-primary,
+.btn.primary {
+  background: var(--neon) !important;
+  color: #040906 !important;
+  font-weight: 700 !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  padding: 0.7em 1.4em !important;
+  box-shadow: 0 2px 14px rgba(0, 255, 136, 0.25) !important;
+  text-shadow: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.btn-primary:hover,
+button.btn-primary:hover,
+.btn.primary:hover {
+  background: var(--neon-bright) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 22px rgba(0, 255, 136, 0.4) !important;
+}
+
+/* Secondary Button (Obsidian with Crisp Hairline & Neon Hover) */
+.btn-secondary,
+button.btn-secondary,
+.btn.ghost,
+.btn-admin-secondary {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  padding: 0.7em 1.4em !important;
+  font-weight: 600 !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.btn-secondary:hover,
+button.btn-secondary:hover,
+.btn.ghost:hover,
+.btn-admin-secondary:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: var(--neon) !important;
+  color: var(--neon) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Badges & Chips */
+.badge-neon,
+.neon-badge {
+  background: var(--neon-tint) !important;
+  color: var(--neon) !important;
+  border: 1px solid var(--neon-border) !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  padding: 3px 10px !important;
+  border-radius: 999px !important;
+  letter-spacing: 0.02em !important;
+  text-transform: uppercase !important;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0c;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #22232a;
+  border-radius: 4px;
+  border: 2px solid #0a0a0c;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--neon);
+}
+
+/* Selection Color */
+::selection {
+  background: var(--neon);
+  color: #040906;
+}

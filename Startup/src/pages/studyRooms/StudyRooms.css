@@ -3,8 +3,8 @@
 .study-rooms-layout {
   display: flex;
   min-height: calc(100vh - 64px);
-  background-color: #050b0f;
-  color: #f1f5f9;
+  background-color: #0a0a0c;
+  color: #ffffff;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   overflow: hidden;
 }
@@ -12,8 +12,8 @@
 /* Mobile Nav Bar - Hidden by default on Desktop */
 .mobile-nav-bar {
   display: none;
-  background: #080f14;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: #0e0e12;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding: 12px 20px;
   align-items: center;
   justify-content: space-between;
@@ -33,8 +33,8 @@
 /* LEFT SIDEBAR STYLES */
 .study-rooms-sidebar {
   width: 260px;
-  background: #080f14;
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  background: #0e0e12;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   padding: 24px 16px;
   display: flex;
   flex-direction: column;
@@ -56,11 +56,11 @@
   justify-content: space-between;
   padding: 11px 14px;
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.65);
   font-weight: 500;
   font-size: 0.9rem;
   transition: all 0.2s ease;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   width: 100%;
   cursor: pointer;
@@ -82,19 +82,20 @@
 }
 
 .sidebar-item:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.04);
   color: #fff;
 }
 
 .sidebar-item.active {
-  background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
-  color: #fff;
+  background: rgba(0, 255, 136, 0.12);
+  color: #00ff88;
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.3);
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  box-shadow: 0 2px 12px rgba(0, 255, 136, 0.15);
 }
 
 .sidebar-item.active .sidebar-icon {
-  color: #fff;
+  color: #00ff88;
 }
 
 .sidebar-icon {
@@ -228,8 +229,8 @@
 
 .btn-upgrade {
   width: 100%;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: #fff;
+  background: var(--neon);
+  color: #040906;
   border: none;
   font-size: 0.8rem;
   font-weight: 700;
@@ -240,14 +241,14 @@
 }
 
 .btn-upgrade:hover {
-  opacity: 0.95;
-  box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+  background: var(--neon-bright);
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.35);
 }
 
 /* MAIN DASHBOARD PANEL */
 .study-rooms-main {
   flex-grow: 1;
-  background-color: #050b0f;
+  background-color: #0a0a0c;
   padding: 32px 40px;
   box-sizing: border-box;
   overflow-y: auto;

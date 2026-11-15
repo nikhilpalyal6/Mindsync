@@ -347,7 +347,7 @@ export default function VideoLearning({
               style={{
                 fontSize: '0.8rem',
                 fontWeight: 600,
-                color: '#66b8ff',
+                color: '#00ff88',
                 backgroundColor: 'rgba(102, 184, 255, 0.15)',
                 border: '1px solid rgba(102, 184, 255, 0.3)',
                 padding: '4px 10px',
@@ -423,7 +423,7 @@ export default function VideoLearning({
                     style={{
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      color: transcriptMode === 'english' ? '#66b8ff' : 'rgba(255,255,255,0.5)',
+                      color: transcriptMode === 'english' ? '#00ff88' : 'rgba(255,255,255,0.5)',
                       backgroundColor: transcriptMode === 'english' ? 'rgba(102, 184, 255, 0.18)' : 'transparent',
                       border: transcriptMode === 'english' ? '1px solid rgba(102, 184, 255, 0.35)' : '1px solid transparent',
                       padding: '3px 10px',
@@ -438,7 +438,7 @@ export default function VideoLearning({
                     style={{
                       fontSize: '0.75rem',
                       fontWeight: 600,
-                      color: transcriptMode === 'original' ? '#66b8ff' : 'rgba(255,255,255,0.5)',
+                      color: transcriptMode === 'original' ? '#00ff88' : 'rgba(255,255,255,0.5)',
                       backgroundColor: transcriptMode === 'original' ? 'rgba(102, 184, 255, 0.18)' : 'transparent',
                       border: transcriptMode === 'original' ? '1px solid rgba(102, 184, 255, 0.35)' : '1px solid transparent',
                       padding: '3px 10px',
@@ -456,7 +456,7 @@ export default function VideoLearning({
               {activeTab === 'chapters' && (
                 <div className="vl-chapters-list">
                   {loading ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: '#66b8ff', fontSize: '0.9rem' }}>
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#00ff88', fontSize: '0.9rem' }}>
                       Generating chapters...
                     </div>
                   ) : chapters.length > 0 ? (
@@ -482,7 +482,7 @@ export default function VideoLearning({
               {activeTab === 'transcript' && (
                 <div className="vl-transcripts-list">
                   {loading ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: '#66b8ff', fontSize: '0.9rem' }}>
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#00ff88', fontSize: '0.9rem' }}>
                       Generating transcript...
                     </div>
                   ) : isGeneratingTranslation ? (
@@ -524,7 +524,7 @@ export default function VideoLearning({
                               }));
                             }}
                             style={{
-                              border: 'none', background: 'none', color: '#66b8ff', fontSize: '0.675rem', fontWeight: 700, padding: '3px 6px', borderRadius: '4px', cursor: 'pointer'
+                              border: 'none', background: 'none', color: '#00ff88', fontSize: '0.675rem', fontWeight: 700, padding: '3px 6px', borderRadius: '4px', cursor: 'pointer'
                             }}
                           >
                             Explain

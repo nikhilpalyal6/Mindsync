@@ -63,7 +63,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           style={{
             background: activeFeature === 'ask-notes' ? 'rgba(102, 184, 255, 0.15)' : 'none',
             border: activeFeature === 'ask-notes' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'ask-notes' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
+            color: activeFeature === 'ask-notes' ? '#00ff88' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -84,7 +84,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           style={{
             background: activeFeature === 'summary' ? 'rgba(102, 184, 255, 0.15)' : 'none',
             border: activeFeature === 'summary' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'summary' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
+            color: activeFeature === 'summary' ? '#00ff88' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -105,7 +105,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           style={{
             background: activeFeature === 'flashcards' ? 'rgba(102, 184, 255, 0.15)' : 'none',
             border: activeFeature === 'flashcards' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'flashcards' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
+            color: activeFeature === 'flashcards' ? '#00ff88' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -126,7 +126,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           style={{
             background: activeFeature === 'quiz' ? 'rgba(102, 184, 255, 0.15)' : 'none',
             border: activeFeature === 'quiz' ? '1px solid rgba(102, 184, 255, 0.3)' : '1px solid transparent',
-            color: activeFeature === 'quiz' ? '#66b8ff' : 'rgba(255, 255, 255, 0.6)',
+            color: activeFeature === 'quiz' ? '#00ff88' : 'rgba(255, 255, 255, 0.6)',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',
@@ -151,7 +151,7 @@ export const NotesLearningPanel = React.memo(({ session }) => {
           style={{
             background: 'rgba(102, 184, 255, 0.06)',
             border: '1px solid rgba(102, 184, 255, 0.25)',
-            color: '#66b8ff',
+            color: '#00ff88',
             padding: '5px 10px',
             borderRadius: '6px',
             fontSize: '0.775rem',

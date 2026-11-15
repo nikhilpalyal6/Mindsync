@@ -118,7 +118,7 @@ export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) =
             style={{
               background: summaryType === 'quick' ? 'rgba(102, 184, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
               border: summaryType === 'quick' ? '1px solid rgba(102, 184, 255, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
-              color: summaryType === 'quick' ? '#66b8ff' : 'rgba(255, 255, 255, 0.7)',
+              color: summaryType === 'quick' ? '#00ff88' : 'rgba(255, 255, 255, 0.7)',
               padding: '6px 8px',
               borderRadius: '6px',
               fontSize: '0.75rem',
@@ -138,7 +138,7 @@ export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) =
             style={{
               background: summaryType === 'detailed' ? 'rgba(102, 184, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
               border: summaryType === 'detailed' ? '1px solid rgba(102, 184, 255, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
-              color: summaryType === 'detailed' ? '#66b8ff' : 'rgba(255, 255, 255, 0.7)',
+              color: summaryType === 'detailed' ? '#00ff88' : 'rgba(255, 255, 255, 0.7)',
               padding: '6px 8px',
               borderRadius: '6px',
               fontSize: '0.75rem',
@@ -158,7 +158,7 @@ export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) =
             style={{
               background: summaryType === 'key-takeaways' ? 'rgba(102, 184, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
               border: summaryType === 'key-takeaways' ? '1px solid rgba(102, 184, 255, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
-              color: summaryType === 'key-takeaways' ? '#66b8ff' : 'rgba(255, 255, 255, 0.7)',
+              color: summaryType === 'key-takeaways' ? '#00ff88' : 'rgba(255, 255, 255, 0.7)',
               padding: '6px 8px',
               borderRadius: '6px',
               fontSize: '0.75rem',
@@ -178,7 +178,7 @@ export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) =
             style={{
               background: summaryType === 'beginner' ? 'rgba(102, 184, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
               border: summaryType === 'beginner' ? '1px solid rgba(102, 184, 255, 0.35)' : '1px solid rgba(255, 255, 255, 0.08)',
-              color: summaryType === 'beginner' ? '#66b8ff' : 'rgba(255, 255, 255, 0.7)',
+              color: summaryType === 'beginner' ? '#00ff88' : 'rgba(255, 255, 255, 0.7)',
               padding: '6px 8px',
               borderRadius: '6px',
               fontSize: '0.75rem',
@@ -239,7 +239,7 @@ export const SummaryPanel = React.memo(({ session, resourceId, resourceType }) =
               <span style={{
                 fontSize: '0.675rem',
                 fontWeight: 600,
-                color: isCached ? '#34d399' : '#66b8ff',
+                color: isCached ? '#34d399' : '#00ff88',
                 backgroundColor: isCached ? 'rgba(52, 211, 153, 0.12)' : 'rgba(102, 184, 255, 0.12)',
                 border: isCached ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(102, 184, 255, 0.3)',
                 padding: '2px 8px',
