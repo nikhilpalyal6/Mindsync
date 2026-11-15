@@ -37,7 +37,7 @@
 }
 
 .back-button:hover {
-  border-color: rgba(0, 229, 255, 0.6);
+  border-color: rgba(0, 255, 136, 0.6);
   color: #00ff88;
 }
 
@@ -96,7 +96,7 @@
   background: linear-gradient(135deg, #00ff88 0%, #00ff88 50%, #39ff9e 100%);
   border: none;
   color: #07111a;
-  box-shadow: 0 6px 18px rgba(0, 229, 255, 0.2);
+  box-shadow: 0 6px 18px rgba(0, 255, 136, 0.2);
 }
 
 .primary-btn.ghost {
@@ -109,7 +109,7 @@
 .primary-btn:hover,
 .ghost-btn:hover {
   transform: translateY(-1px);
-  border-color: rgba(0, 229, 255, 0.4);
+  border-color: rgba(0, 255, 136, 0.4);
 }
 
 .viewer-layout {
@@ -162,7 +162,7 @@
 }
 
 .toolbar-btn:hover {
-  border-color: rgba(0, 229, 255, 0.5);
+  border-color: rgba(0, 255, 136, 0.5);
   color: #00ff88;
 }
 
@@ -238,8 +238,8 @@
 }
 
 .ai-action-card:hover {
-  border-color: rgba(0, 229, 255, 0.4);
-  background: rgba(0, 229, 255, 0.08);
+  border-color: rgba(0, 255, 136, 0.4);
+  background: rgba(0, 255, 136, 0.08);
   transform: translateY(-2px);
 }
 

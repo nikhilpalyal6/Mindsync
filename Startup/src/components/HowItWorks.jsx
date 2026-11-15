@@ -50,6 +50,8 @@ function Card({idx, title, lines, side, order=1}){
     el.style.setProperty('--ry', `${ry}deg`)
     el.style.setProperty('--tx', `${px * 6}px`)
     el.style.setProperty('--ty', `${py * 6}px`)
+    el.style.setProperty('--mx', `${x}px`)
+    el.style.setProperty('--my', `${y}px`)
   }
 
   function handleLeave(){

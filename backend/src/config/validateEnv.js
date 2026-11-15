@@ -25,6 +25,20 @@ const optionalEnvVars = [
  * Throws early if critical configuration is missing.
  */
 export const validateEnv = () => {
+  // Provide resilient defaults if omitted in deployment environment
+  if (!process.env.ACCESS_TOKEN_EXPIRE) {
+    process.env.ACCESS_TOKEN_EXPIRE = '15m';
+  }
+  if (!process.env.REFRESH_TOKEN_EXPIRE) {
+    process.env.REFRESH_TOKEN_EXPIRE = '7d';
+  }
+  if (!process.env.CLIENT_URL) {
+    process.env.CLIENT_URL = 'https://mindsync-bczj.onrender.com,http://localhost:5173';
+  }
+  if (!process.env.PORT) {
+    process.env.PORT = '5000';
+  }
+
   const missing = requiredEnvVars.filter((key) => !process.env[key]);
 
   if (missing.length > 0) {

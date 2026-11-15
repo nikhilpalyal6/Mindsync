@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import BorderBeam from './ui/BorderBeam'
 import './cta.css'
 
 export default function HeroCTA(){
@@ -9,18 +10,18 @@ export default function HeroCTA(){
     return ()=> clearTimeout(t)
   }, [])
 
-  // Enhanced particle positions with more variety
+  // Refined particles in pure emerald and white
   const particles = [
-    {l:8, t:30, d:0, s:0.9, c: 'cyan'}, 
-    {l:22, t:12, d:120, s:1.2, c: 'blue'}, 
-    {l:40, t:22, d:240, s:0.8, c: 'purple'},
-    {l:62, t:18, d:60, s:1.0, c: 'teal'}, 
-    {l:78, t:34, d:180, s:0.85, c: 'cyan'}, 
-    {l:88, t:10, d:300, s:1.1, c: 'blue'},
-    {l:52, t:46, d:90, s:0.7, c: 'purple'}, 
-    {l:32, t:54, d:210, s:0.95, c: 'teal'},
-    {l:15, t:65, d:150, s:0.75, c: 'cyan'},
-    {l:70, t:5, d:270, s:1.15, c: 'blue'}
+    {l:8, t:30, d:0, s:0.9, c: 'neon'}, 
+    {l:22, t:12, d:120, s:1.2, c: 'white'}, 
+    {l:40, t:22, d:240, s:0.8, c: 'neon'},
+    {l:62, t:18, d:60, s:1.0, c: 'white'}, 
+    {l:78, t:34, d:180, s:0.85, c: 'neon'}, 
+    {l:88, t:10, d:300, s:1.1, c: 'white'},
+    {l:52, t:46, d:90, s:0.7, c: 'neon'}, 
+    {l:32, t:54, d:210, s:0.95, c: 'white'},
+    {l:15, t:65, d:150, s:0.75, c: 'neon'},
+    {l:70, t:5, d:270, s:1.15, c: 'white'}
   ]
 
   return (
@@ -49,6 +50,7 @@ export default function HeroCTA(){
       <div className="cta-grid-overlay" />
 
       <div className="cta-inner">
+        <BorderBeam size={300} duration={10} colorFrom="#00ff88" colorTo="transparent" />
         {/* Badge */}
         <div className="cta-badge">
           <span className="cta-badge-icon">✨</span>

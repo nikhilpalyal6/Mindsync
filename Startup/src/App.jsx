@@ -40,6 +40,8 @@ import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Toast from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
+import ScrollProgress from './components/ui/ScrollProgress'
+import CursorGlow from './components/ui/CursorGlow'
 
 
 
@@ -60,6 +62,8 @@ function AppContent() {
 
   return (
     <div className="app-container">
+      <ScrollProgress />
+      <CursorGlow />
       <ScrollToTop />
       {!isAuthPage && !isStudyMode && !isAdminRoute && !isWorkspace && <Navbar />}
       <Toast />

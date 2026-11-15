@@ -1,0 +1,32 @@
+/* BorderBeam CSS - Vengeance UI Spec */
+
+.border-beam-container {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: var(--border-width) solid transparent;
+  mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
+  mask-clip: padding-box, border-box;
+  mask-composite: intersect;
+  -webkit-mask: linear-gradient(transparent, transparent), linear-gradient(white, white);
+  -webkit-mask-clip: padding-box, border-box;
+  -webkit-mask-composite: source-in;
+  z-index: 10;
+}
+
+.border-beam-line {
+  position: absolute;
+  aspect-ratio: 1;
+  width: var(--size);
+  background: linear-gradient(to left, var(--color-from), var(--color-to), transparent);
+  offset-path: rect(0 auto auto 0 round var(--size));
+  animation: border-beam-anim var(--duration) linear infinite;
+  animation-delay: var(--delay);
+}
+
+@keyframes border-beam-anim {
+  to {
+    offset-distance: 100%;
+  }
+}

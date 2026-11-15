@@ -31,9 +31,11 @@ app.use(
   })
 );
 
-const allowedOrigins = config.clientUrl
+const defaultOrigins = ['http://localhost:5173', 'https://mindsync-bczj.onrender.com'];
+const configuredOrigins = config.clientUrl
   ? config.clientUrl.split(',').map((url) => url.trim().replace(/\/$/, ''))
-  : ['http://localhost:5173'];
+  : [];
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
 
 app.use(
   cors({

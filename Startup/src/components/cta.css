@@ -25,7 +25,7 @@
 .cta-orb-1 {
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(0, 229, 255, 0.3), transparent 70%);
+  background: radial-gradient(circle, rgba(0, 255, 136, 0.15), transparent 70%);
   top: -200px;
   left: -200px;
   animation-delay: 0s;
@@ -34,7 +34,7 @@
 .cta-orb-2 {
   width: 500px;
   height: 500px;
-  background: radial-gradient(circle, rgba(111, 107, 255, 0.25), transparent 70%);
+  background: radial-gradient(circle, rgba(0, 255, 136, 0.1), transparent 70%);
   bottom: -150px;
   right: -150px;
   animation-delay: 7s;
@@ -43,7 +43,7 @@
 .cta-orb-3 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(72, 239, 179, 0.2), transparent 70%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.04), transparent 70%);
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -67,9 +67,9 @@
   position: absolute;
   inset: 0;
   background: 
-    radial-gradient(1200px 400px at 50% 40%, rgba(0, 229, 255, 0.08), transparent),
-    radial-gradient(800px 300px at 20% 70%, rgba(111, 107, 255, 0.06), transparent),
-    radial-gradient(600px 200px at 80% 20%, rgba(72, 239, 179, 0.05), transparent);
+    radial-gradient(1200px 400px at 50% 40%, rgba(0, 255, 136, 0.06), transparent),
+    radial-gradient(800px 300px at 20% 70%, rgba(0, 255, 136, 0.03), transparent),
+    radial-gradient(600px 200px at 80% 20%, rgba(255, 255, 255, 0.02), transparent);
   z-index: 0;
   mix-blend-mode: screen;
   animation: backdrop-pulse 15s ease-in-out infinite;
@@ -110,17 +110,17 @@
   border-radius: 24px;
   background: linear-gradient(
     135deg,
-    rgba(15, 25, 35, 0.7) 0%,
-    rgba(10, 18, 28, 0.8) 50%,
-    rgba(15, 25, 35, 0.7) 100%
+    rgba(18, 18, 22, 0.95) 0%,
+    rgba(10, 10, 12, 0.98) 50%,
+    rgba(18, 18, 22, 0.95) 100%
   );
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 8px 32px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.05) inset,
-    0 0 80px rgba(0, 229, 255, 0.1);
+    0 0 60px rgba(0, 255, 136, 0.08);
   transform: translateY(30px) scale(0.98);
   opacity: 0;
 }
@@ -132,8 +132,8 @@
   gap: 8px;
   padding: 8px 16px;
   border-radius: 50px;
-  background: linear-gradient(135deg, rgba(0, 229, 255, 0.1), rgba(111, 107, 255, 0.1));
-  border: 1px solid rgba(0, 229, 255, 0.2);
+  background: rgba(0, 255, 136, 0.08);
+  border: 1px solid rgba(0, 255, 136, 0.25);
   margin-bottom: 24px;
   font-size: 13px;
   font-weight: 500;
@@ -280,9 +280,9 @@
 .cta-btn:hover {
   transform: translateY(-4px) scale(1.02);
   box-shadow: 
-    0 20px 60px rgba(0, 229, 255, 0.4),
-    0 0 0 4px rgba(0, 229, 255, 0.2),
-    0 0 100px rgba(111, 107, 255, 0.3);
+    0 20px 60px rgba(0, 255, 136, 0.35),
+    0 0 0 2px rgba(0, 255, 136, 0.4),
+    0 0 80px rgba(0, 255, 136, 0.2);
 }
 
 .cta-btn:active {
@@ -326,12 +326,12 @@
 }
 
 .cta-note-icon {
-  color: #48EFB3;
+  color: #00ff88;
   font-size: 16px;
   font-weight: 600;
 }
 
-/* Enhanced particles with color variants */
+/* Enhanced particles in emerald and white */
 .cta-particle {
   position: absolute;
   border-radius: 50%;
@@ -344,32 +344,18 @@
   pointer-events: none;
 }
 
-.cta-particle-cyan {
-  width: 16px;
-  height: 16px;
-  background: radial-gradient(circle at 30% 30%, rgba(0, 229, 255, 0.8), rgba(0, 229, 255, 0.2));
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.4);
-}
-
-.cta-particle-blue {
+.cta-particle-neon {
   width: 14px;
   height: 14px;
-  background: radial-gradient(circle at 30% 30%, rgba(111, 107, 255, 0.8), rgba(111, 107, 255, 0.2));
-  box-shadow: 0 0 18px rgba(111, 107, 255, 0.4);
+  background: radial-gradient(circle at 30% 30%, rgba(0, 255, 136, 0.9), rgba(0, 255, 136, 0.2));
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
 }
 
-.cta-particle-purple {
-  width: 18px;
-  height: 18px;
-  background: radial-gradient(circle at 30% 30%, rgba(160, 120, 220, 0.8), rgba(160, 120, 220, 0.2));
-  box-shadow: 0 0 22px rgba(160, 120, 220, 0.4);
-}
-
-.cta-particle-teal {
+.cta-particle-white {
   width: 12px;
   height: 12px;
-  background: radial-gradient(circle at 30% 30%, rgba(72, 239, 179, 0.8), rgba(72, 239, 179, 0.2));
-  box-shadow: 0 0 16px rgba(72, 239, 179, 0.4);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.15));
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.3);
 }
 
 @keyframes particle-float {
