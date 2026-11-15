@@ -42,6 +42,7 @@ import Toast from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import ScrollProgress from './components/ui/ScrollProgress'
 import CursorGlow from './components/ui/CursorGlow'
+import FloatingThemeToggle from './components/FloatingThemeToggle'
 
 
 
@@ -64,6 +65,7 @@ function AppContent() {
     <div className="app-container">
       <ScrollProgress />
       <CursorGlow />
+      <FloatingThemeToggle />
       <ScrollToTop />
       {!isAuthPage && !isStudyMode && !isAdminRoute && !isWorkspace && <Navbar />}
       <Toast />
