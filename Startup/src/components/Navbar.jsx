@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import ThemeToggle from './ThemeToggle'
 import './navbar.css'
 
 export default function Navbar() {
@@ -111,6 +112,7 @@ export default function Navbar() {
         </ul>
 
         <div className="nav-actions">
+          <ThemeToggle />
           {user ? (
             <div className="profile-menu" ref={dropdownRef}>
               <button type="button" className="profile-button" onClick={() => setIsDropdownOpen((prev) => !prev)} aria-haspopup="true" aria-expanded={isDropdownOpen}>
@@ -285,6 +287,7 @@ export default function Navbar() {
           </li>
         </ul>
         <div className="nav-actions">
+          <ThemeToggle showLabel={true} />
           {user ? (
             <>
               <Link onClick={() => setIsMenuOpen(false)} className="login" to="/profile">{user.name || user.username}</Link>

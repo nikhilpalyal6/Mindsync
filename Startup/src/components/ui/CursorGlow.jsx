@@ -4,7 +4,7 @@ import { motion, useMotionValue, useSpring } from 'framer-motion';
 /**
  * CursorGlow Component (inspired by Skiper UI & Animaster)
  * Subtle, luxury cyber-emerald radial aura that tracks the mouse pointer.
- * Disables automatically on touch devices.
+ * Disables automatically on touch devices. Adapts dynamically to light/dark mode.
  */
 export default function CursorGlow() {
   const [isVisible, setIsVisible] = useState(false);
@@ -44,20 +44,12 @@ export default function CursorGlow() {
   return (
     <motion.div
       aria-hidden="true"
+      className="global-cursor-glow"
       style={{
-        position: 'fixed',
         left: smoothX,
         top: smoothY,
         x: '-50%',
         y: '-50%',
-        width: '420px',
-        height: '420px',
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(0, 255, 136, 0.075) 0%, rgba(0, 255, 136, 0.02) 45%, transparent 70%)',
-        pointerEvents: 'none',
-        zIndex: 9998,
-        mixBlendMode: 'screen',
-        filter: 'blur(10px)',
       }}
     />
   );

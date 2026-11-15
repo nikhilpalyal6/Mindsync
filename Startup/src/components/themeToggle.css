@@ -1,0 +1,88 @@
+/* High-Performance Theme Toggle Button */
+
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  outline: none;
+  flex-shrink: 0;
+}
+
+[data-theme="light"] .theme-toggle-btn {
+  background: rgba(10, 10, 12, 0.04);
+  border: 1px solid rgba(10, 10, 12, 0.12);
+  color: #0a0a0c;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--neon);
+  box-shadow: 0 0 16px var(--neon-tint);
+  transform: translateY(-1px);
+}
+
+.theme-toggle-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.theme-toggle-track {
+  width: 20px;
+  height: 20px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-icon-wrapper {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-icon-wrapper svg {
+  width: 18px;
+  height: 18px;
+}
+
+.moon-icon svg {
+  color: #00ff88;
+  filter: drop-shadow(0 0 6px rgba(0, 255, 136, 0.4));
+}
+
+.sun-icon svg {
+  color: #f59e0b;
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.4));
+}
+
+.theme-toggle-btn.has-label {
+  width: auto;
+  padding: 0 14px;
+  height: 40px;
+}
+
+.theme-toggle-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mobile-nav .theme-toggle-btn {
+  width: 100%;
+  height: 44px;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 10px;
+}
