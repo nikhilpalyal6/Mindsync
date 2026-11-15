@@ -16,7 +16,8 @@ export default function StudyRoomChat({
   const chatEndRef = useRef(null);
 
   // Filter active student participants (exclude self, admins, inactive users)
-  const activeStudents = participants.filter((p) => {
+  const activeStudents = (participants || []).filter((p) => {
+    if (!p) return false;
     if (p.status !== 'active' && p.status !== 'joined') return false;
     if (p.user?._id && String(p.user._id) === String(currentUserId)) return false;
     if (p.user?.role === 'ADMIN' || p.user?.role === 'SUPER_ADMIN') return false;
@@ -24,7 +25,7 @@ export default function StudyRoomChat({
   });
 
   const activeRecipient = activeStudents.find(
-    (p) => String(p.user?._id || p.user) === String(selectedChatUser)
+    (p) => String(p?.user?._id || p?.user || '') === String(selectedChatUser)
   );
 
   const activeRecipientName = activeRecipient
@@ -32,7 +33,8 @@ export default function StudyRoomChat({
     : '';
 
   // Filter messages belonging to the selected chat conversation
-  const filteredMessages = messages.filter((msg) => {
+  const filteredMessages = (messages || []).filter((msg) => {
+    if (!msg) return false;
     const senderId = msg.sender?._id || msg.sender;
     const recipientId = msg.recipientId || null;
 

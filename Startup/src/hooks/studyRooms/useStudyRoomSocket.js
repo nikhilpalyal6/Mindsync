@@ -8,6 +8,7 @@ export default function useStudyRoomSocket(roomId, onMessageCallback, token) {
   const [connectionState, setConnectionState] = useState('CONNECTING');
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+  const isIntentionalCloseRef = useRef(false);
   const onMessageCallbackRef = useRef(onMessageCallback);
   useEffect(() => {
     onMessageCallbackRef.current = onMessageCallback;
@@ -30,12 +31,18 @@ export default function useStudyRoomSocket(roomId, onMessageCallback, token) {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
     let host = window.location.host;
+    let basePath = '/api/v1';
     if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
-      const url = new URL(apiBase);
-      host = url.host;
+      try {
+        const url = new URL(apiBase);
+        host = url.host;
+        basePath = url.pathname.replace(/\/+$/, '') || '/api/v1';
+      } catch (e) {
+        console.error('Invalid VITE_API_BASE_URL:', e);
+      }
     }
 
-    const wsUrl = `${wsProtocol}//${host}/api/v1/study-rooms/realtime?roomId=${roomId}&token=${token}`;
+    const wsUrl = `${wsProtocol}//${host}${basePath}/study-rooms/realtime?roomId=${roomId}&token=${token}`;
     
     console.log(`[SOCKET CLIENT] Connecting to ${wsUrl}...`);
     const ws = new WebSocket(wsUrl);

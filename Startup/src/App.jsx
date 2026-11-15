@@ -39,6 +39,7 @@ import StudyPlanner from './components/study/StudyPlanner'
 import { AuthProvider } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import Toast from './components/Toast'
+import ErrorBoundary from './components/ErrorBoundary'
 
 
 
@@ -63,42 +64,44 @@ function AppContent() {
       {!isAuthPage && !isStudyMode && !isAdminRoute && !isWorkspace && <Navbar />}
       <Toast />
       <div className="main-content">
-        <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<GuestRoute><Auth /></GuestRoute>} />
-        <Route path="/signup" element={<GuestRoute><Auth /></GuestRoute>} />
-        <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
-        <Route path="/reset-password/:token" element={<GuestRoute><ResetPassword /></GuestRoute>} />
-        <Route path="/verify-email/:token" element={<GuestRoute><VerifyEmail /></GuestRoute>} />
-        <Route path="/study" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
-        <Route path="/study/:workspaceId" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
-        <Route path="/study/viewer" element={<ProtectedRoute><StudyViewer /></ProtectedRoute>} />
-        <Route path="/study-planner" element={<ProtectedRoute><StudyPlanner /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/study-rooms" element={<ProtectedRoute><StudyRooms /></ProtectedRoute>} />
-        <Route path="/study-rooms/:roomId" element={<ProtectedRoute><StudyRoomWorkspace /></ProtectedRoute>} />
-        <Route path="/contact" element={<Contact />} />
-        {/* Admin Routes */}
-        <Route path="/admin" element={
-          <AdminProtectedRoute>
-            <AdminLayout />
-          </AdminProtectedRoute>
-        }>
-          <Route index element={<AdminDashboard />} />
-          <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="users" element={<AdminUsers />} />
-          <Route path="analytics" element={<AdminAnalytics />} />
-          <Route path="ai" element={<AdminAI />} />
-          <Route path="notifications" element={<AdminNotifications />} />
-          <Route path="reports" element={<AdminReports />} />
-          <Route path="study-rooms" element={<AdminStudyRooms />} />
-          <Route path="settings" element={<AdminSettings />} />
-          <Route path="system-logs" element={<AdminSystemLogs />} />
-        </Route>
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+        <ErrorBoundary>
+          <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<GuestRoute><Auth /></GuestRoute>} />
+          <Route path="/signup" element={<GuestRoute><Auth /></GuestRoute>} />
+          <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
+          <Route path="/reset-password/:token" element={<GuestRoute><ResetPassword /></GuestRoute>} />
+          <Route path="/verify-email/:token" element={<GuestRoute><VerifyEmail /></GuestRoute>} />
+          <Route path="/study" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
+          <Route path="/study/:workspaceId" element={<ProtectedRoute><StudyMode /></ProtectedRoute>} />
+          <Route path="/study/viewer" element={<ProtectedRoute><StudyViewer /></ProtectedRoute>} />
+          <Route path="/study-planner" element={<ProtectedRoute><StudyPlanner /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/study-rooms" element={<ProtectedRoute><StudyRooms /></ProtectedRoute>} />
+          <Route path="/study-rooms/:roomId" element={<ProtectedRoute><StudyRoomWorkspace /></ProtectedRoute>} />
+          <Route path="/contact" element={<Contact />} />
+          {/* Admin Routes */}
+          <Route path="/admin" element={
+            <AdminProtectedRoute>
+              <AdminLayout />
+            </AdminProtectedRoute>
+          }>
+            <Route index element={<AdminDashboard />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="analytics" element={<AdminAnalytics />} />
+            <Route path="ai" element={<AdminAI />} />
+            <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="reports" element={<AdminReports />} />
+            <Route path="study-rooms" element={<AdminStudyRooms />} />
+            <Route path="settings" element={<AdminSettings />} />
+            <Route path="system-logs" element={<AdminSystemLogs />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+        </ErrorBoundary>
       </div>
       {!isAuthPage && !isStudyMode && !isAdminRoute && !isWorkspace && !location.pathname.startsWith('/study-rooms') && <Footer />}
     </div>

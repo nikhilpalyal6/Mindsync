@@ -80,7 +80,11 @@ export const initStudyRoomRealtime = (server) => {
 
   server.on('upgrade', (request, socket, head) => {
     const urlParams = new URL(request.url, 'http://localhost');
-    if (urlParams.pathname.startsWith('/api/v1/study-rooms/realtime')) {
+    if (
+      urlParams.pathname.startsWith('/api/v1/study-rooms/realtime') ||
+      urlParams.pathname.startsWith('/study-rooms/realtime') ||
+      urlParams.pathname.startsWith('/api/study-rooms/realtime')
+    ) {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request);
       });

@@ -32,14 +32,14 @@ export default function StudyRoomParticipantCard({
     );
   }
 
-  const name = participant.user?.name || participant.user?.username || participant.name || 'Unknown User';
-  const avatar = participant.user?.profileImage || participant.user?.avatar || participant.avatar;
+  const name = participant?.user?.name || participant?.user?.username || participant?.name || 'Unknown User';
+  const avatar = participant?.user?.profileImage || participant?.user?.avatar || participant?.avatar;
   
   // Authoritative host check
   const hostId = roomHostId && (typeof roomHostId === 'object' ? roomHostId._id : roomHostId);
-  const isHost = roomHostId && String(participant.user?._id || participant.user || participant.participantId) === String(hostId);
+  const isHost = roomHostId && String(participant?.user?._id || participant?.user || participant?.participantId) === String(hostId);
 
-  const initials = name.charAt(0).toUpperCase();
+  const initials = (typeof name === 'string' && name.length > 0) ? name.charAt(0).toUpperCase() : 'U';
 
   return (
     <div className={`participant-workspace-card ${isCurrentUser ? 'self' : ''}`} style={{

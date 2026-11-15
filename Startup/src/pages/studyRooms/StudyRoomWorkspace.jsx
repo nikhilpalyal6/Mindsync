@@ -39,7 +39,7 @@ export default function StudyRoomWorkspace() {
   }
 
   if (!user) {
-    return <StudyRoomError message="Please log in to join the study room." />;
+    return <StudyRoomError errorText="Please log in to join the study room." />;
   }
 
   return <StudyRoomWorkspaceContent user={user} />;
@@ -460,25 +460,36 @@ function StudyRoomWorkspaceContent({ user }) {
       try {
         console.log('[ROOM AUTH] userId:', user?._id?.toString());
         if (!isAdmin) {
-          console.log('[STUDY ROOM] Student join requested');
+          console.log('[STUDY ROOM] Participant join requested');
           console.log('[ROOM JOIN] started');
-          console.log('[STUDY ROOM] REST join started');
-          const joinRes = await joinStudyRoom(roomId);
-          if (!joinRes) {
-            setError('Failed to join study room.');
-            setLoading(false);
-            return;
+          try {
+            const joinRes = await joinStudyRoom(roomId);
+            console.log('[ROOM JOIN] success', joinRes);
+          } catch (joinErr) {
+            console.warn('[ROOM JOIN] REST join notice:', joinErr.message);
+            // Non-fatal if already joined or if room creator
           }
-          console.log('[ROOM JOIN] success');
-          console.log('[STUDY ROOM] REST join successful');
-          console.log('[STUDY ROOM] Participant ID:', joinRes._id || joinRes.user?._id || joinRes.user);
         } else {
           console.log('[STUDY ROOM] Admin entering room, skipping REST participant creation');
         }
 
-        const t = await refreshAccessToken();
+        let t = localStorage.getItem('mindsync_token');
+        if (!t) {
+          try {
+            t = await refreshAccessToken();
+            if (t) localStorage.setItem('mindsync_token', t);
+          } catch (tokenErr) {
+            console.warn('[ROOM AUTH] Token refresh failed:', tokenErr.message);
+          }
+        }
+
+        if (!t) {
+          setError('Authentication token missing. Please sign in again.');
+          setLoading(false);
+          return;
+        }
+
         console.log('[ROOM AUTH] token present:', !!t);
-        console.log('[ROOM AUTH] token length:', t ? t.length : 0);
         setToken(t);
         setIsJoined(true);
         console.log('[ROOM SOCKET] connecting');
@@ -497,15 +508,17 @@ function StudyRoomWorkspaceContent({ user }) {
 
     const pollingInterval = setInterval(() => {
       getStudyRoomTimeline(roomId)
-        .then(res => { if (Array.isArray(res)) setTimeline(res); });
+        .then(res => { if (Array.isArray(res)) setTimeline(res); })
+        .catch(() => {});
       getRoomGoals(roomId)
-        .then(res => { if (Array.isArray(res)) setGoals(res); });
+        .then(res => { if (Array.isArray(res)) setGoals(res); })
+        .catch(() => {});
     }, 12000);
 
     return () => {
       clearInterval(pollingInterval);
     };
-  }, [roomId, refreshAccessToken]);
+  }, [roomId, refreshAccessToken, isAdmin, user?._id]);
 
   const handleLeaveConfirm = async () => {
     setLeaveDialogOpen(false);
