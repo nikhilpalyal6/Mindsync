@@ -53,18 +53,42 @@ class SummaryService {
     // 3. Extract active resource content
     let resourceData = {};
     if (activeResourceType === 'pdf') {
-      const resItem = session.resources?.find(r => r.type === 'pdf' && (r.url === resourceId || r.title === resourceId));
+      const resItem = session.resources?.find(r => r.type === 'pdf' && (r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId));
       if (resItem && resItem.data) {
-        resourceData = resItem.data;
+        resourceData = { ...resItem.data };
       } else {
-        resourceData = metadata.pdf || {};
+        resourceData = { ...(metadata.pdf || {}) };
+      }
+      if (!resourceData.extractedText && resourceData.pages?.length > 0) {
+        resourceData.extractedText = resourceData.pages.map(p => p.text).filter(Boolean).join('\n\n');
+      }
+      if (!resourceData.extractedText) {
+        try {
+          const KnowledgeChunk = (await import('../../models/knowledgeChunk.model.js')).default;
+          const chunks = await KnowledgeChunk.find({ workspaceId: sessionId, resourceId }).sort({ chunkIndex: 1 });
+          if (chunks.length > 0) {
+            resourceData.extractedText = chunks.map(c => c.text).join('\n\n');
+          }
+        } catch (_) {}
       }
     } else if (activeResourceType === 'youtube') {
-      const resItem = session.resources?.find(r => r.type === 'youtube' && (r.url === resourceId || r.title === resourceId));
+      const resItem = session.resources?.find(r => r.type === 'youtube' && (r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId));
       if (resItem && resItem.data) {
-        resourceData = resItem.data;
+        resourceData = { ...resItem.data };
       } else {
-        resourceData = metadata.youtube || {};
+        resourceData = { ...(metadata.youtube || {}) };
+      }
+      if (!resourceData.transcript && resourceData.transcriptItems?.length > 0) {
+        resourceData.transcript = resourceData.transcriptItems.map(t => `[${t.time}] ${t.text}`).join('\n');
+      }
+      if (!resourceData.transcript) {
+        try {
+          const KnowledgeChunk = (await import('../../models/knowledgeChunk.model.js')).default;
+          const chunks = await KnowledgeChunk.find({ workspaceId: sessionId, resourceId }).sort({ chunkIndex: 1 });
+          if (chunks.length > 0) {
+            resourceData.transcript = chunks.map(c => c.text).join('\n\n');
+          }
+        } catch (_) {}
       }
     } else if (activeResourceType === 'notes') {
       const resItem = session.resources?.find(r => r.type === 'notes' && (r._id?.toString() === resourceId || r.title === resourceId));

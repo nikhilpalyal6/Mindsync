@@ -129,7 +129,15 @@ export const fetchYouTubeData = async (req, res) => {
           thumbnailUrl: youtubeData.thumbnailUrl || initialYoutubeData.thumbnailUrl,
           duration: youtubeData.duration || initialYoutubeData.duration,
           publishedDate: youtubeData.publishedDate || initialYoutubeData.publishedDate,
-          processingStatus: 'completed'
+          processingStatus: 'completed',
+          chapters: youtubeData.chapters || [],
+          transcript: youtubeData.originalTranscript || youtubeData.transcript || youtubeData.englishTranscript || '',
+          originalTranscript: youtubeData.originalTranscript || youtubeData.transcript || '',
+          englishTranscript: youtubeData.englishTranscript || youtubeData.originalTranscript || youtubeData.transcript || '',
+          transcriptItems: youtubeData.originalTranscriptItems || youtubeData.transcriptItems || [],
+          originalTranscriptItems: youtubeData.originalTranscriptItems || youtubeData.transcriptItems || [],
+          hasTranscript: youtubeData.hasTranscript !== false,
+          transcriptMessage: youtubeData.transcriptMessage || null
         };
 
         const bgSession = await StudySession.findById(sessionId);

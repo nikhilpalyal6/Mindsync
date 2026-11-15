@@ -307,6 +307,7 @@ class StudyController {
                 'resources.$.data.failedPages': 0,
                 'resources.$.data.extractionStatus': 'completed',
                 'resources.$.data.processingStatus': 'completed',
+                'resources.$.data.extractedText': extractedText,
                 'resources.$.data.pages': pages
               };
 
@@ -316,6 +317,7 @@ class StudyController {
                   ...bgSession.metadata.pdf,
                   pageCount: totalPages,
                   totalPages,
+                  extractedText,
                   processingStatus: 'completed'
                 };
               }
