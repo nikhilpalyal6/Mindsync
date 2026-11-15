@@ -23,10 +23,10 @@ export const requestTimeout = (timeoutMs = 15000) => {
     }
     res.setTimeout(timeoutMs, () => {
       if (!res.headersSent) {
-        res.status(HTTP_STATUS.SERVICE_UNAVAILABLE || 503).json({
+        res.status(HTTP_STATUS.REQUEST_TIMEOUT || 408).json({
           success: false,
-          statusCode: HTTP_STATUS.SERVICE_UNAVAILABLE || 503,
-          message: 'Database temporarily unavailable'
+          statusCode: HTTP_STATUS.REQUEST_TIMEOUT || 408,
+          message: 'Request timed out. Please try again.'
         });
       }
     });

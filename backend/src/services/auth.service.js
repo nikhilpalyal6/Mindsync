@@ -53,9 +53,7 @@ class AuthService {
     try {
       await EmailService.sendVerificationEmail(user, verificationToken);
     } catch (error) {
-      logger.error('Email verification send failed during registration', { error: error.message });
-      await user.deleteOne();
-      throw ApiError.internal('Unable to send verification email. Please check SMTP credentials in .env and try again.');
+      logger.warn('Email verification send failed during registration (non-fatal):', { error: error.message });
     }
 
     const tokens = await TokenService.generateAndStoreTokens(user, { userAgent, ipAddress });

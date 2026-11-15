@@ -20,6 +20,9 @@ const createEmailTransporter = () => {
       user: config.email.user,
       pass: config.email.password,
     },
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
   });
 
   logger.info('Email transporter configured successfully');

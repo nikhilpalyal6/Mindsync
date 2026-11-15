@@ -85,9 +85,9 @@ app.get('/', (_req, res) => {
 });
 
 app.use(auditLogMiddleware);
-app.use('/api', requestTimeout(15000), apiRoutes);
-app.use('/api', requestTimeout(15000), v1Routes);
-app.use(requestTimeout(15000), v1Routes);
+app.use('/api', requestTimeout(30000), apiRoutes);
+app.use('/api', requestTimeout(30000), v1Routes);
+app.use(requestTimeout(30000), v1Routes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
