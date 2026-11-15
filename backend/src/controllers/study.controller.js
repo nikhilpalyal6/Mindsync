@@ -216,12 +216,14 @@ class StudyController {
       const base64Data = fileBuffer.toString('base64');
       const dataUrl = `data:${req.file.mimetype};base64,${base64Data}`;
 
+      const isUnderDocLimit = req.file.size <= 12 * 1024 * 1024;
       const initialPdfMeta = {
         filename: req.file.originalname,
         pdfFilename: req.file.originalname,
         fileSize: req.file.size,
         fileType: req.file.mimetype,
         storagePath: storagePath,
+        fileData: isUnderDocLimit ? dataUrl : undefined,
         pageNumber: 1,
         scale: 1.0,
         fitMode: 'page',
@@ -430,6 +432,12 @@ class StudyController {
     );
     if (!resource || resource.type !== 'pdf') {
       throw new ApiError(HTTP_STATUS.NOT_FOUND, 'PDF resource not found in workspace.');
+    }
+
+    if (resource.data?.fileData) {
+      return res.status(HTTP_STATUS.OK).json(
+        ApiResponse.success({ fileData: resource.data.fileData }, 'PDF file loaded successfully.')
+      );
     }
 
     const storagePath = resource.data?.storagePath;

@@ -341,6 +341,17 @@ export default function StudyMode() {
       // Save to localStorage so reloading page remembers the session
       localStorage.setItem('mindsync_last_study_session_id', fullSession._id);
 
+      // Cache PDF DataURL locally immediately for instant viewer restoration
+      if (newlyAddedRes?._id && file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            localStorage.setItem(`mindsync_pdf_${newlyAddedRes._id}`, reader.result);
+          } catch (_) {}
+        };
+        reader.readAsDataURL(file);
+      }
+
       // Select resource and update session
       if (newlyAddedRes) {
         await handleSelectResource(newlyAddedRes, fullSession);

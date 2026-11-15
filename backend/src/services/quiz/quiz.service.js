@@ -210,22 +210,22 @@ class QuizService {
   /**
    * Extract content from the resource in the study session.
    */
-  getResourceContent(session, resourceId, resourceType) {
+  async getResourceContent(session, resourceId, resourceType) {
     let content = '';
     let title = '';
 
     // 1. Find resource in resources array
     if (session.resources && Array.isArray(session.resources)) {
       const res = session.resources.find(
-        r => r._id === resourceId || r.url === resourceId || r.title === resourceId || (r.type === resourceType && (r.url === resourceId || r._id === resourceId || r.title === resourceId))
+        r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId || (r.type === resourceType && (r.url === resourceId || r._id?.toString() === resourceId || r.title === resourceId))
       );
       if (res) {
         title = res.title || '';
         if (res.data) {
           if (res.type === 'pdf') {
-            content = res.data.extractedText || '';
+            content = res.data.extractedText || (res.data.pages ? res.data.pages.map(p => p.text).filter(Boolean).join('\n\n') : '') || '';
           } else if (res.type === 'youtube') {
-            content = res.data.englishTranscript || res.data.transcript || res.data.originalTranscript || '';
+            content = res.data.englishTranscript || res.data.transcript || res.data.originalTranscript || (res.data.transcriptItems ? res.data.transcriptItems.map(t => t.text).join(' ') : '') || '';
           } else if (res.type === 'notes') {
             content = res.data.content || res.data.notesContent || res.data.noteContent || '';
           }
@@ -238,14 +238,12 @@ class QuizService {
       const meta = session.metadata;
       if (resourceType === 'pdf') {
         const pdf = meta.pdf || {};
-        content = pdf.extractedText || meta.extractedText || '';
+        content = pdf.extractedText || (pdf.pages ? pdf.pages.map(p => p.text).filter(Boolean).join('\n\n') : '') || meta.extractedText || '';
         title = pdf.filename || pdf.pdfFilename || '';
       } else if (resourceType === 'youtube') {
         const yt = meta.youtube || meta.video || {};
-        if (yt.videoUrl === resourceId || yt.url === resourceId || meta.youtubeUrl === resourceId) {
-          content = yt.englishTranscript || yt.transcript || yt.originalTranscript || '';
-          title = yt.title || yt.videoTitle || '';
-        }
+        content = yt.englishTranscript || yt.transcript || yt.originalTranscript || (yt.transcriptItems ? yt.transcriptItems.map(t => t.text).join(' ') : '') || '';
+        title = yt.title || yt.videoTitle || '';
       } else if (resourceType === 'notes') {
         const notes = meta.notes || {};
         if (notes.noteId === resourceId || notes.id === resourceId || resourceId === 'default_notes_id') {
@@ -260,6 +258,17 @@ class QuizService {
           }
         }
       }
+    }
+
+    // 3. Fallback to KnowledgeChunk
+    if (!content) {
+      try {
+        const KnowledgeChunk = (await import('../../models/knowledgeChunk.model.js')).default;
+        const chunks = await KnowledgeChunk.find({ workspaceId: session._id, resourceId }).sort({ chunkIndex: 1 });
+        if (chunks.length > 0) {
+          content = chunks.map(c => c.text).join('\n\n');
+        }
+      } catch (_) {}
     }
 
     return { content, title };
@@ -284,7 +293,7 @@ class QuizService {
 
     // 2. Locate Resource index in session.resources
     let resourceIndex = session.resources.findIndex(
-      r => r._id === resourceId || r.url === resourceId || (r.type === resourceType && (r.url === resourceId || r._id === resourceId))
+      r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId || (r.type === resourceType && (r.url === resourceId || r._id?.toString() === resourceId || r.title === resourceId))
     );
 
     // If resource is not in array but metadata has it, link it
@@ -366,7 +375,7 @@ class QuizService {
     }
 
     // 5. Extract content
-    let { content, title } = this.getResourceContent(session, resourceId, resourceType);
+    let { content, title } = await this.getResourceContent(session, resourceId, resourceType);
     if (resourceType === 'pdf' && (!content || !content.trim())) {
       const pdfMeta = session.metadata?.pdf || {};
       const fileData = pdfMeta.fileData || (session.resources?.find(r => r.type === 'pdf')?.data?.fileData);
@@ -616,7 +625,7 @@ class QuizService {
     }
 
     let freshResourceIndex = freshSession.resources.findIndex(
-      r => r._id === resourceId || r.url === resourceId || (r.type === resourceType && (r.url === resourceId || r._id === resourceId))
+      r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId || (r.type === resourceType && (r.url === resourceId || r._id?.toString() === resourceId || r.title === resourceId))
     );
     if (freshResourceIndex === -1) {
       throw ApiError.notFound('Resource not found in session on final save');
@@ -664,7 +673,7 @@ class QuizService {
         throw ApiError.notFound('Study session not found on retry');
       }
       let retryResourceIndex = retrySession.resources.findIndex(
-        r => r._id === resourceId || r.url === resourceId || (r.type === resourceType && (r.url === resourceId || r._id === resourceId))
+        r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId || (r.type === resourceType && (r.url === resourceId || r._id?.toString() === resourceId || r.title === resourceId))
       );
       if (retryResourceIndex === -1) {
         throw ApiError.notFound('Resource not found in session on retry');
@@ -731,7 +740,7 @@ class QuizService {
     }
 
     // Locate Resource
-    const resource = session.resources?.find(r => r._id === resourceId || r.url === resourceId);
+    const resource = session.resources?.find(r => r._id?.toString() === resourceId || r.url === resourceId || r.title === resourceId);
     const preferences = resource?.ai?.quiz?.preferences || null;
 
     if (resource?.ai?.quiz?.questions) {
