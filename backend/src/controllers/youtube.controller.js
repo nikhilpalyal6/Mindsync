@@ -26,7 +26,7 @@ export const fetchYouTubeData = async (req, res) => {
 
     // Check Cache: Avoid duplicate transcript/metadata fetching if video URL matches and has valid transcript in Knowledge base
     const existingRes = session.resources?.find(r => r.type === 'youtube' && r.url === videoUrl);
-    if (existingRes && existingRes.data?.processingStatus === 'completed') {
+    if (existingRes && existingRes.data?.processingStatus === 'completed' && (existingRes.data?.transcript || existingRes.data?.originalTranscript)) {
       const KnowledgeDocument = (await import('../models/knowledgeDocument.model.js')).default;
       const doc = await KnowledgeDocument.findOne({ userId: req.user._id, workspaceId: sessionId, resourceId: existingRes._id });
       if (doc && doc.processingStatus === 'READY') {

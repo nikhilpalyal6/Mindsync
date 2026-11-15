@@ -124,6 +124,15 @@ class ProcessingService {
     );
 
     if (!job) {
+      const StudySession = (await import('../../models/studySession.model.js')).default;
+      const session = await StudySession.findById(workspaceId);
+      const res = session?.resources?.find(r => r._id?.toString() === resourceId || r.url === resourceId);
+      if (res) {
+        const text = res.data?.extractedText || (res.data?.pages ? res.data.pages.map(p => p.text).join('\n') : '') || res.data?.transcript || res.data?.englishTranscript || res.data?.content || '';
+        if (text) {
+          return await this.queueProcessing(userId, workspaceId, resourceId, text, res.type?.toUpperCase() || 'DOCUMENT', res.title || 'Study Resource');
+        }
+      }
       throw new Error('No processing job exists for the specified resource.');
     }
 
